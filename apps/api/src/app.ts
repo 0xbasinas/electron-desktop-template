@@ -121,6 +121,15 @@ export function createApp(options: AppOptions = {}) {
         .from(schema.note)
         .where(eq(schema.note.userId, c.var.userId))
         .orderBy(desc(schema.note.createdAt))
+      // Only what the person can see on their account page; the public keys are not personal data.
+      const passkeyRows = await c.var.db
+        .select({
+          name: schema.passkey.name,
+          deviceType: schema.passkey.deviceType,
+          createdAt: schema.passkey.createdAt
+        })
+        .from(schema.passkey)
+        .where(eq(schema.passkey.userId, c.var.userId))
       // Session rows are listed without their tokens.
       const sessionRows = await c.var.db
         .select({
@@ -135,6 +144,11 @@ export function createApp(options: AppOptions = {}) {
         exportedAt: new Date().toISOString(),
         account: toAccount(row),
         notes: noteRows.map(toNote),
+        passkeys: passkeyRows.map((p) => ({
+          name: p.name,
+          deviceType: p.deviceType,
+          createdAt: p.createdAt?.toISOString() ?? null
+        })),
         sessions: sessionRows.map((s) => ({
           createdAt: s.createdAt.toISOString(),
           expiresAt: s.expiresAt.toISOString(),

@@ -31,6 +31,13 @@ export const accountExportSchema = z.object({
   exportedAt: z.string(),
   account: accountSchema,
   notes: z.array(noteSchema),
+  passkeys: z.array(
+    z.object({
+      name: z.string().nullable(),
+      deviceType: z.string(),
+      createdAt: z.string().nullable()
+    })
+  ),
   sessions: z.array(
     z.object({
       createdAt: z.string(),

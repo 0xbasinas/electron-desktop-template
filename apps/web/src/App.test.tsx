@@ -11,12 +11,21 @@ const auth = vi.hoisted(() => ({
   magicLink: vi.fn(),
   transfer: vi.fn(),
   ensureRedirect: vi.fn(() => 0),
-  revoke: vi.fn()
+  revoke: vi.fn(),
+  signInPasskey: vi.fn(),
+  listPasskeys: vi.fn(),
+  addPasskey: vi.fn(),
+  deletePasskey: vi.fn()
 }))
 vi.mock('./lib/auth', () => ({
   authClient: {
     useSession: () => ({ data: auth.session, isPending: auth.pending }),
-    signIn: { magicLink: auth.magicLink },
+    signIn: { magicLink: auth.magicLink, passkey: auth.signInPasskey },
+    passkey: {
+      listUserPasskeys: auth.listPasskeys,
+      addPasskey: auth.addPasskey,
+      deletePasskey: auth.deletePasskey
+    },
     signOut: vi.fn(),
     $fetch: auth.transfer,
     ensureElectronRedirect: auth.ensureRedirect,
@@ -36,6 +45,10 @@ beforeEach(() => {
   notesApi.list.mockReset().mockResolvedValue([])
   notesApi.create.mockReset()
   notesApi.remove.mockReset()
+  auth.signInPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
+  auth.listPasskeys.mockReset().mockResolvedValue({ data: [], error: null })
+  auth.addPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
+  auth.deletePasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.revoke.mockReset().mockResolvedValue({ data: {}, error: null })
   accountApi.get.mockReset().mockResolvedValue({
     id: 'u1',
@@ -252,5 +265,28 @@ describe('account page', () => {
     at('/account')
     await userEvent.click(await screen.findByRole('button', { name: 'Download my data' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not download your data.')
+  })
+})
+
+describe('passkeys', () => {
+  it('offers a passkey button on the sign-in page only when the browser supports passkeys', async () => {
+    at('/sign-in')
+    expect(screen.queryByRole('button', { name: 'Sign in with a passkey' })).toBeNull()
+    vi.stubGlobal('PublicKeyCredential', class {})
+    document.body.innerHTML = ''
+    at('/sign-in')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with a passkey' }))
+    expect(auth.signInPasskey).toHaveBeenCalled()
+  })
+
+  it('lists, adds and removes passkeys on the account page', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    auth.listPasskeys.mockResolvedValue({ data: [{ id: 'p1', name: 'Laptop' }], error: null })
+    at('/account')
+    expect(await screen.findByText('Laptop')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add a passkey' }))
+    await waitFor(() => expect(auth.addPasskey).toHaveBeenCalledWith({ name: 'Passkey 2' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Laptop' }))
+    await waitFor(() => expect(auth.deletePasskey).toHaveBeenCalledWith({ id: 'p1' }))
   })
 })

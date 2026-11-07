@@ -1,5 +1,6 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { electron } from '@better-auth/electron'
+import { passkey } from '@better-auth/passkey'
 import { betterAuth } from 'better-auth'
 import { magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
@@ -59,6 +60,9 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     plugins: [
       // Lets the desktop app sign in through the system browser (PKCE, then a one-time code over the deep link).
       electron(),
+      // Sign in with a fingerprint, face or security key instead of waiting for an email. A passkey is tied to the
+      // site's domain (rpID), so it cannot be used on a look-alike site. Passkeys are added from the account page.
+      passkey({ rpID: new URL(env.BETTER_AUTH_URL).hostname, rpName: APP_NAME }),
       magicLink({
         expiresIn: 5 * 60,
         // Store only a hash of the token, so a leaked database cannot be used to sign in.

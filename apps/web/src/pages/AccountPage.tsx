@@ -5,6 +5,11 @@ import { Navigate, useNavigate } from 'react-router'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
 
+interface PasskeyRow {
+  id: string
+  name: string
+}
+
 /** Your account: see who you are, sign out everywhere, download your data, delete the account. */
 export function AccountPage(): JSX.Element {
   const { data: session, isPending } = authClient.useSession()
@@ -20,6 +25,7 @@ function AccountDetails(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [confirmEmail, setConfirmEmail] = useState('')
   const [busy, setBusy] = useState(false)
+  const [passkeys, setPasskeys] = useState<PasskeyRow[]>([])
 
   useEffect(() => {
     let cancelled = false
@@ -36,6 +42,56 @@ function AccountDetails(): JSX.Element {
       cancelled = true
     }
   }, [])
+
+  async function loadPasskeys(): Promise<void> {
+    const { data } = await authClient.passkey.listUserPasskeys()
+    setPasskeys((data ?? []).map((p) => ({ id: p.id, name: p.name ?? 'Passkey' })))
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    authClient.passkey
+      .listUserPasskeys()
+      .then(({ data }) => {
+        if (!cancelled)
+          setPasskeys((data ?? []).map((p) => ({ id: p.id, name: p.name ?? 'Passkey' })))
+      })
+      .catch((e: unknown) => console.error(e))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function addPasskey(): Promise<void> {
+    setBusy(true)
+    setError(null)
+    try {
+      const { error: failure } = await authClient.passkey.addPasskey({
+        name: `Passkey ${passkeys.length + 1}`
+      })
+      if (failure && failure.status !== 0) throw new Error(failure.message)
+      await loadPasskeys()
+    } catch (e) {
+      console.error(e)
+      setError('Could not add the passkey.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function removePasskey(id: string): Promise<void> {
+    setBusy(true)
+    setError(null)
+    try {
+      await authClient.passkey.deletePasskey({ id })
+      await loadPasskeys()
+    } catch (e) {
+      console.error(e)
+      setError('Could not remove the passkey.')
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function signOutEverywhere(): Promise<void> {
     setBusy(true)
@@ -109,6 +165,34 @@ function AccountDetails(): JSX.Element {
           {error}
         </p>
       )}
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Passkeys</h2>
+        <p className="text-sm text-muted-foreground">
+          Sign in with your fingerprint, face or a security key instead of waiting for an email.
+        </p>
+        {passkeys.length > 0 && (
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {passkeys.map((p) => (
+              <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-2">
+                <span className="text-sm">{p.name}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={busy}
+                  aria-label={`Remove ${p.name}`}
+                  onClick={() => void removePasskey(p.id)}
+                >
+                  Remove
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Button variant="outline" disabled={busy} onClick={() => void addPasskey()}>
+          Add a passkey
+        </Button>
+      </section>
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Sessions</h2>

@@ -8,6 +8,13 @@
       "when": 1794070322011,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794073745818,
+      "tag": "0001_yummy_mercury",
+      "breakpoints": true
     }
   ]
 }

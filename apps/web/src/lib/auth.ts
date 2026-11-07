@@ -1,4 +1,5 @@
 import { electronProxyClient } from '@better-auth/electron/proxy'
+import { passkeyClient } from '@better-auth/passkey/client'
 import { createAuthClient } from 'better-auth/react'
 import { magicLinkClient } from 'better-auth/client/plugins'
 import { DESKTOP_SCHEME } from '../config'
@@ -9,5 +10,9 @@ import { DESKTOP_SCHEME } from '../config'
  */
 export const authClient = createAuthClient({
   baseURL: window.location.origin,
-  plugins: [magicLinkClient(), electronProxyClient({ protocol: { scheme: DESKTOP_SCHEME } })]
+  plugins: [
+    magicLinkClient(),
+    passkeyClient(),
+    electronProxyClient({ protocol: { scheme: DESKTOP_SCHEME } })
+  ]
 })

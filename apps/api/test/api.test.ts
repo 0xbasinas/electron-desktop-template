@@ -374,6 +374,11 @@ describe('account', () => {
     const s = setup()
     const cookie = await signIn(s, 'gone@example.com')
     await s.call('/api/notes', json(cookie, 'POST', { title: 'bye' }))
+    await bindings.DB.prepare(
+      "INSERT INTO passkey (id, name, public_key, user_id, credential_id, counter, device_type, backed_up) VALUES ('pk1', 'laptop', 'k', (SELECT id FROM user WHERE email = ?), 'cred1', 0, 'singleDevice', 0)"
+    )
+      .bind('gone@example.com')
+      .run()
     const userId = (await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
       .bind('gone@example.com')
       .first<{ id: string }>())!.id
@@ -401,5 +406,30 @@ describe('account', () => {
     expect(await left('user', 'id')).toBe(0)
     expect(await left('session', 'user_id')).toBe(0)
     expect(await left('note', 'user_id')).toBe(0)
+    expect(await left('passkey', 'user_id')).toBe(0)
+  })
+})
+
+describe('passkeys', () => {
+  it('offers a challenge for the site domain to anyone, and keeps the list private', async () => {
+    const s = setup()
+    const options = await s.call('/api/auth/passkey/generate-authenticate-options')
+    expect(options.status).toBe(200)
+    const body = (await options.json()) as { challenge: string; rpId?: string }
+    expect(body.challenge).toBeTruthy()
+    expect(body.rpId).toBe(new URL(ORIGIN).hostname)
+
+    expect((await s.call('/api/auth/passkey/list-user-passkeys')).status).toBe(401)
+    const cookie = await signIn(s, 'pk@example.com')
+    const list = await s.call('/api/auth/passkey/list-user-passkeys', { headers: { cookie } })
+    expect(await list.json()).toEqual([])
+  })
+
+  it('needs a session to start adding a passkey', async () => {
+    const s = setup()
+    expect((await s.call('/api/auth/passkey/generate-register-options')).status).toBe(401)
+    const cookie = await signIn(s, 'pk2@example.com')
+    const ok = await s.call('/api/auth/passkey/generate-register-options', { headers: { cookie } })
+    expect(ok.status).toBe(200)
   })
 })

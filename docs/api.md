@@ -98,3 +98,17 @@ The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /
   unused sign-in links are removed, and the response clears the session cookies.
 - **When you add your own tables**, give them `userId ... references user.id ON DELETE CASCADE`, and add their rows to the export
   in `app.ts`, so deletion and export stay complete. The tests in `apps/api/test/api.test.ts` ("account") show how to check it.
+
+## Passkeys
+
+Signing in with a passkey (fingerprint, face or security key) works next to the email link. People add passkeys on `/account`
+and use them from `/sign-in`. It uses Better Auth's passkey plugin (`@better-auth/passkey`, SimpleWebAuthn underneath):
+
+- A passkey is bound to the site's domain (`rpID` = the host of `BETTER_AUTH_URL`) and cannot be used on a look-alike site. If you
+  change the domain, existing passkeys stop working, so decide it before people register.
+- Verification uses the Web Crypto API, which is cheap enough for the free Workers CPU limit; a passkey sign-in costs one D1 write
+  (the challenge) instead of an email.
+- The desktop app signs in through the browser, so a passkey works there too: sign in on the web first, then choose Sign in in
+  the app and the site hands the session over.
+- The tests cover the endpoints and the rules around them (sessions needed, rpId, deletion cascades); the browser prompt itself
+  needs a real authenticator, so try adding a passkey by hand after deploying.

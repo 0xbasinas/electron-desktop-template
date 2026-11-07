@@ -7,6 +7,9 @@ import { readDesktopParams } from '../lib/desktop'
 
 type State = 'idle' | 'sending' | 'sent'
 
+const passkeysSupported = (): boolean =>
+  typeof window !== 'undefined' && 'PublicKeyCredential' in window
+
 export function SignInPage(): JSX.Element {
   const { data: session } = authClient.useSession()
   const [params] = useSearchParams()
@@ -41,6 +44,14 @@ export function SignInPage(): JSX.Element {
     )
   }
   if (session) return <Navigate to="/app" replace />
+
+  async function signInWithPasskey(): Promise<void> {
+    setError(null)
+    const { error: failure } = await authClient.signIn.passkey()
+    // Cancelling the browser prompt is not worth an error message.
+    if (failure && failure.status !== 0)
+      setError('That passkey did not work. Try the email link instead.')
+  }
 
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -111,6 +122,16 @@ export function SignInPage(): JSX.Element {
       <Button type="submit" disabled={state === 'sending'} className="w-full">
         {state === 'sending' ? 'Sending...' : 'Email me a sign-in link'}
       </Button>
+      {passkeysSupported() && (
+        <Button
+          type="button"
+          variant="outline"
+          className="w-full"
+          onClick={() => void signInWithPasskey()}
+        >
+          Sign in with a passkey
+        </Button>
+      )}
     </form>
   )
 }

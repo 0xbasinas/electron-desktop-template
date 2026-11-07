@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@better-auth/electron": "^1.7.18",
+    "@better-auth/passkey": "^1.7.18",
     "@repo/shared": "workspace:*",
     "better-auth": "^1.7.18",
     "react": "catalog:",
