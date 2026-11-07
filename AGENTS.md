@@ -54,6 +54,8 @@ apps/desktop/             The Electron app (its own package.json, electron-build
   src/shared/             ipc.ts (channels + types), validate.ts (payload checks). Imported by all three processes.
   scripts/                Node scripts (release notes, rollout, manifest checks). scripts/lib/*.mjs are pure and unit tested.
   tests/e2e/              Playwright against the packaged app.   tests/update/  old-to-new update test.
+apps/web/                 Vite + React SPA: marketing site (/), download page (/download, reads the latest GitHub release), web app (/app/*).
+                          public/_headers and _redirects are Cloudflare Pages config (CSP, SPA fallback).
 packages/ui/               @repo/ui: shared React components (Button, cn) and the Tailwind theme (theme.css). Source-only; apps bundle it.
 turbo.json                Task graph (build, typecheck, test). pnpm-workspace.yaml holds the workspace globs and the version catalog.
 .github/                  Workflows. publish-stable / publish-beta call _publish.yml after ci.yml passes.

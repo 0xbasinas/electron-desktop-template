@@ -56,6 +56,9 @@ const edits = {
   'apps/desktop/src/renderer/index.html': (s) =>
     s.replace(/<title>.*<\/title>/, `<title>${title}</title>`),
   'apps/desktop/src/renderer/src/App.tsx': (s) => s.replaceAll(oldTitle, title),
+  'apps/web/src/config.ts': (s) =>
+    s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`).replaceAll(oldTitle, title),
+  'apps/web/index.html': (s) => s.replace(/<title>.*<[/]title>/, `<title>${title}</title>`),
   'README.md': (s) =>
     s.replace(/^# .*$/m, `# ${title}`).replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
   'docs/releasing.md': (s) => s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),

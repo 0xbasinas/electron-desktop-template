@@ -8,7 +8,7 @@ independently.
 
 ```
 apps/desktop    Electron app (electron-vite + electron-builder). Released with the existing release system.
-apps/web        Vite + React SPA: marketing/download site and the app at /app.   (step 3)
+apps/web        Vite + React SPA: marketing/download site and the app at /app.   (done: site, download page, /app placeholder)
 apps/api        Hono API on Cloudflare Workers: database and auth.               (step 4)
 packages/ui      @repo/ui: shared components and the Tailwind theme (done).
 packages/shared  Types and zod schemas shared by web, desktop and API (added with the API).
@@ -31,6 +31,6 @@ packages/shared  Types and zod schemas shared by web, desktop and API (added wit
 
 1. Workspace + Turborepo, desktop moved to `apps/desktop` (done).
 2. Shared UI package `packages/ui` (done). `packages/shared` arrives with the API, when there is real shared code.
-3. `apps/web`: marketing/download site and `/app`.
+3. `apps/web`: marketing/download site and `/app` (done; deploy comes in step 5).
 4. `apps/api`: Hono, database (Drizzle) and authentication, with a typed client used by web and desktop.
 5. Deploy workflows for Cloudflare, final docs.
