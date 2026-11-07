@@ -52,7 +52,8 @@ src/shared/      ipc.ts (channels + types), validate.ts (payload checks). Import
 scripts/         Node scripts (release notes, rollout, manifest checks). scripts/lib/*.mjs are pure and unit tested.
 tests/e2e/       Playwright against the packaged app.   tests/update/  old-to-new update test.
 .github/         Workflows. publish-stable / publish-beta call _publish.yml after ci.yml passes.
-docs/            architecture.md (how the app works), releasing.md (how releases, rollouts and rollbacks work).
+docs/            architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
+                 monorepo-and-web.md (why one package, and when to change that).
 ```
 
 ## Rules for code
@@ -88,6 +89,9 @@ Details: [docs/releasing.md](docs/releasing.md).
 - `pnpm run script -c.x=y` mangles `-c` flags. Set the version with `npm pkg set version=...`, or write a temp config file.
 - The Vite/Rolldown renderer is only minified because `electron.vite.config.ts` sets `minify: true`; keep it.
 - `electron-vite` main/preload leave dependencies external, so main-process dependencies must be in `dependencies`.
+- Releases switch Electron fuses and ASAR integrity on. Playwright needs `enableNodeCliInspectArguments`, so only test builds
+  (`pnpm build:unpack`, the update test) turn it on. Never weaken `electronFuses` in `electron-builder.yml` for a release, and
+  update `scripts/lib/fuses.mjs` when you change it. If a Playwright launch times out, suspect that fuse.
 - macOS auto-update needs code signing, which is not set up; the update test therefore skips macOS.
 - GitHub takes a minute to recompute mergeability after a push or a branch-protection change; "blocked" can be stale.
 - `makensis` can fail to spawn on some local Node versions (`ENOTCONN`); CI is the reference for installer builds.

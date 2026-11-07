@@ -119,6 +119,12 @@ while React starts.
   only import `electron` and bundled code, which is why `src/preload` imports nothing else.
 - `handle()` only answers the main frame of a page loaded from our own bundle (or the dev server in
   development). Anything else, such as an iframe or a navigated-away page, is rejected.
+- **Electron fuses** are set in `electron-builder.yml` (`electronFuses`) and written into the executable before signing:
+  `runAsNode` and `NODE_OPTIONS` are off (so the app cannot be hijacked to run arbitrary Node code), cookies are encrypted,
+  and the Node inspector flags are off in releases. **ASAR integrity** is on with `onlyLoadAppFromAsar`: the app refuses to
+  start if `app.asar` was modified (it exits with "Integrity check failed for asar archive"). `grantFileProtocolExtraPrivileges`
+  stays on because the renderer loads from `file://`; a custom `app://` protocol would let you turn it off.
+  `scripts/lib/fuses.mjs` lists the expected state and CI checks it on the packaged app.
 - Payloads are validated in main (`parseSettingsPatch`), never trusted because the TypeScript type says so.
 - New windows and navigations are blocked by `hardenWindow`; only `http(s)` links open in the browser.
 - The page has a Content-Security-Policy in `index.html`.

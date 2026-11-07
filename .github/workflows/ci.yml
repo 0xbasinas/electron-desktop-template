@@ -69,6 +69,8 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Package the app (unpacked)
         run: pnpm build:unpack
+      - name: Check the Electron fuses (test build)
+        run: node scripts/check-fuses.mjs --test-build
       - name: Launch the packaged app and check the window opens
         if: runner.os != 'Linux'
         run: pnpm test:e2e
@@ -144,3 +146,5 @@ jobs:
         run: pnpm run ${{ matrix.script }} --publish never
       - name: Check the update manifest against the files
         run: pnpm check:release
+      - name: Check the Electron fuses (hardened release build)
+        run: pnpm check:fuses
