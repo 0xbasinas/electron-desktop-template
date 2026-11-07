@@ -10,6 +10,13 @@ function applyChannel(channel: UpdateChannel): void {
   autoUpdater.allowPrerelease = channel === 'beta'
 }
 
+/** Check now on the user's chosen channel. Updates only work in packaged builds. */
+export async function checkForUpdates(): Promise<void> {
+  if (is.dev || !app.isPackaged) return
+  applyChannel(getSettings().updateChannel)
+  await autoUpdater.checkForUpdates().catch((err) => console.error('[updater]', err))
+}
+
 export function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
@@ -33,14 +40,7 @@ export function setupAutoUpdater(): void {
     send({ type: 'error', message: err.message })
   })
 
-  // Updates only work in packaged builds.
-  const check = async (): Promise<void> => {
-    if (is.dev || !app.isPackaged) return
-    applyChannel(getSettings().updateChannel)
-    await autoUpdater.checkForUpdates().catch((err) => console.error('[updater]', err))
-  }
-
-  ipcMain.handle(IPC.updaterCheck, check)
+  ipcMain.handle(IPC.updaterCheck, checkForUpdates)
   ipcMain.handle(IPC.updaterStatus, () => last)
   ipcMain.handle(IPC.updaterInstall, () => {
     if (last?.type === 'downloaded') autoUpdater.quitAndInstall()
@@ -48,9 +48,9 @@ export function setupAutoUpdater(): void {
   ipcMain.handle(IPC.settingsGet, () => getSettings())
   ipcMain.handle(IPC.settingsSetChannel, async (_event, channel: UpdateChannel) => {
     const settings = updateSettings({ updateChannel: channel === 'beta' ? 'beta' : 'latest' })
-    await check()
+    await checkForUpdates()
     return settings
   })
 
-  void check()
+  void checkForUpdates()
 }

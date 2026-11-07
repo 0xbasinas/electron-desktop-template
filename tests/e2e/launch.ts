@@ -1,5 +1,5 @@
 import { _electron as electron, type ElectronApplication } from '@playwright/test'
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -27,8 +27,9 @@ export function packagedExecutable(): string {
 }
 
 /** Launch the packaged app with a throwaway user-data folder so tests never touch real settings. */
-export async function launchApp(): Promise<ElectronApplication> {
+export async function launchApp(settings?: object): Promise<ElectronApplication> {
   const userData = mkdtempSync(join(tmpdir(), 'app-e2e-'))
+  if (settings) writeFileSync(join(userData, 'settings.json'), JSON.stringify(settings))
   return electron.launch({
     executablePath: packagedExecutable(),
     // CI Linux runners cannot use Chromium's setuid sandbox.

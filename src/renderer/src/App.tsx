@@ -17,13 +17,15 @@ function App(): React.JSX.Element {
 
   useEffect(() => {
     void window.api.getSettings().then((s) => setChannel(s.updateChannel))
+    const offMenu = window.api.onMenuCheckUpdates(updater.check)
     const offLink = window.api.onDeepLink((url) => setOpened(`Deep link: ${url}`))
     const offFile = window.api.onOpenFile((path) => setOpened(`Opened file: ${path}`))
     return () => {
+      offMenu()
       offLink()
       offFile()
     }
-  }, [])
+  }, [updater.check])
 
   const toggleChannel = async (): Promise<void> => {
     const next: UpdateChannel = channel === 'beta' ? 'latest' : 'beta'

@@ -20,19 +20,23 @@ Shared types and channel names live in `src/shared/ipc.ts`, which all three impo
 
 ## Folders
 
-| Path                      | What lives there                                                                  |
-| ------------------------- | --------------------------------------------------------------------------------- |
-| `src/main/index.ts`       | App startup, the window (custom title bar, no white flash), single-instance lock  |
-| `src/main/updater.ts`     | `electron-updater`: stable vs beta channel, differential downloads, update events |
-| `src/main/deeplink.ts`    | `myapp://` links and file associations, on macOS, Windows and Linux               |
-| `src/main/windowState.ts` | Remembers window size, position and maximized state between launches              |
-| `src/main/settings.ts`    | Tiny JSON settings file in the user data folder                                   |
-| `src/preload/api.ts`      | The `window.api` surface. Everything the page can ask main to do is listed here   |
-| `src/preload/index.ts`    | Exposes `api` with `contextBridge`                                                |
-| `src/shared/ipc.ts`       | Channel names and payload types                                                   |
-| `src/renderer/`           | The React app, Tailwind and shadcn/ui                                             |
-| `build/`                  | App icons (generated) and macOS entitlements                                      |
-| `scripts/`                | Rename, icon generation and bundle-size scripts                                   |
+| Path                      | What lives there                                                                                     |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `src/main/index.ts`       | App startup, the window (custom title bar, no white flash), single-instance lock                     |
+| `src/main/updater.ts`     | `electron-updater`: stable vs beta channel, differential downloads, update events                    |
+| `src/main/deeplink.ts`    | `myapp://` links and file associations, on macOS, Windows and Linux                                  |
+| `src/main/menu.ts`        | The application menu (File, Edit, View, Window, Help) and its keyboard accelerators                  |
+| `src/main/tray.ts`        | System tray icon and menu, plus the optional "keep running when closed" setting                      |
+| `src/main/shortcuts.ts`   | The global show/hide shortcut                                                                        |
+| `src/main/windowUtils.ts` | `showWindow`, `toggleWindow` and `requestUpdateCheck`, shared by menu, tray, shortcut and deep links |
+| `src/main/windowState.ts` | Remembers window size, position and maximized state between launches                                 |
+| `src/main/settings.ts`    | Tiny JSON settings file in the user data folder                                                      |
+| `src/preload/api.ts`      | The `window.api` surface. Everything the page can ask main to do is listed here                      |
+| `src/preload/index.ts`    | Exposes `api` with `contextBridge`                                                                   |
+| `src/shared/ipc.ts`       | Channel names and payload types                                                                      |
+| `src/renderer/`           | The React app, Tailwind and shadcn/ui                                                                |
+| `build/`                  | App icons (generated) and macOS entitlements                                                         |
+| `scripts/`                | Rename, icon generation and bundle-size scripts                                                      |
 
 ## How IPC flows
 
@@ -85,3 +89,16 @@ while React starts.
   uses `open-url` and `open-file`.
 - Try it on a packaged build: open `electron-desktop-template://hello` from a browser or run it from a terminal.
   Protocol registration for a dev build (`pnpm dev`) works on Windows and Linux but is flaky on macOS.
+
+## Menu, tray and shortcuts
+
+- **Menu** (`menu.ts`): standard roles for Edit, View and Window, plus _Open File..._ (`Ctrl/Cmd+O`) and Help links.
+  Reload and DevTools only exist in development. On Windows and Linux the bar is hidden by the custom title
+  bar, but the accelerators still work.
+- **Tray** (`tray.ts`): click to show or hide the window; the right-click menu has Show, Check for Updates, the
+  _Keep running in the tray when closed_ option (stored as `closeToTray` in the settings file) and Quit.
+  If the desktop has no tray, creating it fails quietly and the app carries on without one.
+- **Shortcut** (`shortcuts.ts`): `Ctrl/Cmd+Shift+Space` shows or hides the window from anywhere.
+  Change `TOGGLE_WINDOW_SHORTCUT` to use another one. If another app already owns it, a warning is logged.
+- "Check for Updates" in the menu or tray goes through the renderer (`menu:check-updates`), so you see the
+  result in the update banner like a normal check.

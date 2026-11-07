@@ -19,11 +19,17 @@ test('packaged app opens and the renderer talks to main', async () => {
       return { platform: api.platform, settings: await api.getSettings() }
     })
     expect(result.platform).toBe(process.platform)
-    expect(result.settings).toEqual({ updateChannel: 'latest' })
+    expect(result.settings).toEqual({ updateChannel: 'latest', closeToTray: false })
 
     // Switching the channel is saved by main and reported back.
     await page.getByRole('button', { name: /Update channel/ }).click()
     await expect(page.getByText('Update channel: beta')).toBeVisible()
+
+    // The native application menu is installed.
+    const menus = await app.evaluate(({ Menu }) =>
+      Menu.getApplicationMenu()?.items.map((item) => item.label)
+    )
+    expect(menus).toEqual(expect.arrayContaining(['File', 'Edit', 'View', 'Help']))
 
     // The window has a real size and the app is the packaged one.
     const size = await app.evaluate(({ BrowserWindow }) =>
@@ -33,6 +39,26 @@ test('packaged app opens and the renderer talks to main', async () => {
     expect(await app.evaluate(({ app: a }) => a.isPackaged)).toBe(true)
 
     expect(errors).toEqual([])
+  } finally {
+    await app.close()
+  }
+})
+
+test('closing the window hides it to the tray when that setting is on', async () => {
+  test.skip(process.platform === 'darwin', 'macOS keeps the app alive on its own')
+  const app = await launchApp({ closeToTray: true })
+  try {
+    const page = await app.firstWindow()
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
+
+    // The window is hidden, not destroyed, and the app is still running.
+    const state = await app.evaluate(({ BrowserWindow }) => {
+      const windows = BrowserWindow.getAllWindows()
+      return { count: windows.length, visible: windows[0]?.isVisible() }
+    })
+    expect(state).toEqual({ count: 1, visible: false })
   } finally {
     await app.close()
   }

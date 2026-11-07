@@ -9,6 +9,7 @@ export const IPC = {
   updaterInstall: 'updater:install',
   settingsGet: 'settings:get',
   settingsSetChannel: 'settings:set-channel',
+  menuCheckUpdates: 'menu:check-updates',
   deepLink: 'deeplink:url',
   openFile: 'file:open'
 } as const
@@ -17,6 +18,8 @@ export type UpdateChannel = 'latest' | 'beta'
 
 export interface Settings {
   updateChannel: UpdateChannel
+  /** Closing the window hides it to the tray instead of quitting (Windows and Linux). */
+  closeToTray: boolean
 }
 
 export type UpdaterEvent =

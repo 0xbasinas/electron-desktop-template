@@ -2,6 +2,7 @@ import { app, type BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { resolve } from 'path'
 import { IPC } from '../shared/ipc'
+import { showWindow } from './windowUtils'
 
 // URL scheme for deep links, e.g. electron-desktop-template://open/42
 // Keep in sync with `protocols` in electron-builder.yml (`pnpm rename` does this for you).
@@ -21,8 +22,7 @@ function dispatch(channel: string, payload: string): void {
     pending.push({ channel, payload })
     return
   }
-  if (win.isMinimized()) win.restore()
-  win.focus()
+  showWindow(win)
   win.webContents.send(channel, payload)
 }
 
@@ -66,10 +66,7 @@ export function initDeepLinks(windowGetter: () => BrowserWindow | undefined): vo
   // Windows and Linux: a second launch passes the link or file in argv.
   app.on('second-instance', (_event, argv) => {
     const win = getWindow()
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
+    if (win) showWindow(win)
     handleArgv(argv)
   })
 

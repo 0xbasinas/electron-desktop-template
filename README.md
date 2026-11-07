@@ -35,6 +35,10 @@ Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-upda
 
 Details: [docs/releasing.md](docs/releasing.md). How the app is put together: [docs/architecture.md](docs/architecture.md).
 
+## Menu, tray and shortcuts
+
+A native application menu, a system tray icon (click to show or hide) and a global shortcut, `Ctrl/Cmd+Shift+Space`, to show or hide the window from anywhere. The tray menu can keep the app running when you close the window (off by default). See [docs/architecture.md](docs/architecture.md).
+
 ## Icons and logo
 
 Edit or replace `build/icon-source.svg` (square, ideally 1024x1024), then run `pnpm icons` to regenerate `build/icon.png`, `.ico`, `.icns` and `resources/icon.png`. The in-app logo is `src/renderer/src/assets/logo.png`.

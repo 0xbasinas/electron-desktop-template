@@ -48,6 +48,7 @@ const edits = {
       .replace(/^ {2}repo: .*$/m, `  repo: ${name}`)
       .replace(/^ {2}maintainer: .*$/m, `  maintainer: ${owner}`)
       .replace(new RegExp(`^( {6}- )${oldName}$`, 'm'), `$1${name}`),
+  'src/main/menu.ts': (s) => s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
   'src/main/deeplink.ts': (s) => s.replace(`PROTOCOL = '${oldName}'`, `PROTOCOL = '${name}'`),
   'src/main/index.ts': (s) => s.replace(oldId, newId),
   'src/renderer/index.html': (s) => s.replace(/<title>.*<\/title>/, `<title>${title}</title>`),

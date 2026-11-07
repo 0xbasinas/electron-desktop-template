@@ -19,6 +19,7 @@ export const api = {
     ipcRenderer.invoke(IPC.settingsSetChannel, channel),
   onUpdaterEvent: (cb: (event: UpdaterEvent) => void): (() => void) =>
     subscribe(IPC.updaterEvent, cb),
+  onMenuCheckUpdates: (cb: () => void): (() => void) => subscribe<void>(IPC.menuCheckUpdates, cb),
   onDeepLink: (cb: (url: string) => void): (() => void) => subscribe(IPC.deepLink, cb),
   onOpenFile: (cb: (path: string) => void): (() => void) => subscribe(IPC.openFile, cb)
 }

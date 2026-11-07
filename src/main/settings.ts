@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { Settings } from '../shared/ipc'
 
-const defaults: Settings = { updateChannel: 'latest' }
+const defaults: Settings = { updateChannel: 'latest', closeToTray: false }
 
 const settingsPath = (): string => join(app.getPath('userData'), 'settings.json')
 
@@ -11,7 +11,8 @@ export function getSettings(): Settings {
   try {
     const saved = JSON.parse(readFileSync(settingsPath(), 'utf8')) as Partial<Settings>
     return {
-      updateChannel: saved.updateChannel === 'beta' ? 'beta' : defaults.updateChannel
+      updateChannel: saved.updateChannel === 'beta' ? 'beta' : defaults.updateChannel,
+      closeToTray: saved.closeToTray === true
     }
   } catch {
     return { ...defaults }

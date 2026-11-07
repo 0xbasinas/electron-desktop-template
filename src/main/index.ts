@@ -3,12 +3,18 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { IPC } from '../shared/ipc'
 import { flushPending, initDeepLinks } from './deeplink'
+import { setupMenu } from './menu'
+import { getSettings } from './settings'
+import { setupShortcuts } from './shortcuts'
+import { setupTray } from './tray'
 import { setupAutoUpdater } from './updater'
 import { loadWindowState, trackWindowState } from './windowState'
 import icon from '../../resources/icon.png?asset'
 
 const isMac = process.platform === 'darwin'
 let mainWindow: BrowserWindow | undefined
+// Set when the app is really quitting, so "close to tray" doesn't block it.
+let quitting = false
 
 // Colors match --background in the renderer's theme so there is no white flash on startup.
 const backgroundColor = (): string => (nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff')
@@ -45,6 +51,13 @@ function createWindow(): void {
   trackWindowState(win)
 
   win.on('ready-to-show', () => win.show())
+  win.on('close', (event) => {
+    // Optional: closing the window keeps the app running in the tray (Windows and Linux).
+    if (!quitting && !isMac && getSettings().closeToTray) {
+      event.preventDefault()
+      win.hide()
+    }
+  })
   win.on('closed', () => (mainWindow = undefined))
   win.webContents.on('did-finish-load', flushPending)
 
@@ -71,6 +84,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   initDeepLinks(() => mainWindow)
+  app.on('before-quit', () => (quitting = true))
 
   app.whenReady().then(() => {
     electronApp.setAppUserModelId('com.0xbasinas.electron-desktop-template')
@@ -84,6 +98,9 @@ if (!app.requestSingleInstanceLock()) {
     ipcMain.on(IPC.ping, () => console.log('pong'))
 
     createWindow()
+    setupMenu(() => mainWindow)
+    setupTray(() => mainWindow)
+    setupShortcuts(() => mainWindow)
     setupAutoUpdater()
 
     app.on('activate', function () {
