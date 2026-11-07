@@ -60,6 +60,16 @@ export function fromAddress(displayName, domain) {
  * Edit apps/api/wrangler.jsonc in place without losing its comments.
  * Every placeholder is replaced by a single targeted substitution; a missing one is an error, not a silent skip.
  */
+export function patchWorkerName(text, name) {
+  if (!/"name":\s*"[^"]*"/.test(text)) throw new Error('No Worker "name" line to update')
+  return text
+    .replace(/("name":\s*)"[^"]*"/, () => `"name": ${JSON.stringify(name)}`)
+    .replace(
+      /("database_name":\s*)"(?![^"]*-preview")[^"]*"/,
+      () => `"database_name": ${JSON.stringify(name)}`
+    )
+}
+
 export function patchWranglerConfig(text, { databaseId, siteUrl, from, appName, routeHost }) {
   const swap = (source, pattern, replacement, label) => {
     if (!pattern.test(source)) throw new Error(`wrangler.jsonc has no ${label} line to update`)

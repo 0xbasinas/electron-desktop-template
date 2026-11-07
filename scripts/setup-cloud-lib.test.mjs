@@ -12,6 +12,7 @@ import {
   findDatabaseId,
   parseDatabaseId,
   patchPreviewDatabase,
+  patchWorkerName,
   PREVIEW_DB_PLACEHOLDER,
   patchWranglerConfig,
   recordExists,
@@ -201,4 +202,14 @@ test('patchWranglerConfig sets APP_NAME everywhere and fails when there is none'
   const out = patchWranglerConfig(text, { appName: 'My "App"' })
   assert.equal(out.match(/"APP_NAME": "My \\"App\\""/g).length, 2)
   assert.throws(() => patchWranglerConfig('{}', { appName: 'X' }), /APP_NAME/)
+})
+
+test('patchWorkerName names the Worker and its production database, not the preview one', () => {
+  const text = `{ "name": "old", "d1_databases": [{ "database_name": "old" }],
+    "previews": { "d1_databases": [{ "database_name": "old-preview" }] } }`
+  const out = patchWorkerName(text, 'gozap')
+  assert.match(out, /"name": "gozap"/)
+  assert.match(out, /"database_name": "gozap"/)
+  assert.match(out, /"database_name": "old-preview"/)
+  assert.throws(() => patchWorkerName('{}', 'x'))
 })
