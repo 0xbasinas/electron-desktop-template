@@ -12,6 +12,7 @@
     "rename": "node scripts/rename.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "check:bundle": "node scripts/check-bundle-size.mjs",
+    "check:release": "node scripts/check-release-artifacts.mjs",
     "test:watch": "vitest",
     "lint": "eslint --cache .",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",

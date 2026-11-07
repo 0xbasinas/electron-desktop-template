@@ -50,13 +50,32 @@ A stable release is first offered to a share of users (`rollout` in `publish-sta
 This works through `stagingPercentage` in the update manifests (`latest*.yml`): each install has a stable
 random number and only takes the update if that number falls inside the percentage.
 
-1. Publish. About 10% of installs are offered the new version. Watch for crash reports and issues.
-2. Looks good: run **Actions > Set release rollout** with the tag (for example `v0.1.42`) and a higher
-   percentage, up to `100` for everyone. Raising it never takes the update away from anyone.
-3. Looks bad: set it to `0` to stop offering it, then publish a fix. People who already have it keep it.
+1. Publish. About 10% of installs are offered the new version.
+2. **Automatic promotion:** `rollout-guard.yml` runs hourly and raises the newest stable release on a schedule while it
+   looks healthy: 25% after 1 day, 50% after 2, 100% after 3 (`scripts/lib/promote.mjs`). "Healthy" means the guard
+   (below) saw enough crash data and found nothing wrong. With no crash data nothing is promoted on its own; set the
+   repository variable `AUTO_PROMOTE_WITHOUT_CRASH_DATA` to `true` to let age alone decide.
+3. **By hand:** run **Actions > Set release rollout** with the tag (for example `v0.1.42`) and a percentage, up to
+   `100` for everyone. Raising it never takes the update away from anyone.
+4. Looks bad: the guard sets it to `0`, or you do. Automatic promotion never touches a release at 0%, so a paused
+   release stays paused until you raise it. Then ship a fix, or run **Rollback release**.
 
 Beta releases are always offered to everyone on the beta channel. Set `rollout: 100` in `publish-stable.yml`
 if you don't want staged rollouts. The logic lives in `scripts/lib/rollout.mjs` and is unit tested.
+
+## Release dry run
+
+Every pull request builds the real installers on Windows, macOS and Linux (`electron-builder --publish never`) and runs
+`pnpm check:release` (`scripts/check-release-artifacts.mjs`). It fails when:
+
+- the update manifest (`latest.yml`, `latest-mac.yml` or `latest-linux.yml`) is missing or has a different version than the app;
+- a file the manifest lists is missing, or its size or sha512 differs;
+- a Windows installer or macOS zip/dmg has no `.blockmap` (updates would not be differential; AppImages have none);
+- the packaged app lacks `app-update.yml`, `release-notes.md` or `app.asar`;
+- the fresh manifest already carries a rollout percentage (only the publish step adds that).
+
+This is the same build the release runs, so packaging problems show up on the pull request instead of after the merge.
+It stops short of publishing, signing or installing the result; `pnpm test:update` covers the update flow itself.
 
 ## Rolling back
 
@@ -69,7 +88,7 @@ if you don't want staged rollouts. The logic lives in `scripts/lib/rollout.mjs` 
 Installs that already updated keep the bad version, because updaters never downgrade. To fix them, revert the
 change in a pull request and merge it: that publishes a higher version.
 
-## Automatic pause on crashes
+## Automatic pause on crashes (the guard)
 
 `rollout-guard.yml` runs every hour. For the newest stable release (under 7 days old) it asks Sentry for the
 crash-free session rate. It sets the rollout to 0% and opens an issue when the rate is below 98%, or more than 2 points
