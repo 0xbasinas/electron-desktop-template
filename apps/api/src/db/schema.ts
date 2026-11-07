@@ -5,6 +5,15 @@ import { user } from './auth-schema'
 // `pnpm auth:schema`. Our own tables go below.
 export * from './auth-schema'
 
+/** One row per person: their synced preferences (JSON, validated on read) and when they last changed. */
+export const preference = sqliteTable('preference', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  data: text('data').notNull(),
+  updatedAt: integer('updated_at').notNull()
+})
+
 /** A small example resource: notes owned by a signed-in user. Replace it with your own data. */
 export const note = sqliteTable(
   'note',

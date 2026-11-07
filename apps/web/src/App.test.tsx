@@ -34,7 +34,10 @@ vi.mock('./lib/auth', () => ({
 }))
 const notesApi = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }))
 const accountApi = vi.hoisted(() => ({ get: vi.fn(), export: vi.fn(), remove: vi.fn() }))
-vi.mock('./lib/api', () => ({ api: { notes: notesApi, account: accountApi } }))
+const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
+vi.mock('./lib/api', () => ({
+  api: { notes: notesApi, account: accountApi, preferences: prefsApi }
+}))
 
 beforeEach(() => {
   auth.session = null
@@ -56,6 +59,9 @@ beforeEach(() => {
     name: 'ada',
     createdAt: '2026-01-01T00:00:00.000Z'
   })
+  localStorage.clear()
+  prefsApi.get.mockReset().mockResolvedValue({ preferences: { theme: 'system' }, updatedAt: 0 })
+  prefsApi.put.mockReset().mockImplementation((r: unknown) => Promise.resolve(r))
   accountApi.export.mockReset()
   accountApi.remove.mockReset().mockResolvedValue(undefined)
 })
@@ -288,5 +294,41 @@ describe('passkeys', () => {
     await waitFor(() => expect(auth.addPasskey).toHaveBeenCalledWith({ name: 'Passkey 2' }))
     await userEvent.click(screen.getByRole('button', { name: 'Remove Laptop' }))
     await waitFor(() => expect(auth.deletePasskey).toHaveBeenCalledWith({ id: 'p1' }))
+  })
+})
+
+describe('theme sync', () => {
+  it('saves a chosen theme here and on the server', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    await waitFor(() =>
+      expect(prefsApi.put).toHaveBeenCalledWith(
+        expect.objectContaining({ preferences: { theme: 'dark' } })
+      )
+    )
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(await screen.findByRole('status')).toHaveTextContent('desktop app will use it too')
+  })
+
+  it('takes a newer theme from another device', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    prefsApi.get.mockResolvedValue({
+      preferences: { theme: 'light' },
+      updatedAt: Date.now() + 1000
+    })
+    at('/account')
+    await waitFor(() => expect(screen.getByLabelText('Theme')).toHaveValue('light'))
+    expect(prefsApi.put).not.toHaveBeenCalled()
+  })
+
+  it('keeps working when the server is down', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    prefsApi.put.mockRejectedValue(new Error('offline'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/account')
+    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved on this device')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
   })
 })

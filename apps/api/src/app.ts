@@ -1,6 +1,12 @@
 import { zValidator } from '@hono/zod-validator'
 import {
+  clampUpdatedAt,
   deleteAccountInputSchema,
+  emptyPreferences,
+  newerWins,
+  parsePreferences,
+  preferencesRecordSchema,
+  type PreferencesRecord,
   noteInputSchema,
   type Account,
   type AccountExport,
@@ -60,6 +66,21 @@ const toAccount = (row: typeof schema.user.$inferSelect): Account => ({
   createdAt: row.createdAt.toISOString()
 })
 
+async function readPreferences(db: Db, userId: string): Promise<PreferencesRecord> {
+  const [row] = await db
+    .select()
+    .from(schema.preference)
+    .where(eq(schema.preference.userId, userId))
+  if (!row) return emptyPreferences()
+  let raw: unknown = null
+  try {
+    raw = JSON.parse(row.data)
+  } catch {
+    // unreadable data falls back to the defaults
+  }
+  return { preferences: parsePreferences(raw), updatedAt: row.updatedAt }
+}
+
 export function createApp(options: AppOptions = {}) {
   const sender = options.emailSender ?? defaultEmailSender
 
@@ -96,6 +117,34 @@ export function createApp(options: AppOptions = {}) {
         .returning({ id: schema.note.id })
       if (deleted.length === 0) throw new HTTPException(404, { message: 'Not found' })
       return c.body(null, 204)
+    })
+
+  // Preferences that follow the person between the web app and the desktop app. Last write wins.
+  const preferences = new Hono<AppEnv>()
+    .use(sameOriginOnly)
+    .use(requireSession(false))
+    .get('/', async (c) => c.json(await readPreferences(c.var.db, c.var.userId)))
+    .put('/', zValidator('json', preferencesRecordSchema), async (c) => {
+      const incoming = c.req.valid('json')
+      const record: PreferencesRecord = {
+        preferences: incoming.preferences,
+        updatedAt: clampUpdatedAt(incoming.updatedAt, Date.now())
+      }
+      const current = await readPreferences(c.var.db, c.var.userId)
+      const winner = newerWins(record, current)
+      // Only write when the incoming copy is actually newer: a stale device then costs a read, not a write.
+      if (winner === record && record.updatedAt > current.updatedAt) {
+        const data = JSON.stringify(record.preferences)
+        await c.var.db
+          .insert(schema.preference)
+          .values({ userId: c.var.userId, data, updatedAt: record.updatedAt })
+          .onConflictDoUpdate({
+            target: schema.preference.userId,
+            set: { data, updatedAt: record.updatedAt }
+          })
+        return c.json(record)
+      }
+      return c.json(current)
     })
 
   // The person's own account: see it, download everything we hold, delete it.
@@ -144,6 +193,7 @@ export function createApp(options: AppOptions = {}) {
         exportedAt: new Date().toISOString(),
         account: toAccount(row),
         notes: noteRows.map(toNote),
+        preferences: await readPreferences(c.var.db, c.var.userId),
         passkeys: passkeyRows.map((p) => ({
           name: p.name,
           deviceType: p.deviceType,
@@ -208,6 +258,7 @@ export function createApp(options: AppOptions = {}) {
       // Sign-in, sessions and sign-out: handled by Better Auth under /api/auth/*.
       .on(['GET', 'POST'], '/auth/*', (c) => c.var.auth.handler(c.req.raw))
       .route('/notes', notes)
+      .route('/preferences', preferences)
       .route('/account', account)
       .onError((error, c) => {
         if (error instanceof HTTPException) return c.json({ error: error.message }, error.status)

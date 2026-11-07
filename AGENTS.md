@@ -103,6 +103,9 @@ only third-party runtime modules go in `dependencies` (electron-builder packages
   renderer tokens, and check deep links with `authLink.ts` before using them. The Account section shows only when `API_URL` is set at build time.
 - Change the database by editing `apps/api/src/db/schema.ts` then `pnpm --filter @repo/api db:generate`; auth tables come from
   `pnpm --filter @repo/api auth:schema`. Migrations run before the new code deploys, so keep them backward compatible.
+- Per-person data that must follow them between devices goes through `/api/preferences` (last write wins, local copy first, best-effort sync):
+  see `packages/shared/src/preferences.ts` and the theme in `apps/web/src/lib/theme.ts` and `apps/desktop/src/main/preferencesSync.ts`.
+- Anything you store per person needs `ON DELETE CASCADE` on the user and a place in the account export (`apps/api/src/app.ts`).
 - Web and API deploy from `.github/workflows/deploy-web.yml` (off until `CLOUDFLARE_DEPLOY=true`); it never releases the desktop app.
 
 ## Release system in one paragraph

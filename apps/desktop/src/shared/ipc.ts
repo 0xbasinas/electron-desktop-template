@@ -29,7 +29,11 @@ export const IPC = {
 export type UpdateChannel = 'latest' | 'beta'
 
 /** User preferences. Everything here can be changed from the settings window. */
+export type Theme = 'system' | 'light' | 'dark'
+
 export interface Settings {
+  /** Light, dark or follow the system. Synced with the account's other devices when signed in. */
+  theme: Theme
   updateChannel: UpdateChannel
   /** Closing the window hides it to the tray instead of quitting (Windows and Linux). */
   closeToTray: boolean

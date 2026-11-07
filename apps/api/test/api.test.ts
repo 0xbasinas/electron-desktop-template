@@ -379,6 +379,10 @@ describe('account', () => {
     )
       .bind('gone@example.com')
       .run()
+    await s.call(
+      '/api/preferences',
+      json(cookie, 'PUT', { preferences: { theme: 'dark' }, updatedAt: 5 })
+    )
     const userId = (await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
       .bind('gone@example.com')
       .first<{ id: string }>())!.id
@@ -407,6 +411,7 @@ describe('account', () => {
     expect(await left('session', 'user_id')).toBe(0)
     expect(await left('note', 'user_id')).toBe(0)
     expect(await left('passkey', 'user_id')).toBe(0)
+    expect(await left('preference', 'user_id')).toBe(0)
   })
 })
 
@@ -431,5 +436,62 @@ describe('passkeys', () => {
     const cookie = await signIn(s, 'pk2@example.com')
     const ok = await s.call('/api/auth/passkey/generate-register-options', { headers: { cookie } })
     expect(ok.status).toBe(200)
+  })
+})
+
+describe('preferences', () => {
+  const put = (cookie: string, theme: string, updatedAt: number): RequestInit => ({
+    method: 'PUT',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ preferences: { theme }, updatedAt })
+  })
+  const get = async (s: ReturnType<typeof setup>, cookie: string): Promise<unknown> =>
+    (await s.call('/api/preferences', { headers: { cookie } })).json()
+
+  it('needs a session and blocks cross-site writes', async () => {
+    const s = setup()
+    expect((await s.call('/api/preferences')).status).toBe(401)
+    const cookie = await signIn(s, 'pref0@example.com')
+    const cross = await s.call('/api/preferences', {
+      ...put(cookie, 'dark', 5),
+      headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' }
+    })
+    expect(cross.status).toBe(403)
+  })
+
+  it('starts with the defaults and keeps the newest edit', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'pref1@example.com')
+    expect(await get(s, cookie)).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+
+    const first = await s.call('/api/preferences', put(cookie, 'dark', 100))
+    expect(await first.json()).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+
+    // An older edit from a device that was offline loses, and gets the newer copy back.
+    const stale = await s.call('/api/preferences', put(cookie, 'light', 50))
+    expect(await stale.json()).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+    expect(await get(s, cookie)).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+
+    const newer = await s.call('/api/preferences', put(cookie, 'light', 200))
+    expect(await newer.json()).toEqual({ preferences: { theme: 'light' }, updatedAt: 200 })
+  })
+
+  it('rejects values it does not know', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'pref2@example.com')
+    expect((await s.call('/api/preferences', put(cookie, 'pink', 5))).status).toBe(400)
+    expect((await s.call('/api/preferences', put(cookie, 'dark', -5))).status).toBe(400)
+  })
+
+  it('cannot pin a time in the far future, and keeps people apart', async () => {
+    const s = setup()
+    const a = await signIn(s, 'pref3@example.com')
+    const b = await signIn(s, 'pref4@example.com')
+    const far = Date.now() + 10 * 365 * 86_400_000
+    const saved = (await (await s.call('/api/preferences', put(a, 'dark', far))).json()) as {
+      updatedAt: number
+    }
+    expect(saved.updatedAt).toBeLessThan(Date.now() + 10 * 60_000)
+    expect(await get(s, b)).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
   })
 })

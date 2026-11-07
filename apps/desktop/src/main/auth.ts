@@ -48,8 +48,27 @@ function getClient(): AuthClient {
   return client
 }
 
+const accountListeners = new Set<(account: Account) => void>()
+
+/** Run `listener` whenever the signed-in person changes (sign-in or sign-out). */
+export function onAccountChanged(listener: (account: Account) => void): void {
+  accountListeners.add(listener)
+}
+
 function broadcast(account: Account): void {
   for (const win of BrowserWindow.getAllWindows()) win.webContents.send(IPC.accountChanged, account)
+  accountListeners.forEach((listener) => listener(account))
+}
+
+/**
+ * `fetch` for the API on behalf of the signed-in person: adds the stored session cookie and the app's own origin
+ * (which the Worker lists in TRUSTED_ORIGINS). Used by the typed client in main; the renderer never sees the cookie.
+ */
+export const authenticatedFetch: typeof fetch = (input, init) => {
+  const headers = new Headers(init?.headers)
+  headers.set('cookie', getClient().getCookie())
+  headers.set('origin', `${PROTOCOL}:/`)
+  return fetch(input, { ...init, headers })
 }
 
 export async function getAccount(): Promise<Account> {

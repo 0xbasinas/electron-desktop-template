@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { preferencesRecordSchema } from './preferences'
 
 /** An email address, normalised the same way everywhere (trimmed, lower case). */
 export const emailSchema = z.string().trim().toLowerCase().pipe(z.email().max(254))
@@ -31,6 +32,7 @@ export const accountExportSchema = z.object({
   exportedAt: z.string(),
   account: accountSchema,
   notes: z.array(noteSchema),
+  preferences: preferencesRecordSchema,
   passkeys: z.array(
     z.object({
       name: z.string().nullable(),

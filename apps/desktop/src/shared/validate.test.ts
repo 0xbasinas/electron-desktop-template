@@ -9,6 +9,8 @@ describe('parseSettingsPatch', () => {
       launchAtLogin: false
     })
     expect(parseSettingsPatch({ crashReports: true })).toEqual({ crashReports: true })
+    expect(parseSettingsPatch({ theme: 'dark' })).toEqual({ theme: 'dark' })
+    expect(() => parseSettingsPatch({ theme: 'pink' })).toThrow(/theme/)
     expect(() => parseSettingsPatch({ crashReports: 'yes' })).toThrow()
     expect(parseSettingsPatch({})).toEqual({})
   })

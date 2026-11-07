@@ -4,6 +4,9 @@ import type { Account } from '@repo/shared'
 import { Navigate, useNavigate } from 'react-router'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
+import { currentTheme, setTheme, syncTheme } from '../lib/theme'
+
+type ThemeChoice = 'system' | 'light' | 'dark'
 
 interface PasskeyRow {
   id: string
@@ -25,6 +28,7 @@ function AccountDetails(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [confirmEmail, setConfirmEmail] = useState('')
   const [busy, setBusy] = useState(false)
+  const [theme, setThemeState] = useState(currentTheme())
   const [passkeys, setPasskeys] = useState<PasskeyRow[]>([])
 
   useEffect(() => {
@@ -42,6 +46,24 @@ function AccountDetails(): JSX.Element {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    syncTheme()
+      .then((t) => {
+        if (!cancelled) setThemeState(t)
+      })
+      .catch((e: unknown) => console.error(e))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function chooseTheme(next: ThemeChoice): Promise<void> {
+    setThemeState(next)
+    const saved = await setTheme(next, true)
+    setMessage(saved ? 'Saved. The desktop app will use it too.' : 'Saved on this device.')
+  }
 
   async function loadPasskeys(): Promise<void> {
     const { data } = await authClient.passkey.listUserPasskeys()
@@ -165,6 +187,23 @@ function AccountDetails(): JSX.Element {
           {error}
         </p>
       )}
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Appearance</h2>
+        <p className="text-sm text-muted-foreground">
+          The theme follows you: change it here or in the desktop app and the other one catches up.
+        </p>
+        <select
+          aria-label="Theme"
+          value={theme}
+          onChange={(e) => void chooseTheme(e.target.value as ThemeChoice)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="system">Match my system</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </section>
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Passkeys</h2>

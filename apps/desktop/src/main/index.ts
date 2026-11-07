@@ -7,6 +7,7 @@ import { registerIpcHandlers } from './ipcHandlers'
 import { logger, setupLogging } from './logger'
 import { setupMenu } from './menu'
 import { getSettings } from './settings'
+import { startPreferencesSync } from './preferencesSync'
 import { setupSettingsEffects } from './settingsEffects'
 import { setupShortcuts } from './shortcuts'
 import { setupTray } from './tray'
@@ -93,6 +94,7 @@ if (!app.requestSingleInstanceLock()) {
     setupTray(() => mainWindow)
     setupShortcuts(() => mainWindow)
     setupSettingsEffects()
+    startPreferencesSync()
     setupAutoUpdater()
 
     app.on('activate', function () {
