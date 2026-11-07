@@ -247,8 +247,8 @@ function AccountDetails(): JSX.Element {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Your data</h2>
         <p className="text-sm text-muted-foreground">
-          Download everything we hold about you (your account, your notes and your sign-ins) as one
-          file.
+          Download everything we hold about you (your account, your settings and your sign-ins) as
+          one file.
         </p>
         <Button variant="outline" disabled={busy} onClick={() => void download()}>
           Download my data
@@ -258,7 +258,7 @@ function AccountDetails(): JSX.Element {
       <section className="space-y-2 rounded-lg border border-destructive/40 p-4">
         <h2 className="text-lg font-semibold text-destructive">Delete account</h2>
         <p className="text-sm text-muted-foreground">
-          Permanently deletes your account, your notes and your sign-ins. This cannot be undone.
+          Permanently deletes your account, your settings and your sign-ins. This cannot be undone.
           Type your email to confirm.
         </p>
         <form onSubmit={(e) => void remove(e)} className="flex gap-2">

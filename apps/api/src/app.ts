@@ -8,12 +8,10 @@ import {
   parsePreferences,
   preferencesRecordSchema,
   type PreferencesRecord,
-  noteInputSchema,
   type Account,
-  type AccountExport,
-  type Note
+  type AccountExport
 } from '@repo/shared'
-import { and, desc, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
@@ -37,14 +35,6 @@ const defaultEmailSender = (env: Bindings): EmailSender =>
   env.RESEND_API_KEY
     ? createResendSender(env.RESEND_API_KEY, env.EMAIL_FROM)
     : createConsoleSender()
-
-const toNote = (row: typeof schema.note.$inferSelect): Note => ({
-  id: row.id,
-  title: row.title,
-  body: row.body,
-  createdAt: row.createdAt.toISOString(),
-  updatedAt: row.updatedAt.toISOString()
-})
 
 /**
  * Requires a signed-in user. `fresh` skips the 5-minute session cookie cache and asks the database, which account
@@ -86,41 +76,6 @@ async function readPreferences(db: Db, userId: string): Promise<PreferencesRecor
 
 export function createApp(options: AppOptions = {}) {
   const sender = options.emailSender ?? defaultEmailSender
-
-  // Notes belong to the signed-in user. Every query below filters by userId.
-  const notes = new Hono<AppEnv>()
-    .use(sameOriginOnly)
-    .use(requireSession(false))
-    .get('/', async (c) => {
-      const rows = await c.var.db
-        .select()
-        .from(schema.note)
-        .where(eq(schema.note.userId, c.var.userId))
-        .orderBy(desc(schema.note.createdAt))
-        .limit(100)
-      return c.json(rows.map(toNote))
-    })
-    .post('/', zValidator('json', noteInputSchema), async (c) => {
-      const input = c.req.valid('json')
-      const now = new Date()
-      const row = {
-        id: crypto.randomUUID(),
-        userId: c.var.userId,
-        ...input,
-        createdAt: now,
-        updatedAt: now
-      }
-      await c.var.db.insert(schema.note).values(row)
-      return c.json(toNote(row), 201)
-    })
-    .delete('/:id', async (c) => {
-      const deleted = await c.var.db
-        .delete(schema.note)
-        .where(and(eq(schema.note.id, c.req.param('id')), eq(schema.note.userId, c.var.userId)))
-        .returning({ id: schema.note.id })
-      if (deleted.length === 0) throw new HTTPException(404, { message: 'Not found' })
-      return c.body(null, 204)
-    })
 
   // Preferences that follow the person between the web app and the desktop app. Last write wins.
   const preferences = new Hono<AppEnv>()
@@ -168,11 +123,6 @@ export function createApp(options: AppOptions = {}) {
         .from(schema.user)
         .where(eq(schema.user.id, c.var.userId))
       if (!row) throw new HTTPException(404, { message: 'Not found' })
-      const noteRows = await c.var.db
-        .select()
-        .from(schema.note)
-        .where(eq(schema.note.userId, c.var.userId))
-        .orderBy(desc(schema.note.createdAt))
       // Only what the person can see on their account page; the public keys are not personal data.
       const passkeyRows = await c.var.db
         .select({
@@ -195,7 +145,6 @@ export function createApp(options: AppOptions = {}) {
       const body: AccountExport = {
         exportedAt: new Date().toISOString(),
         account: toAccount(row),
-        notes: noteRows.map(toNote),
         preferences: await readPreferences(c.var.db, c.var.userId),
         passkeys: passkeyRows.map((p) => ({
           name: p.name,
@@ -228,7 +177,7 @@ export function createApp(options: AppOptions = {}) {
         headers: c.req.raw.headers,
         asResponse: true
       })
-      // Sessions, linked accounts and notes go with the user (ON DELETE CASCADE). Unused sign-in links are removed too.
+      // Sessions, linked accounts, passkeys and preferences go with the user (ON DELETE CASCADE). Unused sign-in links are removed too.
       await c.var.db.batch([
         c.var.db.delete(schema.verification).where(eq(schema.verification.identifier, row.email)),
         c.var.db.delete(schema.user).where(eq(schema.user.id, c.var.userId))
@@ -288,7 +237,6 @@ export function createApp(options: AppOptions = {}) {
         }
         return c.json({ ok: true })
       })
-      .route('/notes', notes)
       .route('/preferences', preferences)
       .route('/account', account)
       .onError((error, c) => {

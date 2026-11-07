@@ -32,11 +32,10 @@ vi.mock('./lib/auth', () => ({
     revokeSessions: auth.revoke
   }
 }))
-const notesApi = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }))
 const accountApi = vi.hoisted(() => ({ get: vi.fn(), export: vi.fn(), remove: vi.fn() }))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 vi.mock('./lib/api', () => ({
-  api: { notes: notesApi, account: accountApi, preferences: prefsApi }
+  api: { account: accountApi, preferences: prefsApi }
 }))
 
 beforeEach(() => {
@@ -45,9 +44,6 @@ beforeEach(() => {
   auth.magicLink.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.transfer.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.ensureRedirect.mockClear()
-  notesApi.list.mockReset().mockResolvedValue([])
-  notesApi.create.mockReset()
-  notesApi.remove.mockReset()
   auth.signInPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.listPasskeys.mockReset().mockResolvedValue({ data: [], error: null })
   auth.addPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
@@ -91,33 +87,9 @@ describe('routes', () => {
 
   it('shows the web app to a signed-in user', async () => {
     auth.session = { user: { email: 'ada@example.com' } }
-    notesApi.list.mockResolvedValue([
-      { id: '1', title: 'First note', body: '', createdAt: '', updatedAt: '' }
-    ])
     at('/app')
     expect(screen.getByRole('heading', { name: 'Web app' })).toBeInTheDocument()
     expect(screen.getByText('Signed in as ada@example.com')).toBeInTheDocument()
-    expect(await screen.findByText('First note')).toBeInTheDocument()
-  })
-
-  it('adds and deletes notes', async () => {
-    auth.session = { user: { email: 'ada@example.com' } }
-    notesApi.create.mockResolvedValue({
-      id: '2',
-      title: 'Milk',
-      body: '',
-      createdAt: '',
-      updatedAt: ''
-    })
-    at('/app')
-    await screen.findByText('No notes yet.')
-    await userEvent.type(screen.getByLabelText('New note'), 'Milk')
-    await userEvent.click(screen.getByRole('button', { name: 'Add' }))
-    expect(notesApi.create).toHaveBeenCalledWith({ title: 'Milk', body: '' })
-    expect(await screen.findByText('Milk')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Delete Milk' }))
-    expect(notesApi.remove).toHaveBeenCalledWith('2')
-    await waitFor(() => expect(screen.queryByText('Milk')).not.toBeInTheDocument())
   })
 
   it('shows a not-found page for unknown routes', () => {

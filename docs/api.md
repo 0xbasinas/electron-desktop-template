@@ -7,7 +7,7 @@ cookie is first-party and there is no CORS to configure.
 
 ```
 apps/api/src/index.ts      The Worker (default export) and the `AppType` used for the typed client
-apps/api/src/app.ts        Routes: /api/health, /api/auth/* (Better Auth), /api/notes (example resource)
+apps/api/src/app.ts        Routes: /api/health, /api/auth/* (Better Auth), /api/account, /api/preferences
 apps/api/src/auth.ts       Better Auth configuration (magic link, sessions, rate limits)
 apps/api/src/email.ts      EmailSender: Resend in production, the log in development, a fake in tests
 apps/api/src/origin.ts     Blocks cross-site writes
@@ -62,13 +62,14 @@ The design keeps well inside that:
 - Magic-link tokens are stored hashed, expire after 5 minutes and work once.
 - Sign-in requests are rate limited per IP (`cf-connecting-ip`, which Cloudflare sets itself).
 - Writes with a cross-site `Origin` are rejected (`src/origin.ts`); Better Auth checks origins on its own routes.
-- Every notes query filters by the signed-in user. The tests check that one user cannot read or delete another's notes.
+- Every query for private data filters by the signed-in user. The tests check that one user cannot read another's data.
 - The email sender is not awaited, so the response time does not reveal whether an address already has an account.
 
 ## Web sign-in
 
-`apps/web` has a `/sign-in` page (email, then "check your email") and `/app`, which needs a session and shows the notes
-example through the typed client in `packages/shared/src/client.ts` (responses are checked with zod). In development you
+`apps/web` has a `/sign-in` page (email, then "check your email") and `/app`, which needs a session. `/app` is an
+empty starting point for your product; call the API from it through the typed client in `packages/shared/src/client.ts`
+(responses are checked with zod). To add your own data, add a table in `apps/api/src/db/schema.ts`, run `pnpm --filter @repo/api db:generate`, and filter every query by the signed-in user's id. In development you
 can also run `pnpm --filter @repo/web dev`; Vite proxies `/api` to `wrangler dev` on port 8787.
 
 ## Desktop sign-in
@@ -93,8 +94,8 @@ The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /
 
 - These routes ask the database for the session instead of trusting the 5-minute cookie cache, so a deleted account or a
   revoked session stops working at once.
-- The export lists the account, the notes and the sign-ins (time, IP, browser) and never any token.
-- Deleting needs the email typed again. It removes the user; sessions, linked accounts and notes go with it (`ON DELETE CASCADE`),
+- The export lists the account, the settings and the sign-ins (time, IP, browser) and never any token.
+- Deleting needs the email typed again. It removes the user; sessions, linked accounts, passkeys and settings go with it (`ON DELETE CASCADE`),
   unused sign-in links are removed, and the response clears the session cookies.
 - **When you add your own tables**, give them `userId ... references user.id ON DELETE CASCADE`, and add their rows to the export
   in `app.ts`, so deletion and export stay complete. The tests in `apps/api/test/api.test.ts` ("account") show how to check it.
