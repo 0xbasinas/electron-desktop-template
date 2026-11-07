@@ -16,6 +16,10 @@
     "dev": {
       "cache": false,
       "persistent": true
+    },
+    "@repo/api#build": {
+      "dependsOn": ["^build", "@repo/web#build"],
+      "outputs": ["dist/**"]
     }
   }
 }

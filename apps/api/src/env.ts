@@ -1,0 +1,14 @@
+/** Everything the Worker receives from Cloudflare: bindings, plain variables and secrets. */
+export interface Bindings {
+  DB: D1Database
+  /** Public address of the site; the API lives on the same origin. */
+  BETTER_AUTH_URL: string
+  /** Sender shown on login emails. The domain must be verified in Resend. */
+  EMAIL_FROM: string
+  /** Secret: signs sessions and tokens. `openssl rand -base64 32`. */
+  BETTER_AUTH_SECRET: string
+  /** Secret: Resend API key. Without it (local development) login links are printed to the log instead. */
+  RESEND_API_KEY?: string
+  /** Optional, comma separated: extra origins allowed to call the API (for example a custom desktop scheme). */
+  TRUSTED_ORIGINS?: string
+}

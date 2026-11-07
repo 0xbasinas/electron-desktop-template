@@ -56,10 +56,12 @@ apps/desktop/             The Electron app (its own package.json, electron-build
   tests/e2e/              Playwright against the packaged app.   tests/update/  old-to-new update test.
 apps/web/                 Vite + React SPA: marketing site (/), download page (/download, reads the latest GitHub release), web app (/app/*).
                           public/_headers and _redirects are Cloudflare Pages config (CSP, SPA fallback).
+apps/api/                 Hono API on Cloudflare Workers + D1 (Drizzle) + Better Auth magic links (Resend). Also serves apps/web/dist. See docs/api.md.
+packages/shared/          zod schemas shared by API, web and desktop.
 packages/ui/               @repo/ui: shared React components (Button, cn) and the Tailwind theme (theme.css). Source-only; apps bundle it.
 turbo.json                Task graph (build, typecheck, test). pnpm-workspace.yaml holds the workspace globs and the version catalog.
 .github/                  Workflows. publish-stable / publish-beta call _publish.yml after ci.yml passes.
-docs/                     architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
+docs/                     api.md (API, database, sign-in), architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
                           monorepo-and-web.md (how the repo is organised and the plan for web + API).
 ```
 

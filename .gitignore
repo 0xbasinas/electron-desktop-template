@@ -9,3 +9,5 @@ playwright-report
 dist-update
 dist-*
 .turbo
+.dev.vars
+.wrangler
