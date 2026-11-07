@@ -19,7 +19,7 @@ import {
   mask,
   normalizeSiteUrl,
   parseArgs,
-  parseDatabaseId,
+  findDatabaseId,
   patchPreviewDatabase,
   patchWranglerConfig,
   recordExists,
@@ -175,25 +175,26 @@ ok(
 // 3 -------------------------------------------------------------------------------------------------------------------
 step(3, 'Database (D1)')
 const dbName = WORKER_NAME
-let info = wrangler(['d1', 'info', dbName, '--json'], { allowFail: true })
-let databaseId = info.ok ? parseDatabaseId(info.out) : null
+const d1Id = (name) => {
+  const list = wrangler(['d1', 'list', '--json'], { allowFail: true })
+  return list.ok ? findDatabaseId(list.out, name) : null
+}
+let databaseId = d1Id(dbName)
 if (databaseId) {
   ok(`Database "${dbName}" already exists`)
 } else {
   wrangler(['d1', 'create', dbName])
-  info = wrangler(['d1', 'info', dbName, '--json'])
-  databaseId = parseDatabaseId(info.out)
+  databaseId = d1Id(dbName)
   if (!databaseId)
     fail(
-      'Created the database but could not read its id. Run `wrangler d1 info` and paste it into wrangler.jsonc.'
+      'Created the database but could not read its id. Run `wrangler d1 list` and paste it into wrangler.jsonc.'
     )
   ok(`Created database "${dbName}"`)
 }
 
 // The shared staging database for pull request previews (never production data).
 const previewDbName = `${WORKER_NAME}-preview`
-let previewInfo = wrangler(['d1', 'info', previewDbName, '--json'], { allowFail: true })
-let previewDatabaseId = previewInfo.ok ? parseDatabaseId(previewInfo.out) : null
+let previewDatabaseId = d1Id(previewDbName)
 if (previewDatabaseId) {
   ok(`Preview database "${previewDbName}" already exists`)
 } else if (
@@ -202,11 +203,10 @@ if (previewDatabaseId) {
   note('Skipped. Previews stay off until you create it (docs/api.md, Previews) or run this again.')
 } else {
   wrangler(['d1', 'create', previewDbName])
-  previewInfo = wrangler(['d1', 'info', previewDbName, '--json'])
-  previewDatabaseId = parseDatabaseId(previewInfo.out)
+  previewDatabaseId = d1Id(previewDbName)
   if (!previewDatabaseId)
     fail(
-      'Created the preview database but could not read its id. Run `wrangler d1 info` and paste it into wrangler.jsonc and wrangler.preview-migrations.jsonc.'
+      'Created the preview database but could not read its id. Run `wrangler d1 list` and paste it into wrangler.jsonc and wrangler.preview-migrations.jsonc.'
     )
   ok(`Created preview database "${previewDbName}"`)
 }
