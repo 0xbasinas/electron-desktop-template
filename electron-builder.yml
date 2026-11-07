@@ -6,10 +6,19 @@ files:
   - '!**/.vscode/*'
   - '!src/*'
   - '!scripts/*'
+  - '!build/icon-source.svg'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{vitest.config.ts,components.json,.github,.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{vitest.config.ts,bundle-budget.json,components.json,.github,.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+protocols:
+  - name: App deep link
+    schemes:
+      - electron-desktop-template
+fileAssociations:
+  - ext: tpl
+    name: Template file
+    role: Editor
 asarUnpack:
   - 'resources/**'
 win:
@@ -20,6 +29,9 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
 mac:
+  target:
+    - dmg
+    - zip
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.

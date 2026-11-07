@@ -72,3 +72,11 @@
     @apply bg-background text-foreground antialiased;
   }
 }
+
+/* Custom title bar: draggable, but its interactive children are not. */
+.app-drag {
+  -webkit-app-region: drag;
+}
+.app-drag :is(button, a, input, select) {
+  -webkit-app-region: no-drag;
+}

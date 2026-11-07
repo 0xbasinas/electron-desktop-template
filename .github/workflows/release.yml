@@ -1,18 +1,23 @@
 name: Release
-# Every push to main publishes a release. Version = <major>.<minor from package.json>.<commit count>,
-# so the first commit is 0.0.1 and it grows by itself. Bump major/minor by editing package.json.
+# Pushes to `main` publish a stable release; pushes to `beta` publish a pre-release on the beta channel.
+# Version = <major>.<minor from package.json>.<commit count>, plus "-beta" on the beta branch.
+# Bump major/minor by editing package.json.
 on:
   push:
-    branches: [main]
+    branches: [main, beta]
     paths-ignore:
       - '**.md'
+      - 'docs/**'
+      - '.github/ISSUE_TEMPLATE/**'
       - '.github/workflows/ci.yml'
 
 permissions:
   contents: write
+  id-token: write # build provenance (OIDC)
+  attestations: write
 
 concurrency:
-  group: release
+  group: release-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
@@ -21,6 +26,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       sha: ${{ steps.v.outputs.sha }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,8 +35,26 @@ jobs:
         run: |
           base=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
           count=$(git rev-list --count HEAD)
-          echo "version=$base.$count" >> "$GITHUB_OUTPUT"
+          version="$base.$count"
+          prerelease=false
+          if [ "$GITHUB_REF_NAME" = "beta" ]; then
+            version="$version-beta"
+            prerelease=true
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
           echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      # Tag the exact commit that was pushed, so the release never points at a different branch tip.
+      - name: Tag this commit
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists"
+          else
+            git tag "v$VERSION" "$GITHUB_SHA"
+            git push origin "v$VERSION"
+          fi
 
   build:
     needs: version
@@ -40,10 +64,18 @@ jobs:
         include:
           - os: windows-latest
             script: build:win
+            artifacts: |
+              dist/*.exe
           - os: macos-latest
             script: build:mac
+            artifacts: |
+              dist/*.dmg
+              dist/*.zip
           - os: ubuntu-latest
             script: build:linux
+            artifacts: |
+              dist/*.AppImage
+              dist/*.deb
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -54,19 +86,45 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Set version
+        shell: bash
         run: npm pkg set version=${{ needs.version.outputs.version }}
+      - name: Publish as pre-release
+        if: needs.version.outputs.prerelease == 'true'
+        shell: bash
+        run: |
+          sed -i.bak 's/releaseType: release/releaseType: prerelease/' electron-builder.yml
       - run: pnpm run ${{ matrix.script }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ matrix.artifacts }}
 
-  name-release:
+  finalize:
     needs: [version, build]
     runs-on: ubuntu-latest
     steps:
-      - run: >
-          gh release edit "v${{ needs.version.outputs.version }}"
-          --repo "${{ github.repository }}"
-          --title "v${{ needs.version.outputs.version }} (${{ needs.version.outputs.sha }})"
-          --notes "Build of commit ${{ needs.version.outputs.sha }}: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
+      - name: Title, notes and checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          SHA: ${{ needs.version.outputs.sha }}
+          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+        run: |
+          tag="v$VERSION"
+          channel=stable
+          [ "$PRERELEASE" = "true" ] && channel=beta
+
+          gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
+            --title "v$VERSION ($SHA)" \
+            --notes "Build of commit [$SHA]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) on the $channel channel.
+
+          Verify a download: \`sha256sum -c SHA256SUMS.txt\`, or \`gh attestation verify <file> --repo $GITHUB_REPOSITORY\`."
+
+          mkdir assets
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir assets \
+            --pattern '*.exe' --pattern '*.dmg' --pattern '*.zip' --pattern '*.AppImage' --pattern '*.deb'
+          (cd assets && sha256sum * > ../SHA256SUMS.txt)
+          cat SHA256SUMS.txt
+          gh release upload "$tag" SHA256SUMS.txt --clobber --repo "$GITHUB_REPOSITORY"

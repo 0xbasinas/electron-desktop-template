@@ -46,7 +46,9 @@ const edits = {
       .replace(/^ {2}executableName: .*$/m, `  executableName: ${name}`)
       .replace(/^ {2}owner: .*$/m, `  owner: ${owner}`)
       .replace(/^ {2}repo: .*$/m, `  repo: ${name}`)
-      .replace(/^ {2}maintainer: .*$/m, `  maintainer: ${owner}`),
+      .replace(/^ {2}maintainer: .*$/m, `  maintainer: ${owner}`)
+      .replace(new RegExp(`^( {6}- )${oldName}$`, 'm'), `$1${name}`),
+  'src/main/deeplink.ts': (s) => s.replace(`PROTOCOL = '${oldName}'`, `PROTOCOL = '${name}'`),
   'src/main/index.ts': (s) => s.replace(oldId, newId),
   'src/renderer/index.html': (s) => s.replace(/<title>.*<\/title>/, `<title>${title}</title>`),
   'src/renderer/src/App.tsx': (s) => s.replaceAll(oldTitle, title),
