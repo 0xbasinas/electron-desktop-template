@@ -25,6 +25,20 @@ extraResources:
   # Release notes shown in the "what's new" screen. The release workflow overwrites this file.
   - from: build/release-notes.md
     to: release-notes.md
+# Electron fuses: switches baked into the executable (set before signing) that turn off features an attacker
+# could abuse. Kept in sync with scripts/lib/fuses.mjs, which CI uses to check the packaged app.
+electronFuses:
+  runAsNode: false # ELECTRON_RUN_AS_NODE would let anyone run the app as a plain Node.js
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  # Playwright needs the inspector flags, so `pnpm build:unpack` and the update test turn this on for test builds.
+  enableNodeCliInspectArguments: false
+  # Refuse to start if app.asar was modified, and only ever load code from it.
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
+  loadBrowserProcessSpecificV8Snapshot: false
+  # The renderer is loaded from file://, which needs these privileges.
+  grantFileProtocolExtraPrivileges: true
 asarUnpack:
   - 'resources/**'
 win:

@@ -19,6 +19,7 @@ Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-upda
 | `pnpm test:e2e`                                | Playwright smoke test against the packaged app (run `pnpm build:unpack` first)            |
 | `pnpm test`                                    | Vitest (jsdom)                                                                            |
 | `pnpm check:release`                           | After `pnpm build:<os> --publish never`: check the installers against the update manifest |
+| `pnpm check:fuses`                             | Check the Electron fuses of the packaged app (`--test-build` for the Playwright build)    |
 | `pnpm test:update`                             | Build 0.0.1 and 0.0.2, check the old one updates to the new one                           |
 | `pnpm icons`                                   | Regenerate app icons from `build/icon-source.svg`                                         |
 | `pnpm check:bundle`                            | Fail if the renderer bundle exceeds `bundle-budget.json` (run after `pnpm build`)         |
@@ -39,11 +40,11 @@ Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-upda
 - The repo is public, so installed apps can read releases without a token. If you make it private again, add `private: true` to `publish` in `electron-builder.yml` and give installed apps a `GH_TOKEN`.
 - macOS auto-update requires code signing and notarization (not configured here).
 
-Details: [docs/releasing.md](docs/releasing.md). How the app is put together: [docs/architecture.md](docs/architecture.md).
+Details: [docs/releasing.md](docs/releasing.md). How the app is put together: [docs/architecture.md](docs/architecture.md). Why this is one package and not a monorepo with a web app: [docs/monorepo-and-web.md](docs/monorepo-and-web.md).
 
 ## Security, settings and logs
 
-Renderers are sandboxed, IPC calls are checked for who sent them and what they contain, and logs go to a file (Help > Show Log File). A Settings window (`Ctrl/Cmd+,`) holds the update channel, tray and launch-at-login options. After an update the app shows the release notes once, and a welcome screen on first run. Dependabot keeps dependencies current.
+Renderers are sandboxed, Electron fuses and ASAR integrity are on in releases (the app refuses to start if its code was tampered with), IPC calls are checked for who sent them and what they contain, and logs go to a file (Help > Show Log File). A Settings window (`Ctrl/Cmd+,`) holds the update channel, tray and launch-at-login options. After an update the app shows the release notes once, and a welcome screen on first run. Dependabot keeps dependencies current.
 
 ## Menu, tray and shortcuts
 

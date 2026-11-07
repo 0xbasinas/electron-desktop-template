@@ -77,6 +77,17 @@ Every pull request builds the real installers on Windows, macOS and Linux (`elec
 This is the same build the release runs, so packaging problems show up on the pull request instead of after the merge.
 It stops short of publishing, signing or installing the result; `pnpm test:update` covers the update flow itself.
 
+## Fuses and ASAR integrity
+
+Releases are built with Electron fuses (see "Security model" in [architecture.md](architecture.md)). CI verifies them twice:
+
+- the release dry run builds the real installers and runs `pnpm check:fuses`, which fails unless the packaged app has the
+  hardened settings (inspector flags off, ASAR integrity on, `runAsNode` off, ...);
+- the smoke test job runs `node scripts/check-fuses.mjs --test-build` on the unpacked build used for Playwright.
+
+Playwright needs the Node inspector flags, so `pnpm build:unpack` and the update test turn that one fuse on (and only for those
+test builds). Never publish those builds. If Playwright cannot launch the app and times out, check that fuse first.
+
 ## Rolling back
 
 **Actions > Rollback release** takes the bad tag (and optionally the release to promote instead):

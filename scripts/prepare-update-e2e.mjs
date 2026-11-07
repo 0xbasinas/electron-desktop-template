@@ -43,6 +43,8 @@ function packageVersion(name, version) {
       `publish:\n  provider: generic\n  url: http://127.0.0.1:${PORT}\n`
     )
     .replace(/^directories:\n/m, `directories:\n  output: ${output}\n`)
+    // Playwright drives the old app, so it needs the Node inspector flags that releases switch off.
+    .replace('enableNodeCliInspectArguments: false', 'enableNodeCliInspectArguments: true')
   const configPath = `dist-update/${name}.yml`
   writeFileSync(configPath, config)
 
