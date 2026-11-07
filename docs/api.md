@@ -68,5 +68,19 @@ The design keeps well inside that:
 
 `apps/web` has a `/sign-in` page (email, then "check your email") and `/app`, which needs a session and shows the notes
 example through the typed client in `packages/shared/src/client.ts` (responses are checked with zod). In development you
-can also run `pnpm --filter @repo/web dev`; Vite proxies `/api` to `wrangler dev` on port 8787. The desktop app will use the
-same client and sign in through the system browser (planned next).
+can also run `pnpm --filter @repo/web dev`; Vite proxies `/api` to `wrangler dev` on port 8787.
+
+## Desktop sign-in
+
+The desktop app never shows a password or email form. **Settings → Account → Sign in** opens the system browser on
+`<API>/sign-in` (with a PKCE challenge and a random `state`); after the magic link is opened the site sends the browser
+back to `<scheme>:/auth/callback#token=<one-time code>`. The app swaps that code and its secret verifier for a session,
+which is stored encrypted with the operating system's keychain (Electron `safeStorage`).
+
+- Only the main process talks to the API (`apps/desktop/src/main/auth.ts`); the renderer gets `getAccount`, `signIn` and
+  `signOut` through narrow `secureIpc` channels. We do not use `@better-auth/electron`'s `setupMain`, because it would
+  replace this app's scheme registration, CSP, single-instance lock and IPC.
+- The deep link is checked before use (`authLink.ts`): right scheme, right path, code of the expected characters and length.
+- The Account section only shows in builds that know the API address. Set `API_URL` (a repository **variable**, not a
+  secret) to your deployed address for release builds; in development it defaults to `http://localhost:8787`.
+- The Worker already trusts `<scheme>:/` as an origin (`TRUSTED_ORIGINS` in `wrangler.jsonc`); `pnpm rename` updates it.

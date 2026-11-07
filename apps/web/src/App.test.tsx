@@ -8,13 +8,17 @@ import { App } from './App'
 const auth = vi.hoisted(() => ({
   session: null as null | { user: { email: string } },
   pending: false,
-  magicLink: vi.fn()
+  magicLink: vi.fn(),
+  transfer: vi.fn(),
+  ensureRedirect: vi.fn(() => 0)
 }))
 vi.mock('./lib/auth', () => ({
   authClient: {
     useSession: () => ({ data: auth.session, isPending: auth.pending }),
     signIn: { magicLink: auth.magicLink },
-    signOut: vi.fn()
+    signOut: vi.fn(),
+    $fetch: auth.transfer,
+    ensureElectronRedirect: auth.ensureRedirect
   }
 }))
 const notesApi = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }))
@@ -24,6 +28,8 @@ beforeEach(() => {
   auth.session = null
   auth.pending = false
   auth.magicLink.mockReset().mockResolvedValue({ data: {}, error: null })
+  auth.transfer.mockReset().mockResolvedValue({ data: {}, error: null })
+  auth.ensureRedirect.mockClear()
   notesApi.list.mockReset().mockResolvedValue([])
   notesApi.create.mockReset()
   notesApi.remove.mockReset()
@@ -155,5 +161,46 @@ describe('sign-in page', () => {
     auth.session = { user: { email: 'ada@example.com' } }
     at('/sign-in')
     expect(screen.getByRole('heading', { name: 'Web app' })).toBeInTheDocument()
+  })
+})
+
+describe('signing in from the desktop app', () => {
+  const desktopQuery = 'client_id=electron&code_challenge=chal&state=st'
+
+  it('forwards the desktop parameters and ends on the page that opens the app', async () => {
+    at(`/sign-in?${desktopQuery}`)
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }))
+    expect(auth.magicLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        callbackURL: '/auth/desktop',
+        fetchOptions: { query: { client_id: 'electron', code_challenge: 'chal', state: 'st' } }
+      })
+    )
+  })
+
+  it('does not add the parameters to a normal sign-in', async () => {
+    at('/sign-in')
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }))
+    expect(auth.magicLink.mock.calls[0]![0]).not.toHaveProperty('fetchOptions')
+  })
+
+  it('hands an existing web session to the desktop app', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+    at(`/sign-in?${desktopQuery}`)
+    await waitFor(() => expect(assign).toHaveBeenCalledWith('/auth/desktop'))
+    expect(auth.transfer).toHaveBeenCalledWith(
+      '/electron/transfer-user',
+      expect.objectContaining({ method: 'POST' })
+    )
+  })
+
+  it('the callback page waits for the one-time code, then opens the app', () => {
+    at('/auth/desktop')
+    expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
+    expect(auth.ensureRedirect).toHaveBeenCalled()
   })
 })

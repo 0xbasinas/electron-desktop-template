@@ -13,6 +13,7 @@ export default defineConfig(
       '**/dist-*',
       '**/out',
       '**/.turbo',
+      '**/.wrangler',
       'apps/desktop/scripts',
       '**/worker-configuration.d.ts',
       'apps/api/src/db/auth-schema.ts',

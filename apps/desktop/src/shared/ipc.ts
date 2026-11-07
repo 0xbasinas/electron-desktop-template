@@ -13,9 +13,13 @@ export const IPC = {
   appOpenLogs: 'app:open-logs',
   whatsNewGet: 'whats-new:get',
   whatsNewSeen: 'whats-new:seen',
+  accountGet: 'account:get',
+  accountSignIn: 'account:sign-in',
+  accountSignOut: 'account:sign-out',
   // main -> renderer (events)
   updaterEvent: 'updater:event',
   settingsChanged: 'settings:changed',
+  accountChanged: 'account:changed',
   menuCheckUpdates: 'menu:check-updates',
   menuWhatsNew: 'menu:whats-new',
   deepLink: 'deeplink:url',
@@ -51,6 +55,13 @@ export interface AppInfo {
   logPath: string
   /** This build can send crash reports, so the switch in Settings is shown. */
   crashReportingAvailable: boolean
+}
+
+/** Who is signed in to the app's account (the API), if this build has one. */
+export interface Account {
+  /** This build knows where the API is, so the Account section is shown. */
+  available: boolean
+  user: { email: string; name: string } | null
 }
 
 export interface WhatsNew {

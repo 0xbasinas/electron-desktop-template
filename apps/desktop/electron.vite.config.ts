@@ -6,7 +6,11 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   main: {
     // Crash reporting stays off unless the release build provides a Sentry DSN.
-    define: { __SENTRY_DSN__: JSON.stringify(process.env.SENTRY_DSN ?? '') }
+    define: {
+      __SENTRY_DSN__: JSON.stringify(process.env.SENTRY_DSN ?? ''),
+      // Where the API lives, e.g. https://app.example.com. Without it the app has no sign-in.
+      __API_URL__: JSON.stringify(process.env.API_URL ?? '')
+    }
   },
   preload: {},
   renderer: {

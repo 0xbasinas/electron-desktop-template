@@ -1,14 +1,16 @@
-import { useState, type FormEvent, type JSX } from 'react'
+import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Button } from '@repo/ui'
 import { emailSchema } from '@repo/shared'
 import { Navigate, useSearchParams } from 'react-router'
 import { authClient } from '../lib/auth'
+import { readDesktopParams } from '../lib/desktop'
 
 type State = 'idle' | 'sending' | 'sent'
 
 export function SignInPage(): JSX.Element {
   const { data: session } = authClient.useSession()
   const [params] = useSearchParams()
+  const desktop = readDesktopParams(params)
   const [email, setEmail] = useState('')
   const [state, setState] = useState<State>('idle')
   const [error, setError] = useState<string | null>(
@@ -17,6 +19,27 @@ export function SignInPage(): JSX.Element {
       : null
   )
 
+  // Already signed in on the web and the desktop app asked for a sign-in: hand the session over.
+  const signedIn = Boolean(session)
+  useEffect(() => {
+    if (!signedIn || !desktop) return
+    void authClient
+      .$fetch('/electron/transfer-user', { method: 'POST', query: desktop, body: {} })
+      .then(({ error: failure }) => {
+        if (failure)
+          setError('Could not hand the sign-in to the desktop app. Try again from the app.')
+        else window.location.assign('/auth/desktop')
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once per visit
+  }, [signedIn])
+
+  if (session && desktop) {
+    return (
+      <p className="text-center text-muted-foreground" role="status">
+        Signing you in to the desktop app...
+      </p>
+    )
+  }
   if (session) return <Navigate to="/app" replace />
 
   async function submit(event: FormEvent): Promise<void> {
@@ -30,8 +53,10 @@ export function SignInPage(): JSX.Element {
     setState('sending')
     const { error: failure } = await authClient.signIn.magicLink({
       email: parsed.data,
-      callbackURL: '/app',
-      errorCallbackURL: '/sign-in?error=link'
+      // From the desktop app, the link ends on a page that opens the app; otherwise the web app.
+      callbackURL: desktop ? '/auth/desktop' : '/app',
+      errorCallbackURL: '/sign-in?error=link',
+      ...(desktop ? { fetchOptions: { query: desktop } } : {})
     })
     if (failure) {
       setState('idle')

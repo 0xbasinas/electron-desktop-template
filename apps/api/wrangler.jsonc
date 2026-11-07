@@ -28,6 +28,8 @@
   "vars": {
     // The public address of the site (and of the API: same origin). Change it to your domain.
     "BETTER_AUTH_URL": "http://localhost:8787",
+    // Origins besides the site that may call the API. The desktop app sends its deep-link scheme as its origin.
+    "TRUSTED_ORIGINS": "electron-desktop-template:/",
     // Sender address. The domain must be verified in Resend.
     "EMAIL_FROM": "Electron Desktop Template <login@example.com>"
   }
