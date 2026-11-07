@@ -25,6 +25,12 @@ Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-upda
 
 `components.json` is set up with the `@renderer` alias. Add components with `pnpm dlx shadcn@latest add <component>`.
 
-## Rename checklist
+## Using this template
 
-Update `name` in `package.json`, `appId`/`productName`/`publish` in `electron-builder.yml`, and the app user model id in `src/main/index.ts`.
+Click **Use this template** on GitHub, clone your new repo, then rename everything in one go:
+
+```bash
+pnpm rename my-cool-app --owner your-github-user --title "My Cool App"
+```
+
+This updates `package.json`, `electron-builder.yml` (app id, product name, publish target), the app user model id, the window title, the README title and the license holder. `--owner` and `--title` are optional. Review `git diff` afterwards.
