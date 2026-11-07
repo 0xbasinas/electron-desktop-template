@@ -32,7 +32,7 @@ A git hook checks your message when you commit, and CI checks every commit in a 
 Conventional Commit, because squash merging uses it as the commit message. Turn on auto-merge (`gh pr merge --auto --squash`)
 and it merges when every required check passes.
 
-A merge that changes the app (`src/`, `build/`, `resources/`, `package.json`, the lockfile or build config) publishes a
+A merge that changes the app (`apps/desktop/src/`, `apps/desktop/build/`, `apps/desktop/resources/`, `apps/desktop/package.json`, the lockfile or build config) publishes a
 release (`<major>.<minor>.<commit count>`), first to 10% of users and then more as it proves healthy. So only merge
 changes that are ready to ship. Docs, tests, scripts and CI changes don't release.
 

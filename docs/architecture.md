@@ -16,35 +16,35 @@ An Electron app runs three kinds of code. Knowing which one you are writing is m
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-Shared types and channel names live in `src/shared/ipc.ts`, which all three import.
+Shared types and channel names live in `apps/desktop/src/shared/ipc.ts`, which all three import.
 
 ## Folders
 
-| Path                                               | What lives there                                                                                     |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/main/index.ts`                                | App startup, the window (custom title bar, no white flash), single-instance lock                     |
-| `src/main/updater.ts`                              | `electron-updater`: stable vs beta channel, differential downloads, update events                    |
-| `src/main/deeplink.ts`                             | `myapp://` links and file associations, on macOS, Windows and Linux                                  |
-| `src/main/menu.ts`                                 | The application menu (File, Edit, View, Window, Help) and its keyboard accelerators                  |
-| `src/main/tray.ts`                                 | System tray icon and menu, plus the optional "keep running when closed" setting                      |
-| `src/main/shortcuts.ts`                            | The global show/hide shortcut                                                                        |
-| `src/main/windowUtils.ts`                          | `showWindow`, `toggleWindow` and `requestUpdateCheck`, shared by menu, tray, shortcut and deep links |
-| `src/main/windowState.ts`                          | Remembers window size, position and maximized state between launches                                 |
-| `src/main/settings.ts`                             | Tiny JSON settings file in the user data folder                                                      |
-| `src/main/secureIpc.ts`                            | `handle()`: `ipcMain.handle` that rejects calls not coming from our own page                         |
-| `src/main/trust.ts`                                | `isTrustedUrl()`: which page URLs may talk to main                                                   |
-| `src/main/windowChrome.ts`                         | Shared window options (sandbox, title bar), `hardenWindow`, `loadRenderer`                           |
-| `src/main/ipcHandlers.ts`                          | Handlers for settings, app info, logs and what's new                                                 |
-| `src/main/settingsWindow.ts`, `settingsEffects.ts` | The Settings window, and what changing a setting does                                                |
-| `src/main/logger.ts`                               | `electron-log`: log file, rotation, uncaught errors, "Show Log File"                                 |
-| `src/main/whatsNew.ts`                             | Release notes and first-run state                                                                    |
-| `src/shared/validate.ts`                           | Checks for payloads coming from the renderer                                                         |
-| `src/preload/api.ts`                               | The `window.api` surface. Everything the page can ask main to do is listed here                      |
-| `src/preload/index.ts`                             | Exposes `api` with `contextBridge`                                                                   |
-| `src/shared/ipc.ts`                                | Channel names and payload types                                                                      |
-| `src/renderer/`                                    | The React app, Tailwind and shadcn/ui                                                                |
-| `build/`                                           | App icons (generated) and macOS entitlements                                                         |
-| `scripts/`                                         | Rename, icon generation and bundle-size scripts                                                      |
+| Path                                                            | What lives there                                                                                     |
+| --------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `apps/desktop/src/main/index.ts`                                | App startup, the window (custom title bar, no white flash), single-instance lock                     |
+| `apps/desktop/src/main/updater.ts`                              | `electron-updater`: stable vs beta channel, differential downloads, update events                    |
+| `apps/desktop/src/main/deeplink.ts`                             | `myapp://` links and file associations, on macOS, Windows and Linux                                  |
+| `apps/desktop/src/main/menu.ts`                                 | The application menu (File, Edit, View, Window, Help) and its keyboard accelerators                  |
+| `apps/desktop/src/main/tray.ts`                                 | System tray icon and menu, plus the optional "keep running when closed" setting                      |
+| `apps/desktop/src/main/shortcuts.ts`                            | The global show/hide shortcut                                                                        |
+| `apps/desktop/src/main/windowUtils.ts`                          | `showWindow`, `toggleWindow` and `requestUpdateCheck`, shared by menu, tray, shortcut and deep links |
+| `apps/desktop/src/main/windowState.ts`                          | Remembers window size, position and maximized state between launches                                 |
+| `apps/desktop/src/main/settings.ts`                             | Tiny JSON settings file in the user data folder                                                      |
+| `apps/desktop/src/main/secureIpc.ts`                            | `handle()`: `ipcMain.handle` that rejects calls not coming from our own page                         |
+| `apps/desktop/src/main/trust.ts`                                | `isTrustedUrl()`: which page URLs may talk to main                                                   |
+| `apps/desktop/src/main/windowChrome.ts`                         | Shared window options (sandbox, title bar), `hardenWindow`, `loadRenderer`                           |
+| `apps/desktop/src/main/ipcHandlers.ts`                          | Handlers for settings, app info, logs and what's new                                                 |
+| `apps/desktop/src/main/settingsWindow.ts`, `settingsEffects.ts` | The Settings window, and what changing a setting does                                                |
+| `apps/desktop/src/main/logger.ts`                               | `electron-log`: log file, rotation, uncaught errors, "Show Log File"                                 |
+| `apps/desktop/src/main/whatsNew.ts`                             | Release notes and first-run state                                                                    |
+| `apps/desktop/src/shared/validate.ts`                           | Checks for payloads coming from the renderer                                                         |
+| `apps/desktop/src/preload/api.ts`                               | The `window.api` surface. Everything the page can ask main to do is listed here                      |
+| `apps/desktop/src/preload/index.ts`                             | Exposes `api` with `contextBridge`                                                                   |
+| `apps/desktop/src/shared/ipc.ts`                                | Channel names and payload types                                                                      |
+| `apps/desktop/src/renderer/`                                    | The React app, Tailwind and shadcn/ui                                                                |
+| `apps/desktop/build/`                                           | App icons (generated) and macOS entitlements                                                         |
+| `apps/desktop/scripts/`                                         | Rename, icon generation and bundle-size scripts                                                      |
 
 ## How IPC flows
 
@@ -74,10 +74,10 @@ finished loading, `deeplink.ts` queues it and delivers it on `did-finish-load`.
 
 ## Adding a new IPC call
 
-1. Add the channel name (and any payload type) to `src/shared/ipc.ts`.
+1. Add the channel name (and any payload type) to `apps/desktop/src/shared/ipc.ts`.
 2. Handle it in main with `handle(IPC.yourChannel, ...)` from `secureIpc.ts` (not `ipcMain.handle`), and
-   validate every argument with a function in `src/shared/validate.ts`. Treat the renderer as untrusted.
-3. Expose a typed function in `src/preload/api.ts`.
+   validate every argument with a function in `apps/desktop/src/shared/validate.ts`. Treat the renderer as untrusted.
+3. Expose a typed function in `apps/desktop/src/preload/api.ts`.
 4. Call `window.api.yourFunction()` from the renderer. The types flow through automatically.
 
 Keep the preload surface small and specific. Expose "do this one thing" functions, never raw
@@ -93,7 +93,7 @@ while React starts.
 
 ## Deep links and file associations
 
-- Scheme: `PROTOCOL` in `src/main/deeplink.ts`, mirrored under `protocols` in `electron-builder.yml`.
+- Scheme: `PROTOCOL` in `apps/desktop/src/main/deeplink.ts`, mirrored under `protocols` in `apps/desktop/electron-builder.yml`.
 - File types: `FILE_EXTENSIONS` in `deeplink.ts`, mirrored under `fileAssociations`.
 - Only one instance runs. Windows and Linux deliver links in `argv` (via `second-instance`), macOS
   uses `open-url` and `open-file`.
@@ -116,15 +116,15 @@ while React starts.
 ## Security model
 
 - Windows use `sandbox: true`, `contextIsolation: true` and `nodeIntegration: false`. A sandboxed preload can
-  only import `electron` and bundled code, which is why `src/preload` imports nothing else.
+  only import `electron` and bundled code, which is why `apps/desktop/src/preload` imports nothing else.
 - `handle()` only answers the main frame of a page loaded from our own bundle (or the dev server in
   development). Anything else, such as an iframe or a navigated-away page, is rejected.
-- **Electron fuses** are set in `electron-builder.yml` (`electronFuses`) and written into the executable before signing:
+- **Electron fuses** are set in `apps/desktop/electron-builder.yml` (`electronFuses`) and written into the executable before signing:
   `runAsNode` and `NODE_OPTIONS` are off (so the app cannot be hijacked to run arbitrary Node code), cookies are encrypted,
   and the Node inspector flags are off in releases. **ASAR integrity** is on with `onlyLoadAppFromAsar`: the app refuses to
   start if `app.asar` was modified (it exits with "Integrity check failed for asar archive"). `grantFileProtocolExtraPrivileges`
   is off because the UI is not loaded from `file://` (see "The app:// scheme" below).
-  `scripts/lib/fuses.mjs` lists the expected state and CI checks it on the packaged app.
+  `apps/desktop/scripts/lib/fuses.mjs` lists the expected state and CI checks it on the packaged app.
 - The packaged UI is served from `app://renderer/`, and `isTrustedUrl` accepts only that origin (or the dev server).
 - Payloads are validated in main (`parseSettingsPatch`), never trusted because the TypeScript type says so.
 - New windows and navigations are blocked by `hardenWindow`; only `http(s)` links open in the browser.
@@ -152,7 +152,7 @@ the dialog marks the version as seen.
 
 ## The app:// scheme
 
-In production the window loads `app://renderer/index.html`, not a `file://` URL. `src/main/appProtocol.ts` registers the
+In production the window loads `app://renderer/index.html`, not a `file://` URL. `apps/desktop/src/main/appProtocol.ts` registers the
 scheme (before the app is ready; `standard` and `secure`, so it behaves like https for modules, storage and CORS) and
 answers each request by reading the file from the built renderer folder inside `app.asar`. `resolveAppFile` in `appPath.ts`
 maps the URL to a file and refuses anything that would leave that folder (`..`, encoded dots, sibling folders, NUL bytes);
