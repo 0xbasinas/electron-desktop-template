@@ -1,7 +1,4 @@
 import { useCallback, useEffect, useState } from 'react'
-import RefreshCw from 'lucide-react/icons/refresh-cw'
-import Settings from 'lucide-react/icons/settings'
-import Sparkles from 'lucide-react/icons/sparkles'
 import type { WhatsNew } from '../../shared/ipc'
 import logo from './assets/logo.png'
 import { TitleBar } from '@renderer/components/TitleBar'
@@ -9,6 +6,7 @@ import { TitleBarButton } from '@renderer/components/TitleBarButton'
 import { UpdateBanner } from '@renderer/components/UpdateBanner'
 import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useSettings } from '@renderer/hooks/useSettings'
+import { InfoIcon, RefreshIcon, SettingsIcon } from '@renderer/components/icons'
 import { useUpdater } from '@renderer/hooks/useUpdater'
 
 function App(): React.JSX.Element {
@@ -48,16 +46,16 @@ function App(): React.JSX.Element {
           disabled={updater.checking}
           onClick={updater.check}
         >
-          <RefreshCw className={updater.checking ? 'animate-spin' : undefined} />
+          <RefreshIcon className={updater.checking ? 'animate-spin' : undefined} />
         </TitleBarButton>
         <TitleBarButton
           label="What's new"
           onClick={() => void window.api.getWhatsNew(true).then(setWhatsNew)}
         >
-          <Sparkles />
+          <InfoIcon />
         </TitleBarButton>
         <TitleBarButton label="Settings" onClick={() => window.api.openSettings()}>
-          <Settings />
+          <SettingsIcon />
         </TitleBarButton>
       </TitleBar>
       <UpdateBanner updater={updater} />
