@@ -27,8 +27,8 @@ export function expectedFuses({ testBuild = false } = {}) {
     enableEmbeddedAsarIntegrityValidation: true,
     onlyLoadAppFromAsar: true,
     loadBrowserProcessSpecificV8Snapshot: false,
-    // The renderer is loaded from file://, which needs these privileges.
-    grantFileProtocolExtraPrivileges: true
+    // The renderer is served from app://, so file:// pages need no extra privileges.
+    grantFileProtocolExtraPrivileges: false
   }
 }
 

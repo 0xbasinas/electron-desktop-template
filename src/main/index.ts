@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { registerAppScheme, serveRenderer } from './appProtocol'
 import { setupCrashReporting, reportRendererCrash } from './crashReporting'
 import { flushPending, initDeepLinks } from './deeplink'
 import { registerIpcHandlers } from './ipcHandlers'
@@ -19,6 +20,9 @@ import {
 } from './windowChrome'
 import { loadWindowState, trackWindowState } from './windowState'
 import icon from '../../resources/icon.png?asset'
+
+// The app:// scheme has to be declared before the app is ready.
+registerAppScheme()
 
 const isMac = process.platform === 'darwin'
 let mainWindow: BrowserWindow | undefined
@@ -74,6 +78,7 @@ if (!app.requestSingleInstanceLock()) {
   app.on('before-quit', () => (quitting = true))
 
   app.whenReady().then(() => {
+    serveRenderer()
     electronApp.setAppUserModelId('com.0xbasinas.electron-desktop-template')
 
     // Default open or close DevTools by F12 in development

@@ -37,8 +37,8 @@ electronFuses:
   enableEmbeddedAsarIntegrityValidation: true
   onlyLoadAppFromAsar: true
   loadBrowserProcessSpecificV8Snapshot: false
-  # The renderer is loaded from file://, which needs these privileges.
-  grantFileProtocolExtraPrivileges: true
+  # The renderer is served from our own app:// scheme, so file:// pages need no extra privileges.
+  grantFileProtocolExtraPrivileges: false
 asarUnpack:
   - 'resources/**'
 win:

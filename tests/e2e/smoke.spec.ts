@@ -28,6 +28,9 @@ test('packaged app opens and the renderer talks to main', async () => {
       crashReports: false
     })
 
+    // The UI is served from our own scheme, not file://.
+    expect(page.url()).toMatch(/^app:\/\/renderer\//)
+
     // Node is not reachable from the renderer.
     expect(
       await page.evaluate(() => typeof (window as unknown as { require?: unknown }).require)
