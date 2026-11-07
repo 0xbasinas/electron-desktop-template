@@ -8,7 +8,7 @@ import {
 import { createServer, type Server } from 'node:http'
 import { mkdtempSync, readFileSync, rmSync, createReadStream, existsSync, statSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
-import { extname, join, normalize } from 'node:path'
+import { extname, join, normalize, resolve } from 'node:path'
 import type { Api } from '../../src/preload/api'
 import { withRollout } from '../../scripts/lib/rollout.mjs'
 
@@ -36,8 +36,9 @@ test.beforeAll(async () => {
       /^[\\/]+/,
       ''
     )
-    const file = join(build.feedDir, name)
-    if (!file.startsWith(build.feedDir) || !existsSync(file) || !statSync(file).isFile()) {
+    const root = resolve(build.feedDir)
+    const file = resolve(root, name)
+    if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) {
       res.writeHead(404).end()
       return
     }
