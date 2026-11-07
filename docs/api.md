@@ -36,7 +36,22 @@ Without `RESEND_API_KEY`, the sign-in link is printed in the terminal.
 3. Set secrets: `wrangler secret put BETTER_AUTH_SECRET` (a long random string) and `wrangler secret put RESEND_API_KEY`.
 4. In `wrangler.jsonc` set `BETTER_AUTH_URL` to your public address and `EMAIL_FROM` to an address on a domain you have
    verified in Resend (Resend only sends from verified domains).
-5. `pnpm build && pnpm --filter @repo/api exec wrangler deploy`. (Automated deploys come with the deploy workflow.)
+5. Deploy by hand with `pnpm exec turbo run build --filter=@repo/web && pnpm --filter @repo/api exec wrangler deploy`, or let
+   GitHub do it (next section).
+
+### Automatic deploys
+
+`.github/workflows/deploy-web.yml` builds the site, applies pending D1 migrations and deploys the Worker whenever
+`apps/web`, `apps/api` or `packages` change on `main`. It does nothing until you:
+
+1. Create a Cloudflare API token (dashboard → My Profile → API Tokens → _Edit Cloudflare Workers_ template, and add
+   **D1: Edit**). Limit it to your account.
+2. Add repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (Settings → Secrets and variables → Actions).
+   Better still, put them in an environment called `production` so only deploys can read them.
+3. Add the repository variable `CLOUDFLARE_DEPLOY` = `true`.
+
+The Worker's own secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) live in Cloudflare, set once with `wrangler secret put`;
+CI never sees them. Migrations run before the new code, so write them to be compatible with the previous version.
 
 ## Changing the database
 
