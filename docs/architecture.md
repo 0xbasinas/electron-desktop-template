@@ -20,23 +20,31 @@ Shared types and channel names live in `src/shared/ipc.ts`, which all three impo
 
 ## Folders
 
-| Path                      | What lives there                                                                                     |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/main/index.ts`       | App startup, the window (custom title bar, no white flash), single-instance lock                     |
-| `src/main/updater.ts`     | `electron-updater`: stable vs beta channel, differential downloads, update events                    |
-| `src/main/deeplink.ts`    | `myapp://` links and file associations, on macOS, Windows and Linux                                  |
-| `src/main/menu.ts`        | The application menu (File, Edit, View, Window, Help) and its keyboard accelerators                  |
-| `src/main/tray.ts`        | System tray icon and menu, plus the optional "keep running when closed" setting                      |
-| `src/main/shortcuts.ts`   | The global show/hide shortcut                                                                        |
-| `src/main/windowUtils.ts` | `showWindow`, `toggleWindow` and `requestUpdateCheck`, shared by menu, tray, shortcut and deep links |
-| `src/main/windowState.ts` | Remembers window size, position and maximized state between launches                                 |
-| `src/main/settings.ts`    | Tiny JSON settings file in the user data folder                                                      |
-| `src/preload/api.ts`      | The `window.api` surface. Everything the page can ask main to do is listed here                      |
-| `src/preload/index.ts`    | Exposes `api` with `contextBridge`                                                                   |
-| `src/shared/ipc.ts`       | Channel names and payload types                                                                      |
-| `src/renderer/`           | The React app, Tailwind and shadcn/ui                                                                |
-| `build/`                  | App icons (generated) and macOS entitlements                                                         |
-| `scripts/`                | Rename, icon generation and bundle-size scripts                                                      |
+| Path                                               | What lives there                                                                                     |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `src/main/index.ts`                                | App startup, the window (custom title bar, no white flash), single-instance lock                     |
+| `src/main/updater.ts`                              | `electron-updater`: stable vs beta channel, differential downloads, update events                    |
+| `src/main/deeplink.ts`                             | `myapp://` links and file associations, on macOS, Windows and Linux                                  |
+| `src/main/menu.ts`                                 | The application menu (File, Edit, View, Window, Help) and its keyboard accelerators                  |
+| `src/main/tray.ts`                                 | System tray icon and menu, plus the optional "keep running when closed" setting                      |
+| `src/main/shortcuts.ts`                            | The global show/hide shortcut                                                                        |
+| `src/main/windowUtils.ts`                          | `showWindow`, `toggleWindow` and `requestUpdateCheck`, shared by menu, tray, shortcut and deep links |
+| `src/main/windowState.ts`                          | Remembers window size, position and maximized state between launches                                 |
+| `src/main/settings.ts`                             | Tiny JSON settings file in the user data folder                                                      |
+| `src/main/secureIpc.ts`                            | `handle()`: `ipcMain.handle` that rejects calls not coming from our own page                         |
+| `src/main/trust.ts`                                | `isTrustedUrl()`: which page URLs may talk to main                                                   |
+| `src/main/windowChrome.ts`                         | Shared window options (sandbox, title bar), `hardenWindow`, `loadRenderer`                           |
+| `src/main/ipcHandlers.ts`                          | Handlers for settings, app info, logs and what's new                                                 |
+| `src/main/settingsWindow.ts`, `settingsEffects.ts` | The Settings window, and what changing a setting does                                                |
+| `src/main/logger.ts`                               | `electron-log`: log file, rotation, uncaught errors, "Show Log File"                                 |
+| `src/main/whatsNew.ts`                             | Release notes and first-run state                                                                    |
+| `src/shared/validate.ts`                           | Checks for payloads coming from the renderer                                                         |
+| `src/preload/api.ts`                               | The `window.api` surface. Everything the page can ask main to do is listed here                      |
+| `src/preload/index.ts`                             | Exposes `api` with `contextBridge`                                                                   |
+| `src/shared/ipc.ts`                                | Channel names and payload types                                                                      |
+| `src/renderer/`                                    | The React app, Tailwind and shadcn/ui                                                                |
+| `build/`                                           | App icons (generated) and macOS entitlements                                                         |
+| `scripts/`                                         | Rename, icon generation and bundle-size scripts                                                      |
 
 ## How IPC flows
 
@@ -45,9 +53,10 @@ There are two directions, and both go through the preload script.
 **Renderer asks, main answers** (request/response):
 
 ```
-Button click → window.api.setUpdateChannel('beta')
-  → preload: ipcRenderer.invoke(IPC.settingsSetChannel, 'beta')
-  → main:    ipcMain.handle(IPC.settingsSetChannel, ...) saves it, re-checks for updates
+Toggle click → window.api.updateSettings({ updateChannel: 'beta' })
+  → preload: ipcRenderer.invoke(IPC.settingsUpdate, patch)
+  → main:    handle(IPC.settingsUpdate, ...) checks the sender, validates the patch, saves it,
+             and settingsEffects re-checks for updates and tells every window
   → the returned Settings object resolves the promise in the renderer
 ```
 
@@ -66,7 +75,8 @@ finished loading, `deeplink.ts` queues it and delivers it on `did-finish-load`.
 ## Adding a new IPC call
 
 1. Add the channel name (and any payload type) to `src/shared/ipc.ts`.
-2. Handle it in main with `ipcMain.handle(IPC.yourChannel, ...)`.
+2. Handle it in main with `handle(IPC.yourChannel, ...)` from `secureIpc.ts` (not `ipcMain.handle`), and
+   validate every argument with a function in `src/shared/validate.ts`. Treat the renderer as untrusted.
 3. Expose a typed function in `src/preload/api.ts`.
 4. Call `window.api.yourFunction()` from the renderer. The types flow through automatically.
 
@@ -102,3 +112,33 @@ while React starts.
   Change `TOGGLE_WINDOW_SHORTCUT` to use another one. If another app already owns it, a warning is logged.
 - "Check for Updates" in the menu or tray goes through the renderer (`menu:check-updates`), so you see the
   result in the update banner like a normal check.
+
+## Security model
+
+- Windows use `sandbox: true`, `contextIsolation: true` and `nodeIntegration: false`. A sandboxed preload can
+  only import `electron` and bundled code, which is why `src/preload` imports nothing else.
+- `handle()` only answers the main frame of a page loaded from our own bundle (or the dev server in
+  development). Anything else, such as an iframe or a navigated-away page, is rejected.
+- Payloads are validated in main (`parseSettingsPatch`), never trusted because the TypeScript type says so.
+- New windows and navigations are blocked by `hardenWindow`; only `http(s)` links open in the browser.
+- The page has a Content-Security-Policy in `index.html`.
+
+## Settings window
+
+The Settings window is the same renderer bundle loaded with the `#settings` hash (`main.tsx` picks
+`SettingsWindow` instead of `App`), so it shares the theme, components and preload. It holds the update
+channel, tray and launch-at-login options, update check, log file and what's new. Changes go through
+`settings:update`, and `settingsEffects.ts` applies them (tray menu, channel re-check, login item) and
+broadcasts `settings:changed` so every window and the tray stay in sync.
+
+## Logging
+
+`logger.ts` sets up `electron-log`: logs go to a file (2 MB, rotated), `console.*` in main is routed to it,
+uncaught errors and renderer crashes are written there, and the updater logs through it. Help > Show Log File
+reveals it. Nothing is sent anywhere; point `log.transports.remote` at a server if you want that.
+
+## First run and what's new
+
+`whatsNew.ts` compares the stored `lastSeenVersion` with the running version. No stored version means first
+run (welcome); a different one means the app was updated (release notes); the same one shows nothing. Closing
+the dialog marks the version as seen.

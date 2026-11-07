@@ -8,6 +8,10 @@ on:
         description: stable or beta
         type: string
         required: true
+      rollout:
+        description: Percent of users who get this release at first (100 = everyone)
+        type: number
+        default: 100
 
 permissions:
   contents: write
@@ -52,6 +56,20 @@ jobs:
             git tag "v$VERSION" "$GITHUB_SHA"
             git push origin "v$VERSION"
           fi
+      # The release notes are built into the app, so people see them in the "what's new" screen.
+      - name: Write release notes for the app
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
+          CHANNEL: ${{ inputs.channel }}
+        run: |
+          git fetch --tags --force
+          mkdir -p build
+          node scripts/release-notes.mjs "v$VERSION" "$CHANNEL" > build/release-notes.md
+          cat build/release-notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-notes
+          path: build/release-notes.md
 
   build:
     name: Build and publish (${{ matrix.os }})
@@ -85,6 +103,10 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-notes
+          path: build
       - name: Set version
         shell: bash
         run: npm pkg set version=${{ needs.version.outputs.version }}
@@ -110,6 +132,20 @@ jobs:
         with:
           fetch-depth: 0
       - run: git fetch --tags --force
+      # Staged rollout: only a share of users is offered the update until someone raises it
+      # (Actions > "Set release rollout").
+      - name: Limit the rollout
+        if: inputs.rollout < 100
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+          ROLLOUT: ${{ inputs.rollout }}
+        run: |
+          tag="v$VERSION"
+          mkdir manifests
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir manifests --pattern '*.yml'
+          node scripts/set-rollout.mjs "$ROLLOUT" manifests/*.yml
+          gh release upload "$tag" manifests/*.yml --clobber --repo "$GITHUB_REPOSITORY"
       - name: Title, notes and checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

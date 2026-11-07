@@ -22,3 +22,9 @@ export function requestUpdateCheck(win: BrowserWindow): void {
   showWindow(win)
   win.webContents.send(IPC.menuCheckUpdates)
 }
+
+/** Ask the renderer to open the "what's new" screen for the current version. */
+export function requestWhatsNew(win: BrowserWindow): void {
+  showWindow(win)
+  win.webContents.send(IPC.menuWhatsNew)
+}

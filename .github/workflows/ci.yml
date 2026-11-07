@@ -17,6 +17,7 @@ on:
       - 'eslint.config.mjs'
       - 'vitest.config.ts'
       - 'playwright.config.ts'
+      - 'playwright.update.config.ts'
       - 'commitlint.config.mjs'
       - 'bundle-budget.json'
       - '.prettier*'
@@ -74,3 +75,29 @@ jobs:
       - name: Launch the packaged app and check the window opens (virtual display)
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm test:e2e
+
+  # Builds an old and a new version, then checks the old one finds, downloads and reports the new one
+  # from a local feed. This is what catches packaging and updater mistakes before users do.
+  update:
+    name: Update test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build old and new versions
+        run: node scripts/prepare-update-e2e.mjs
+      - name: Old version updates to the new one
+        if: runner.os != 'Linux'
+        run: pnpm exec playwright test -c playwright.update.config.ts
+      - name: Old version updates to the new one (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm exec playwright test -c playwright.update.config.ts

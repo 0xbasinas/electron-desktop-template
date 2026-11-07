@@ -38,11 +38,44 @@ Promote a beta by merging `beta` into `main`.
 ## What users get
 
 Each install follows one channel, stored in its settings file (`updateChannel`) and switchable from the app
-(the "Update channel" button in the demo UI).
+(Settings window, "Update channel").
 
 - **Stable users** only ever see normal releases.
 - **Beta users** see pre-releases too, and move to the next stable release once its version is higher.
   Switching a beta install back to stable does not downgrade it; it waits for the next stable build.
+
+## Staged rollouts
+
+A stable release is first offered to a share of users (`rollout` in `publish-stable.yml`, 10% by default).
+This works through `stagingPercentage` in the update manifests (`latest*.yml`): each install has a stable
+random number and only takes the update if that number falls inside the percentage.
+
+1. Publish. About 10% of installs are offered the new version. Watch for crash reports and issues.
+2. Looks good: run **Actions > Set release rollout** with the tag (for example `v0.1.42`) and a higher
+   percentage, up to `100` for everyone. Raising it never takes the update away from anyone.
+3. Looks bad: set it to `0` to stop offering it, then publish a fix. People who already have it keep it.
+
+Beta releases are always offered to everyone on the beta channel. Set `rollout: 100` in `publish-stable.yml`
+if you don't want staged rollouts. The logic lives in `scripts/lib/rollout.mjs` and is unit tested.
+
+## What's new
+
+The release notes (grouped from Conventional Commits) are written to `build/release-notes.md` during the
+release build and shipped inside the app as `resources/release-notes.md`. After an update, the app shows them
+once; on first launch it shows a short welcome instead. Users can reopen them from Help > What's New.
+
+## Testing updates
+
+`pnpm test:update` (also run in CI on Linux and Windows) builds version 0.0.1 and 0.0.2 of the real packaged
+app with a local feed, starts the old one and checks that it finds, downloads and reports the new one, and
+that a release staged at 0% is not offered. It catches broken packaging, a missing `app-update.yml` and
+updater wiring mistakes. It stops after the download: installing and relaunching, and macOS (which needs a
+signed build), are not covered.
+
+## Dependency updates
+
+Dependabot (`.github/dependabot.yml`) opens weekly PRs: one for Electron and its tooling, one for other minor and
+patch updates, one for GitHub Actions. CI runs on every one, and the commit messages follow Conventional Commits.
 
 ## Smaller updates
 

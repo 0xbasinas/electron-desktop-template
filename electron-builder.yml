@@ -7,6 +7,7 @@ files:
   - '!src/*'
   - '!scripts/*'
   - '!tests/**'
+  - '!dist-update/**'
   - '!build/icon-source.svg'
   - '!electron.vite.config.{js,ts,mjs,cjs}'
   - '!{vitest.config.ts,playwright.config.ts,commitlint.config.mjs,.husky,docs,bundle-budget.json,components.json,.github,.eslintcache,eslint.config.mjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
@@ -20,6 +21,10 @@ fileAssociations:
   - ext: tpl
     name: Template file
     role: Editor
+extraResources:
+  # Release notes shown in the "what's new" screen. The release workflow overwrites this file.
+  - from: build/release-notes.md
+    to: release-notes.md
 asarUnpack:
   - 'resources/**'
 win:

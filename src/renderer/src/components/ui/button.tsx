@@ -24,8 +24,7 @@ const buttonVariants = cva(
   }
 )
 
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {}
+export type ButtonProps = React.ComponentProps<'button'> & VariantProps<typeof buttonVariants>
 
 // eslint-disable-next-line react-refresh/only-export-components
 export { buttonVariants }

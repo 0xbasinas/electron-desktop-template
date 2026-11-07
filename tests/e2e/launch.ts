@@ -26,10 +26,23 @@ export function packagedExecutable(): string {
   return found
 }
 
+export interface LaunchOptions {
+  /** Contents of settings.json to start with. */
+  settings?: object
+  /** Reuse a user-data folder, to simulate starting the app a second time. */
+  userData?: string
+}
+
+export function makeUserDataDir(): string {
+  return mkdtempSync(join(tmpdir(), 'app-e2e-'))
+}
+
 /** Launch the packaged app with a throwaway user-data folder so tests never touch real settings. */
-export async function launchApp(settings?: object): Promise<ElectronApplication> {
-  const userData = mkdtempSync(join(tmpdir(), 'app-e2e-'))
-  if (settings) writeFileSync(join(userData, 'settings.json'), JSON.stringify(settings))
+export async function launchApp(options: LaunchOptions = {}): Promise<ElectronApplication> {
+  const userData = options.userData ?? makeUserDataDir()
+  if (options.settings) {
+    writeFileSync(join(userData, 'settings.json'), JSON.stringify(options.settings))
+  }
   return electron.launch({
     executablePath: packagedExecutable(),
     // CI Linux runners cannot use Chromium's setuid sandbox.

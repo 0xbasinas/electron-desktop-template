@@ -1,7 +1,9 @@
 import { dialog, Menu, shell, type BrowserWindow, type MenuItemConstructorOptions } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { IPC } from '../shared/ipc'
-import { requestUpdateCheck, showWindow } from './windowUtils'
+import { revealLogs } from './logger'
+import { openSettingsWindow } from './settingsWindow'
+import { requestUpdateCheck, requestWhatsNew, showWindow } from './windowUtils'
 
 // Where the Help menu points. `pnpm rename` updates this for your own repo.
 const REPO_URL = 'https://github.com/0xbasinas/electron-desktop-template'
@@ -38,6 +40,11 @@ export function setupMenu(getWindow: () => BrowserWindow | undefined): void {
           accelerator: 'CommandOrControl+O',
           click: withWindow(openFileDialog)
         },
+        {
+          label: 'Settings...',
+          accelerator: 'CommandOrControl+,',
+          click: () => openSettingsWindow(getWindow())
+        },
         { type: 'separator' },
         isMac ? { role: 'close' } : { role: 'quit' }
       ]
@@ -65,8 +72,10 @@ export function setupMenu(getWindow: () => BrowserWindow | undefined): void {
     {
       role: 'help',
       submenu: [
+        { label: "What's New", click: withWindow(requestWhatsNew) },
         { label: 'Check for Updates...', click: withWindow(requestUpdateCheck) },
         { type: 'separator' },
+        { label: 'Show Log File', click: () => revealLogs() },
         { label: 'Documentation', click: () => shell.openExternal(`${REPO_URL}#readme`) },
         {
           label: 'Report an Issue',

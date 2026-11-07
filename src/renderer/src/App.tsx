@@ -1,47 +1,48 @@
-import { useEffect, useState } from 'react'
-import FlaskConical from 'lucide-react/icons/flask-conical'
+import { useCallback, useEffect, useState } from 'react'
 import RefreshCw from 'lucide-react/icons/refresh-cw'
-import Zap from 'lucide-react/icons/zap'
-import type { UpdateChannel } from '../../shared/ipc'
+import Settings from 'lucide-react/icons/settings'
+import Sparkles from 'lucide-react/icons/sparkles'
+import type { WhatsNew } from '../../shared/ipc'
 import logo from './assets/logo.png'
 import { TitleBar } from '@renderer/components/TitleBar'
 import { TitleBarButton } from '@renderer/components/TitleBarButton'
 import { UpdateBanner } from '@renderer/components/UpdateBanner'
+import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
+import { useSettings } from '@renderer/hooks/useSettings'
 import { useUpdater } from '@renderer/hooks/useUpdater'
 
 function App(): React.JSX.Element {
-  const { electron, chrome, node } = window.electron.process.versions
+  const { electron, chrome, node } = window.api.versions
   const updater = useUpdater()
-  const [channel, setChannel] = useState<UpdateChannel>('latest')
+  const { settings } = useSettings()
+  const [whatsNew, setWhatsNew] = useState<WhatsNew>()
   const [opened, setOpened] = useState<string>()
 
   useEffect(() => {
-    void window.api.getSettings().then((s) => setChannel(s.updateChannel))
+    // First run, or the version changed since last time: show the welcome / release notes.
+    void window.api.getWhatsNew().then(setWhatsNew)
     const offMenu = window.api.onMenuCheckUpdates(updater.check)
+    const offNews = window.api.onMenuWhatsNew(() => {
+      void window.api.getWhatsNew(true).then(setWhatsNew)
+    })
     const offLink = window.api.onDeepLink((url) => setOpened(`Deep link: ${url}`))
     const offFile = window.api.onOpenFile((path) => setOpened(`Opened file: ${path}`))
     return () => {
       offMenu()
+      offNews()
       offLink()
       offFile()
     }
   }, [updater.check])
 
-  const toggleChannel = async (): Promise<void> => {
-    const next: UpdateChannel = channel === 'beta' ? 'latest' : 'beta'
-    const settings = await window.api.setUpdateChannel(next)
-    setChannel(settings.updateChannel)
-  }
+  const closeWhatsNew = useCallback(() => {
+    setWhatsNew(undefined)
+    void window.api.markWhatsNewSeen()
+  }, [])
 
   return (
     <>
       <TitleBar>
-        <TitleBarButton
-          label="Send IPC ping"
-          onClick={() => window.electron.ipcRenderer.send('ping')}
-        >
-          <Zap />
-        </TitleBarButton>
         <TitleBarButton
           label={updater.checking ? 'Checking for updates...' : 'Check for updates'}
           disabled={updater.checking}
@@ -50,11 +51,13 @@ function App(): React.JSX.Element {
           <RefreshCw className={updater.checking ? 'animate-spin' : undefined} />
         </TitleBarButton>
         <TitleBarButton
-          label={`Update channel: ${channel === 'beta' ? 'beta' : 'stable'} (click to switch)`}
-          active={channel === 'beta'}
-          onClick={toggleChannel}
+          label="What's new"
+          onClick={() => void window.api.getWhatsNew(true).then(setWhatsNew)}
         >
-          <FlaskConical />
+          <Sparkles />
+        </TitleBarButton>
+        <TitleBarButton label="Settings" onClick={() => window.api.openSettings()}>
+          <Settings />
         </TitleBarButton>
       </TitleBar>
       <UpdateBanner updater={updater} />
@@ -65,13 +68,14 @@ function App(): React.JSX.Element {
           Electron + Vite + React + TypeScript + Tailwind + shadcn/ui, with auto-updates and CI.
         </p>
         <p className="text-sm text-muted-foreground">
-          Update channel: {channel === 'beta' ? 'beta' : 'stable'}
+          Update channel: {settings?.updateChannel === 'beta' ? 'beta' : 'stable'}
         </p>
         {opened && <p className="max-w-md break-all text-center text-sm">{opened}</p>}
         <p className="text-xs text-muted-foreground">
           Electron {electron} · Chromium {chrome} · Node {node}
         </p>
       </main>
+      {whatsNew && <WhatsNewDialog data={whatsNew} onClose={closeWhatsNew} />}
     </>
   )
 }

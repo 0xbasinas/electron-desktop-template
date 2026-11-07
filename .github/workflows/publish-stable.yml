@@ -35,3 +35,6 @@ jobs:
     uses: ./.github/workflows/_publish.yml
     with:
       channel: stable
+      # Share of users offered a new stable release at first. Raise it later from
+      # Actions > "Set release rollout"; use 100 to release to everyone at once.
+      rollout: 10
