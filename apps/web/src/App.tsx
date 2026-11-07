@@ -5,6 +5,7 @@ import { AppPage } from './pages/AppPage'
 import { DownloadPage } from './pages/DownloadPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { SignInPage } from './pages/SignInPage'
 
 export function App(): JSX.Element {
   return (
@@ -12,6 +13,7 @@ export function App(): JSX.Element {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="download" element={<DownloadPage />} />
+        <Route path="sign-in" element={<SignInPage />} />
         {/* The web version of the product. Everything under /app is handled client-side. */}
         <Route path="app/*" element={<AppPage />} />
         <Route path="*" element={<NotFoundPage />} />

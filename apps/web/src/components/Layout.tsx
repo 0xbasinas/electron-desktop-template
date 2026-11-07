@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { cn } from '@repo/ui'
 import { NavLink, Outlet } from 'react-router'
 import { SITE_NAME } from '../config'
+import { authClient } from '../lib/auth'
 
 const link = ({ isActive }: { isActive: boolean }): string =>
   cn(
@@ -10,6 +11,7 @@ const link = ({ isActive }: { isActive: boolean }): string =>
   )
 
 export function Layout(): JSX.Element {
+  const { data: session } = authClient.useSession()
   return (
     <div className="flex min-h-screen flex-col">
       <header className="border-b border-border">
@@ -24,6 +26,19 @@ export function Layout(): JSX.Element {
             <NavLink to="/app" className={link}>
               Open web app
             </NavLink>
+            {session ? (
+              <button
+                type="button"
+                className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => void authClient.signOut()}
+              >
+                Sign out
+              </button>
+            ) : (
+              <NavLink to="/sign-in" className={link}>
+                Sign in
+              </NavLink>
+            )}
           </div>
         </nav>
       </header>
