@@ -1,5 +1,4 @@
-import { Button } from '@renderer/components/ui/button'
-import { cn } from '@renderer/lib/utils'
+import { Button, cn } from '@repo/ui'
 
 interface Props extends React.ComponentProps<typeof Button> {
   label: string

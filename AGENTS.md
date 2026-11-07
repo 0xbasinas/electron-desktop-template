@@ -44,7 +44,7 @@ anything touching main, preload, the window or IPC, also `pnpm build:unpack && p
 
 ## Where things live
 
-This is a **pnpm + Turborepo monorepo**. Apps are in `apps/`, shared code in `packages/` (more arrive in later steps).
+This is a **pnpm + Turborepo monorepo**. Apps are in `apps/`, shared code in `packages/`. Add UI that more than one app needs to `packages/ui` and export it from `src/index.ts`.
 
 ```
 apps/desktop/             The Electron app (its own package.json, electron-builder.yml, tests, scripts).
@@ -54,7 +54,7 @@ apps/desktop/             The Electron app (its own package.json, electron-build
   src/shared/             ipc.ts (channels + types), validate.ts (payload checks). Imported by all three processes.
   scripts/                Node scripts (release notes, rollout, manifest checks). scripts/lib/*.mjs are pure and unit tested.
   tests/e2e/              Playwright against the packaged app.   tests/update/  old-to-new update test.
-packages/                 Code shared between apps (added as the web app and API arrive).
+packages/ui/               @repo/ui: shared React components (Button, cn) and the Tailwind theme (theme.css). Source-only; apps bundle it.
 turbo.json                Task graph (build, typecheck, test). pnpm-workspace.yaml holds the workspace globs and the version catalog.
 .github/                  Workflows. publish-stable / publish-beta call _publish.yml after ci.yml passes.
 docs/                     architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),

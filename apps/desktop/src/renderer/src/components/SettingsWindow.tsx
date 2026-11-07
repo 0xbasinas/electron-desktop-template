@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { AppInfo, UpdateChannel, UpdaterEvent, WhatsNew } from '../../../shared/ipc'
-import { Button } from '@renderer/components/ui/button'
 import { TitleBar } from '@renderer/components/TitleBar'
 import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useUpdater } from '@renderer/hooks/useUpdater'
-import { cn } from '@renderer/lib/utils'
+import { Button, cn } from '@repo/ui'
 
 const CHANNELS: { value: UpdateChannel; label: string; hint: string }[] = [
   { value: 'latest', label: 'Stable', hint: 'Tested releases. Recommended.' },
