@@ -22,6 +22,7 @@
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
+  color-scheme: light;
 }
 
 .dark {
@@ -41,6 +42,7 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  color-scheme: dark;
 }
 
 @theme inline {
@@ -71,5 +73,52 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+  }
+
+  /* Thin, quiet scrollbars that follow the theme: the thumb is a faint tint of the text colour, the track is invisible. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent;
+  }
+
+  /* Checkboxes in the theme colours instead of the browser's default blue/white box. */
+  input[type='checkbox'] {
+    appearance: none;
+    position: relative;
+    flex: none;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid var(--input);
+    border-radius: 0.25rem;
+    background: transparent;
+    cursor: pointer;
+    transition:
+      background-color 0.15s,
+      border-color 0.15s;
+  }
+  input[type='checkbox']:hover:not(:disabled) {
+    border-color: var(--ring);
+  }
+  input[type='checkbox']:checked {
+    border-color: var(--primary);
+    background: var(--primary);
+  }
+  input[type='checkbox']:checked::after {
+    content: '';
+    position: absolute;
+    left: 0.28rem;
+    top: 0.08rem;
+    width: 0.28rem;
+    height: 0.52rem;
+    border: solid var(--primary-foreground);
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  input[type='checkbox']:focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  input[type='checkbox']:disabled {
+    cursor: not-allowed;
   }
 }
