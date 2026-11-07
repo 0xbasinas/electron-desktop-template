@@ -1,0 +1,4 @@
+# Copy to .dev.vars (git-ignored) for `pnpm dev`. Deployed secrets are set with `wrangler secret put`.
+BETTER_AUTH_SECRET=change-me-to-a-long-random-string
+# Leave RESEND_API_KEY out in development: sign-in links are then printed in the terminal instead of emailed.
+# RESEND_API_KEY=re_xxxxxxxx

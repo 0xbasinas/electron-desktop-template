@@ -13,7 +13,10 @@ export default defineConfig(
       '**/dist-*',
       '**/out',
       '**/.turbo',
-      'apps/desktop/scripts'
+      'apps/desktop/scripts',
+      '**/worker-configuration.d.ts',
+      'apps/api/src/db/auth-schema.ts',
+      'apps/api/drizzle'
     ]
   },
   tseslint.configs.recommended,
@@ -36,6 +39,11 @@ export default defineConfig(
       ...eslintPluginReactHooks.configs.recommended.rules,
       ...eslintPluginReactRefresh.configs.vite.rules
     }
+  },
+  {
+    // The API's value is its inferred types (Hono routes for the typed client, Better Auth options).
+    files: ['apps/api/**/*.ts'],
+    rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   eslintConfigPrettier
 )
