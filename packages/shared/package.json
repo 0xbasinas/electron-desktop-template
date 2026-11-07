@@ -5,7 +5,8 @@
   "description": "Types and zod schemas shared by the API, the web app and the desktop app. Source-only.",
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./client": "./src/client.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

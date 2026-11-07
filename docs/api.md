@@ -63,3 +63,10 @@ The design keeps well inside that:
 - Writes with a cross-site `Origin` are rejected (`src/origin.ts`); Better Auth checks origins on its own routes.
 - Every notes query filters by the signed-in user. The tests check that one user cannot read or delete another's notes.
 - The email sender is not awaited, so the response time does not reveal whether an address already has an account.
+
+## Web sign-in
+
+`apps/web` has a `/sign-in` page (email, then "check your email") and `/app`, which needs a session and shows the notes
+example through the typed client in `packages/shared/src/client.ts` (responses are checked with zod). In development you
+can also run `pnpm --filter @repo/web dev`; Vite proxies `/api` to `wrangler dev` on port 8787. The desktop app will use the
+same client and sign in through the system browser (planned next).
