@@ -64,7 +64,7 @@ function Toggle({
     <label className={cn('flex items-start gap-3', disabled && 'opacity-60')}>
       <input
         type="checkbox"
-        className="mt-1 size-4 accent-primary"
+        className="mt-1"
         checked={checked}
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
