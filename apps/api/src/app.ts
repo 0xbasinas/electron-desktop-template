@@ -1,4 +1,5 @@
 import { zValidator } from '@hono/zod-validator'
+import * as Sentry from '@sentry/cloudflare'
 import {
   clampUpdatedAt,
   deleteAccountInputSchema,
@@ -263,6 +264,7 @@ export function createApp(options: AppOptions = {}) {
       .onError((error, c) => {
         if (error instanceof HTTPException) return c.json({ error: error.message }, error.status)
         console.error('Unhandled error', error)
+        Sentry.captureException(error)
         return c.json({ error: 'Something went wrong' }, 500)
       })
       .notFound((c) => c.json({ error: 'Not found' }, 404))

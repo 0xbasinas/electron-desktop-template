@@ -2,6 +2,7 @@ import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../src/app'
+import worker from '../src/index'
 import type { Bindings } from '../src/env'
 import type { EmailMessage } from '../src/email'
 
@@ -493,5 +494,21 @@ describe('preferences', () => {
     }
     expect(saved.updatedAt).toBeLessThan(Date.now() + 10 * 60_000)
     expect(await get(s, b)).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+  })
+})
+
+describe('the deployed entry point', () => {
+  it('serves requests through the error-reporting wrapper, with or without a Sentry DSN', async () => {
+    for (const dsn of [undefined, 'https://public@o0.ingest.sentry.io/0']) {
+      const ctx = createExecutionContext()
+      const response = await worker.fetch(
+        new Request(`${ORIGIN}/api/health`),
+        { ...bindings, SENTRY_DSN: dsn } as Bindings,
+        ctx
+      )
+      await waitOnExecutionContext(ctx)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ ok: true })
+    }
   })
 })

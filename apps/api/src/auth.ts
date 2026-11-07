@@ -1,6 +1,7 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
+import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
@@ -70,9 +71,11 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         sendMagicLink: async ({ email: to, url }) => {
           // Not awaited: the response time must not reveal whether the address already has an account.
           waitUntil(
-            email
-              .send({ to, ...magicLinkEmail(url, APP_NAME) })
-              .catch((error: unknown) => console.error('Could not send the sign-in email', error))
+            email.send({ to, ...magicLinkEmail(url, APP_NAME) }).catch((error: unknown) => {
+              console.error('Could not send the sign-in email', error)
+              // The one failure that silently locks people out, so make sure someone hears about it.
+              Sentry.captureException(error)
+            })
           )
         }
       })

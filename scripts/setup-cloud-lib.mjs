@@ -134,3 +134,13 @@ export function secretsFileContent(secrets) {
 export function mask(value) {
   return value.length <= 8 ? '****' : `${value.slice(0, 4)}…`
 }
+
+/** A Sentry DSN looks like https://<key>@<host>/<project id>. Anything else is refused before it is stored as a secret. */
+export function isSentryDsn(value) {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.username !== '' && /^\/\d+$/.test(url.pathname)
+  } catch {
+    return false
+  }
+}

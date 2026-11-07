@@ -12,6 +12,7 @@ import {
   assertDomain,
   fromAddress,
   generateSecret,
+  isSentryDsn,
   isWorkersDev,
   mask,
   normalizeSiteUrl,
@@ -335,6 +336,19 @@ if (workerResendKey && !have.has('RESEND_API_KEY')) {
   ok('Created a Resend key that can only send from your domain')
 } else if (workerResendKey) {
   note('RESEND_API_KEY is already set.')
+}
+
+if (process.env.SENTRY_DSN && (!have.has('SENTRY_DSN') || args.flags.has('rotate-secret'))) {
+  if (!isSentryDsn(process.env.SENTRY_DSN))
+    fail('SENTRY_DSN does not look like a Sentry DSN (https://<key>@<host>/<project id>).')
+  secrets.SENTRY_DSN = process.env.SENTRY_DSN
+  ok('Error reporting to Sentry is on')
+} else if (have.has('SENTRY_DSN')) {
+  note('SENTRY_DSN is already set.')
+} else {
+  note(
+    'No SENTRY_DSN: errors are only in the Cloudflare logs. Set it and run again to turn on Sentry (docs/setup-cloud.md).'
+  )
 }
 
 // 7 -------------------------------------------------------------------------------------------------------------------

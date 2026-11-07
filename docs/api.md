@@ -130,3 +130,15 @@ or dark). Change it on `/account` or in the desktop **Settings > General** and t
 - **To sync another preference**, add a field (with a default) to `preferencesSchema` in `packages/shared/src/preferences.ts`,
   read and write it in the website (`apps/web/src/lib/theme.ts` is the pattern) and, for the desktop app, add it as a setting
   (see "Adding a setting" in AGENTS.md) and include it in `preferencesSync.ts`.
+
+## Error reporting (Sentry, optional)
+
+Set the secret `SENTRY_DSN` and unexpected errors in the Worker are reported to [Sentry](https://sentry.io) (free plan is enough to start),
+including the one that silently locks people out: a sign-in email that could not be sent. Without it nothing is sent.
+
+- Errors only: no traces, no user identity (`dataCollection.userInfo` is off). Expected failures (401, 403, 404, validation) are
+  not reported, only 500s and failed emails.
+- Turn it on: create a Sentry project (platform "Cloudflare Workers"), then `SENTRY_DSN=<dsn> pnpm setup:cloud --skip-resend`, or
+  `wrangler secret put SENTRY_DSN`. Use Sentry's alert rules to get an email or chat message on a new issue.
+- It adds about 250 KiB (gzip) to the Worker, which is far below the 3 MiB limit of the free plan.
+- `GET /api/health` is a good URL for an uptime monitor (Cloudflare Health Checks, UptimeRobot, Better Stack).

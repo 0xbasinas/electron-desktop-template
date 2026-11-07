@@ -4,6 +4,7 @@ import {
   assertDomain,
   fromAddress,
   generateSecret,
+  isSentryDsn,
   mask,
   normalizeSiteUrl,
   parseArgs,
@@ -142,4 +143,11 @@ test('secrets are long, random and masked in output', () => {
   assert.notEqual(a, generateSecret())
   assert.equal(mask('re_abcdefghijkl'), 're_a…')
   assert.equal(mask('short'), '****')
+})
+
+test('isSentryDsn', () => {
+  assert.ok(isSentryDsn('https://abc123@o12345.ingest.sentry.io/678'))
+  for (const bad of ['', 'http://abc@host/1', 'https://host/1', 'https://abc@host/', 'nope']) {
+    assert.ok(!isSentryDsn(bad), bad)
+  }
 })
