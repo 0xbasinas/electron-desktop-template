@@ -70,7 +70,7 @@ Every pull request builds the real installers on Windows, macOS and Linux (`elec
 
 - the update manifest (`latest.yml`, `latest-mac.yml` or `latest-linux.yml`) is missing or has a different version than the app;
 - a file the manifest lists is missing, or its size or sha512 differs;
-- an installer has no `.blockmap` (updates would not be differential);
+- a Windows installer or macOS zip/dmg has no `.blockmap` (updates would not be differential; AppImages have none);
 - the packaged app lacks `app-update.yml`, `release-notes.md` or `app.asar`;
 - the fresh manifest already carries a rollout percentage (only the publish step adds that).
 

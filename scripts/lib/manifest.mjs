@@ -71,7 +71,7 @@ export function checkManifest(manifest, build) {
     if (!name.includes(build.version)) {
       problems.push(`${name} does not contain the version ${build.version}`)
     }
-    if (/\.(exe|AppImage|zip|dmg)$/.test(name) && !build.files.has(`${name}.blockmap`)) {
+    if (/\.(exe|zip|dmg)$/.test(name) && !build.files.has(`${name}.blockmap`)) {
       problems.push(`${name} has no .blockmap, so updates cannot be differential`)
     }
   }

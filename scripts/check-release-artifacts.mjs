@@ -7,7 +7,7 @@
 //   - the unpacked app carries app-update.yml and the release notes
 // Usage: node scripts/check-release-artifacts.mjs [dist-folder]
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkManifest, parseManifest } from './lib/manifest.mjs'
 
@@ -28,14 +28,15 @@ if (!existsSync(dist)) {
   process.exit(1)
 }
 
-// Hash every top-level file once.
+// Hash every top-level file once. electron-builder writes names with spaces to disk but with dashes in the
+// manifest (and on GitHub), so files are keyed by the dashed name.
 const files = new Map()
-for (const name of readdirSync(dist)) {
-  const path = join(dist, name)
-  if (!statSync(path).isFile()) continue
-  files.set(name, {
-    size: statSync(path).size,
-    sha512: createHash('sha512').update(readFileSync(path)).digest('base64')
+for (const entry of readdirSync(dist, { withFileTypes: true })) {
+  if (!entry.isFile()) continue
+  const data = readFileSync(join(dist, entry.name))
+  files.set(entry.name.replaceAll(' ', '-'), {
+    size: data.length,
+    sha512: createHash('sha512').update(data).digest('base64')
   })
 }
 

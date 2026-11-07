@@ -70,6 +70,13 @@ describe('checkManifest', () => {
     )
   })
 
+  it('does not ask AppImages for a blockmap', () => {
+    const appImage =
+      'version: 1.2.3\nfiles:\n  - url: app-1.2.3.AppImage\n    sha512: A\n    size: 5\n'
+    const files = new Map([['app-1.2.3.AppImage', { size: 5, sha512: 'A' }]])
+    expect(checkManifest(parseManifest(appImage), { version: '1.2.3', files })).toEqual([])
+  })
+
   it('rejects a fresh build that already has a rollout percentage', () => {
     expect(checkManifest(parseManifest(text + 'stagingPercentage: 10\n'), build()).join()).toMatch(
       /stagingPercentage/
