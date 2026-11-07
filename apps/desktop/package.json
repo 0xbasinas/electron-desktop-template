@@ -35,7 +35,6 @@
     "conf": "^15.0.2",
     "electron-log": "^5.4.4",
     "electron-updater": "^6.8.11",
-    "lucide-react": "catalog:",
     "tw-animate-css": "catalog:"
   },
   "devDependencies": {
