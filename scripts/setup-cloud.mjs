@@ -21,6 +21,7 @@ import {
   parseArgs,
   findDatabaseId,
   patchPreviewDatabase,
+  patchWorkerName,
   patchWranglerConfig,
   recordExists,
   secretsFileContent,
@@ -213,6 +214,7 @@ if (previewDatabaseId) {
 
 // 4 -------------------------------------------------------------------------------------------------------------------
 let from
+let appName
 let workerResendKey
 if (args.flags.has('skip-resend')) {
   step(4, 'Email (Resend): skipped')
@@ -227,6 +229,7 @@ if (args.flags.has('skip-resend')) {
   )
   const displayName =
     args.values['from-name'] ?? (await ask('Sender name', 'Electron Desktop Template'))
+  appName = displayName
   from = fromAddress(displayName, sendingDomain)
 
   const resendKey =
@@ -365,16 +368,23 @@ config = patchWranglerConfig(config, {
   databaseId,
   siteUrl,
   from,
+  appName,
   routeHost: useCustomDomain ? siteHost : ''
 })
+// The Worker (and its database) are named after the app, so they are easy to find in the Cloudflare dashboard.
+config = patchWorkerName(config, WORKER_NAME)
 writeFileSync(CONFIG_PATH, config)
 const PREVIEW_MIGRATIONS_PATH = 'apps/api/wrangler.preview-migrations.jsonc'
+writeFileSync(
+  PREVIEW_MIGRATIONS_PATH,
+  patchWorkerName(readFileSync(PREVIEW_MIGRATIONS_PATH, 'utf8'), WORKER_NAME)
+)
 for (const path of previewDatabaseId ? [CONFIG_PATH, PREVIEW_MIGRATIONS_PATH] : []) {
   const text = readFileSync(path, 'utf8')
   writeFileSync(path, patchPreviewDatabase(text, { name: previewDbName, id: previewDatabaseId }))
 }
 ok(
-  'database_id, BETTER_AUTH_URL' +
+  'name, database_id, BETTER_AUTH_URL' +
     (from ? ', EMAIL_FROM' : '') +
     (useCustomDomain ? ', routes' : '')
 )
