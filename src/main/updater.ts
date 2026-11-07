@@ -16,7 +16,10 @@ export function setupAutoUpdater(): void {
   // Differential (blockmap) downloads are on by default; keep it explicit so nobody turns it off by accident.
   autoUpdater.disableDifferentialDownload = false
 
+  // Remember the latest event so a window that opens later (or reloads) can show the current state.
+  let last: UpdaterEvent | undefined
   const send = (event: UpdaterEvent): void => {
+    last = event
     BrowserWindow.getAllWindows().forEach((w) => w.webContents.send(IPC.updaterEvent, event))
   }
 
@@ -38,6 +41,10 @@ export function setupAutoUpdater(): void {
   }
 
   ipcMain.handle(IPC.updaterCheck, check)
+  ipcMain.handle(IPC.updaterStatus, () => last)
+  ipcMain.handle(IPC.updaterInstall, () => {
+    if (last?.type === 'downloaded') autoUpdater.quitAndInstall()
+  })
   ipcMain.handle(IPC.settingsGet, () => getSettings())
   ipcMain.handle(IPC.settingsSetChannel, async (_event, channel: UpdateChannel) => {
     const settings = updateSettings({ updateChannel: channel === 'beta' ? 'beta' : 'latest' })

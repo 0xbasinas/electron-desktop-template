@@ -5,6 +5,8 @@ export const IPC = {
   ping: 'ping',
   updaterCheck: 'updater:check',
   updaterEvent: 'updater:event',
+  updaterStatus: 'updater:status',
+  updaterInstall: 'updater:install',
   settingsGet: 'settings:get',
   settingsSetChannel: 'settings:set-channel',
   deepLink: 'deeplink:url',

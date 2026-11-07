@@ -1,12 +1,63 @@
 name: CI
+# Runs on pull requests, and is also called by the publish workflows as a gate before they release.
+# Pushes that don't trigger a publish (docs, tests, CI and config changes) get their own run below.
 on:
+  pull_request:
+  workflow_call:
   push:
     branches: [main, beta]
-  pull_request:
+    paths:
+      - '.github/**'
+      - 'docs/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - '**.md'
+      - '**/*.test.ts'
+      - '**/*.test.tsx'
+      - 'eslint.config.mjs'
+      - 'vitest.config.ts'
+      - 'playwright.config.ts'
+      - 'commitlint.config.mjs'
+      - 'bundle-budget.json'
+      - '.prettier*'
+
+permissions:
+  contents: read
+
+env:
+  HUSKY: 0
 
 jobs:
   check:
+    name: Lint, types, tests, bundle size
     runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Commit messages follow Conventional Commits
+        if: github.event_name == 'pull_request'
+        run: pnpm exec commitlint --from ${{ github.event.pull_request.base.sha }} --to ${{ github.event.pull_request.head.sha }} --verbose
+      - run: pnpm format:check
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      - run: pnpm check:bundle
+
+  smoke:
+    name: Smoke test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -15,9 +66,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm format:check
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
-      - run: pnpm check:bundle
+      - name: Package the app (unpacked)
+        run: pnpm build:unpack
+      - name: Launch the packaged app and check the window opens
+        if: runner.os != 'Linux'
+        run: pnpm test:e2e
+      - name: Launch the packaged app and check the window opens (virtual display)
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm test:e2e

@@ -12,6 +12,8 @@ const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => v
 export const api = {
   platform: process.platform,
   checkForUpdates: (): Promise<void> => ipcRenderer.invoke(IPC.updaterCheck),
+  getUpdaterStatus: (): Promise<UpdaterEvent | undefined> => ipcRenderer.invoke(IPC.updaterStatus),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke(IPC.updaterInstall),
   getSettings: (): Promise<Settings> => ipcRenderer.invoke(IPC.settingsGet),
   setUpdateChannel: (channel: UpdateChannel): Promise<Settings> =>
     ipcRenderer.invoke(IPC.settingsSetChannel, channel),

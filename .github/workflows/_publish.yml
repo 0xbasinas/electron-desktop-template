@@ -1,27 +1,22 @@
-name: Release
-# Pushes to `main` publish a stable release; pushes to `beta` publish a pre-release on the beta channel.
-# Version = <major>.<minor from package.json>.<commit count>, plus "-beta" on the beta branch.
-# Bump major/minor by editing package.json.
+name: Publish (shared steps)
+# Reusable pipeline behind "Publish stable release" and "Publish beta pre-release".
+# Not run directly: it is called with channel = stable | beta.
 on:
-  push:
-    branches: [main, beta]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/workflows/ci.yml'
+  workflow_call:
+    inputs:
+      channel:
+        description: stable or beta
+        type: string
+        required: true
 
 permissions:
   contents: write
   id-token: write # build provenance (OIDC)
   attestations: write
 
-concurrency:
-  group: release-${{ github.ref_name }}
-  cancel-in-progress: false
-
 jobs:
   version:
+    name: Work out the version
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.v.outputs.version }}
@@ -32,12 +27,14 @@ jobs:
         with:
           fetch-depth: 0
       - id: v
+        env:
+          CHANNEL: ${{ inputs.channel }}
         run: |
           base=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
           count=$(git rev-list --count HEAD)
           version="$base.$count"
           prerelease=false
-          if [ "$GITHUB_REF_NAME" = "beta" ]; then
+          if [ "$CHANNEL" = "beta" ]; then
             version="$version-beta"
             prerelease=true
           fi
@@ -57,6 +54,7 @@ jobs:
           fi
 
   build:
+    name: Build and publish (${{ matrix.os }})
     needs: version
     strategy:
       fail-fast: false
@@ -77,6 +75,8 @@ jobs:
               dist/*.AppImage
               dist/*.deb
     runs-on: ${{ matrix.os }}
+    env:
+      HUSKY: 0
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -102,25 +102,34 @@ jobs:
           subject-path: ${{ matrix.artifacts }}
 
   finalize:
+    name: Release notes and checksums
     needs: [version, build]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: git fetch --tags --force
       - name: Title, notes and checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ needs.version.outputs.version }}
           SHA: ${{ needs.version.outputs.sha }}
-          PRERELEASE: ${{ needs.version.outputs.prerelease }}
+          CHANNEL: ${{ inputs.channel }}
         run: |
           tag="v$VERSION"
-          channel=stable
-          [ "$PRERELEASE" = "true" ] && channel=beta
+
+          node scripts/release-notes.mjs "$tag" "$CHANNEL" > notes.md
+          {
+            echo "---"
+            echo "Channel: **$CHANNEL**. Built from commit \`$SHA\`."
+            echo
+            echo "Verify a download: \`sha256sum -c SHA256SUMS.txt --ignore-missing\`, or \`gh attestation verify <file> --repo $GITHUB_REPOSITORY\`."
+          } >> notes.md
 
           gh release edit "$tag" --repo "$GITHUB_REPOSITORY" \
             --title "v$VERSION ($SHA)" \
-            --notes "Build of commit [$SHA]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commit/$GITHUB_SHA) on the $channel channel.
-
-          Verify a download: \`sha256sum -c SHA256SUMS.txt\`, or \`gh attestation verify <file> --repo $GITHUB_REPOSITORY\`."
+            --notes-file notes.md
 
           mkdir assets
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir assets \

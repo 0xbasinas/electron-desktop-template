@@ -43,7 +43,7 @@ const edits = {
     s
       .replace(/^appId: .*$/m, `appId: ${newId}`)
       .replace(/^productName: .*$/m, `productName: ${title}`)
-      .replace(/^ {2}executableName: .*$/m, `  executableName: ${name}`)
+      .replace(/^ {2}executableName: .*$/gm, `  executableName: ${name}`)
       .replace(/^ {2}owner: .*$/m, `  owner: ${owner}`)
       .replace(/^ {2}repo: .*$/m, `  repo: ${name}`)
       .replace(/^ {2}maintainer: .*$/m, `  maintainer: ${owner}`)
@@ -52,7 +52,9 @@ const edits = {
   'src/main/index.ts': (s) => s.replace(oldId, newId),
   'src/renderer/index.html': (s) => s.replace(/<title>.*<\/title>/, `<title>${title}</title>`),
   'src/renderer/src/App.tsx': (s) => s.replaceAll(oldTitle, title),
-  'README.md': (s) => s.replace(/^# .*$/m, `# ${title}`),
+  'README.md': (s) =>
+    s.replace(/^# .*$/m, `# ${title}`).replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
+  'docs/releasing.md': (s) => s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
   LICENSE: (s) => s.replace(/Copyright \(c\) (\d{4}) .*/, `Copyright (c) $1 ${owner}`)
 }
 

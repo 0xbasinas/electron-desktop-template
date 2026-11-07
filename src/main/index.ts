@@ -4,6 +4,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { IPC } from '../shared/ipc'
 import { flushPending, initDeepLinks } from './deeplink'
 import { setupAutoUpdater } from './updater'
+import { loadWindowState, trackWindowState } from './windowState'
 import icon from '../../resources/icon.png?asset'
 
 const isMac = process.platform === 'darwin'
@@ -18,9 +19,12 @@ const overlay = (): Electron.TitleBarOverlayOptions => ({
 })
 
 function createWindow(): void {
+  const state = loadWindowState()
   const win = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: state.width,
+    height: state.height,
+    x: state.x,
+    y: state.y,
     minWidth: 480,
     minHeight: 360,
     show: false,
@@ -36,6 +40,8 @@ function createWindow(): void {
     }
   })
   mainWindow = win
+  if (state.isMaximized) win.maximize()
+  trackWindowState(win)
 
   win.on('ready-to-show', () => win.show())
   win.on('closed', () => (mainWindow = undefined))

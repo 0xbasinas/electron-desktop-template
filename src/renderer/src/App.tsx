@@ -1,41 +1,25 @@
 import { useEffect, useState } from 'react'
-import type { UpdateChannel, UpdaterEvent } from '../../shared/ipc'
+import FlaskConical from 'lucide-react/icons/flask-conical'
+import RefreshCw from 'lucide-react/icons/refresh-cw'
+import Zap from 'lucide-react/icons/zap'
+import type { UpdateChannel } from '../../shared/ipc'
 import logo from './assets/logo.png'
-import { Button } from '@renderer/components/ui/button'
 import { TitleBar } from '@renderer/components/TitleBar'
-
-function describe(event: UpdaterEvent | undefined): string {
-  switch (event?.type) {
-    case 'checking':
-      return 'Checking for updates...'
-    case 'available':
-      return `Downloading ${event.version}...`
-    case 'progress':
-      return `Downloading update: ${Math.round(event.percent)}%`
-    case 'downloaded':
-      return `${event.version} is ready and installs when you quit.`
-    case 'not-available':
-      return 'You are up to date.'
-    case 'error':
-      return `Update error: ${event.message}`
-    default:
-      return ''
-  }
-}
+import { TitleBarButton } from '@renderer/components/TitleBarButton'
+import { UpdateBanner } from '@renderer/components/UpdateBanner'
+import { useUpdater } from '@renderer/hooks/useUpdater'
 
 function App(): React.JSX.Element {
   const { electron, chrome, node } = window.electron.process.versions
+  const updater = useUpdater()
   const [channel, setChannel] = useState<UpdateChannel>('latest')
-  const [update, setUpdate] = useState<UpdaterEvent>()
   const [opened, setOpened] = useState<string>()
 
   useEffect(() => {
     void window.api.getSettings().then((s) => setChannel(s.updateChannel))
-    const offUpdate = window.api.onUpdaterEvent(setUpdate)
     const offLink = window.api.onDeepLink((url) => setOpened(`Deep link: ${url}`))
     const offFile = window.api.onOpenFile((path) => setOpened(`Opened file: ${path}`))
     return () => {
-      offUpdate()
       offLink()
       offFile()
     }
@@ -49,23 +33,38 @@ function App(): React.JSX.Element {
 
   return (
     <>
-      <TitleBar />
+      <TitleBar>
+        <TitleBarButton
+          label="Send IPC ping"
+          onClick={() => window.electron.ipcRenderer.send('ping')}
+        >
+          <Zap />
+        </TitleBarButton>
+        <TitleBarButton
+          label={updater.checking ? 'Checking for updates...' : 'Check for updates'}
+          disabled={updater.checking}
+          onClick={updater.check}
+        >
+          <RefreshCw className={updater.checking ? 'animate-spin' : undefined} />
+        </TitleBarButton>
+        <TitleBarButton
+          label={`Update channel: ${channel === 'beta' ? 'beta' : 'stable'} (click to switch)`}
+          active={channel === 'beta'}
+          onClick={toggleChannel}
+        >
+          <FlaskConical />
+        </TitleBarButton>
+      </TitleBar>
+      <UpdateBanner updater={updater} />
       <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8 pt-16">
         <img src={logo} alt="" className="size-20 rounded-2xl" />
         <h1 className="text-3xl font-semibold tracking-tight">Electron Desktop Template</h1>
         <p className="max-w-md text-center text-muted-foreground">
           Electron + Vite + React + TypeScript + Tailwind + shadcn/ui, with auto-updates and CI.
         </p>
-        <div className="flex flex-wrap justify-center gap-2">
-          <Button onClick={() => window.electron.ipcRenderer.send('ping')}>Send IPC ping</Button>
-          <Button variant="outline" onClick={() => window.api.checkForUpdates()}>
-            Check for updates
-          </Button>
-          <Button variant="secondary" onClick={toggleChannel}>
-            Update channel: {channel === 'beta' ? 'beta' : 'stable'}
-          </Button>
-        </div>
-        {update && <p className="text-sm text-muted-foreground">{describe(update)}</p>}
+        <p className="text-sm text-muted-foreground">
+          Update channel: {channel === 'beta' ? 'beta' : 'stable'}
+        </p>
         {opened && <p className="max-w-md break-all text-center text-sm">{opened}</p>}
         <p className="text-xs text-muted-foreground">
           Electron {electron} · Chromium {chrome} · Node {node}

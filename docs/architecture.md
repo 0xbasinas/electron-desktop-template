@@ -20,18 +20,19 @@ Shared types and channel names live in `src/shared/ipc.ts`, which all three impo
 
 ## Folders
 
-| Path                   | What lives there                                                                  |
-| ---------------------- | --------------------------------------------------------------------------------- |
-| `src/main/index.ts`    | App startup, the window (custom title bar, no white flash), single-instance lock  |
-| `src/main/updater.ts`  | `electron-updater`: stable vs beta channel, differential downloads, update events |
-| `src/main/deeplink.ts` | `myapp://` links and file associations, on macOS, Windows and Linux               |
-| `src/main/settings.ts` | Tiny JSON settings file in the user data folder                                   |
-| `src/preload/api.ts`   | The `window.api` surface. Everything the page can ask main to do is listed here   |
-| `src/preload/index.ts` | Exposes `api` with `contextBridge`                                                |
-| `src/shared/ipc.ts`    | Channel names and payload types                                                   |
-| `src/renderer/`        | The React app, Tailwind and shadcn/ui                                             |
-| `build/`               | App icons (generated) and macOS entitlements                                      |
-| `scripts/`             | Rename, icon generation and bundle-size scripts                                   |
+| Path                      | What lives there                                                                  |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `src/main/index.ts`       | App startup, the window (custom title bar, no white flash), single-instance lock  |
+| `src/main/updater.ts`     | `electron-updater`: stable vs beta channel, differential downloads, update events |
+| `src/main/deeplink.ts`    | `myapp://` links and file associations, on macOS, Windows and Linux               |
+| `src/main/windowState.ts` | Remembers window size, position and maximized state between launches              |
+| `src/main/settings.ts`    | Tiny JSON settings file in the user data folder                                   |
+| `src/preload/api.ts`      | The `window.api` surface. Everything the page can ask main to do is listed here   |
+| `src/preload/index.ts`    | Exposes `api` with `contextBridge`                                                |
+| `src/shared/ipc.ts`       | Channel names and payload types                                                   |
+| `src/renderer/`           | The React app, Tailwind and shadcn/ui                                             |
+| `build/`                  | App icons (generated) and macOS entitlements                                      |
+| `scripts/`                | Rename, icon generation and bundle-size scripts                                   |
 
 ## How IPC flows
 
