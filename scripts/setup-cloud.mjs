@@ -462,6 +462,20 @@ if (args.flags.has('skip-github')) {
       run('gh', ['secret', 'set', 'CLOUDFLARE_ACCOUNT_ID', '--repo', repo], { input: accountId })
       run('gh', ['variable', 'set', 'CLOUDFLARE_DEPLOY', '--body', 'true', '--repo', repo])
       ok('Cloudflare secrets saved; automatic deploys are on')
+      const existingSecrets = run('gh', ['secret', 'list', '--repo', repo], { allowFail: true }).out
+      if (!/^BACKUP_PASSPHRASE\b/m.test(existingSecrets)) {
+        // GitHub secrets cannot be read back, so this is the only time the passphrase is ever shown.
+        const passphrase = generateSecret()
+        run('gh', ['secret', 'set', 'BACKUP_PASSPHRASE', '--repo', repo], { input: passphrase })
+        ok('Daily encrypted database backups are on')
+        say('')
+        say('    ┌─ SAVE THIS NOW in your password manager. It is shown only once. ─┐')
+        say(`    │ BACKUP_PASSPHRASE = ${passphrase}`)
+        say('    └─ Without it the backups cannot be opened (docs/api.md, Backups) ─┘')
+        say('')
+      } else {
+        note('BACKUP_PASSPHRASE is already set.')
+      }
     } else {
       note('Automatic deploys need an API token that this script cannot create for you:')
       note(

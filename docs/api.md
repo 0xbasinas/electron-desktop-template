@@ -157,3 +157,31 @@ Sign-in emails only work while mailbox providers trust your domain. Three things
   cannot be used to find out which addresses have accounts. Temporary bounces (full mailbox) are ignored. A complaint is also
   reported to Sentry if it is on. To let a corrected address through earlier:
   `wrangler d1 execute DB --remote --command "DELETE FROM email_suppression WHERE email = 'a@b.com'"`.
+
+## Backups
+
+D1 has **Time Travel** (restore to any minute of the last 7 days on the free plan, 30 on paid:
+`wrangler d1 time-travel restore DB --timestamp=<time>`). That covers "I broke something an hour ago". For anything older, or a copy
+you hold yourself, `.github/workflows/backup-d1.yml` exports the whole database every day at 03:23 UTC:
+
+1. `wrangler d1 export` of the production database.
+2. **It restores the export into an empty scratch database and counts the users**, so a broken backup fails the run (and GitHub emails
+   you) instead of surprising you when you need it.
+3. It is **encrypted** (AES-256, key derived from the secret `BACKUP_PASSPHRASE`) before it is uploaded as a workflow artifact,
+   because artifacts of a public repository can be downloaded by anyone, and the file contains email addresses. The run refuses to
+   export at all without the passphrase. Artifacts are kept for 30 days.
+
+`pnpm setup:cloud` creates the passphrase and prints it **once**: put it in your password manager. A lost passphrase means unreadable
+backups (GitHub never shows a secret again; setting it again only protects future backups).
+
+**Restore** (into a new database, then point `database_id` at it, or copy rows over):
+
+```bash
+gh run download <run-id> -n d1-backup-<run-id>          # gives backup.sql.enc
+openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in backup.sql.enc -out backup.sql   # asks for the passphrase
+pnpm --filter @repo/api exec wrangler d1 create my-app-restored
+pnpm --filter @repo/api exec wrangler d1 execute my-app-restored --remote --file ../../backup.sql
+```
+
+The restore of the encrypted file is the one step the workflow cannot test for you: try it once now, with a manual run of the
+workflow, so you know it works before you need it.
