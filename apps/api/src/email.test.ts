@@ -18,12 +18,33 @@ describe('magicLinkEmail', () => {
   it('is a real, readable message: a button, a fallback address, the name and the expiry', () => {
     const m = magicLinkEmail('https://x.test/verify?token=abc', 'GoZap')
     expect(m.html).toContain('<!doctype html>')
-    expect(m.html).toContain('>Sign in</a>')
+    expect(m.html).toContain('Sign in to GoZap &rarr;</a>')
     expect(m.html).toContain('Sign in to GoZap')
+    expect(m.html).not.toContain('<img')
     expect(m.html).toContain('expires in 5 minutes')
-    expect(m.html).toContain('>G</td>')
-    expect(m.text).toContain('Sign in to GoZap')
+    expect(m.text).toContain('Your sign-in link for GoZap is ready')
     expect(m.text).toContain('https://x.test/verify?token=abc')
     expect(m.text).not.toContain('<')
+  })
+})
+
+describe('magicLinkEmail branding', () => {
+  it('shows the logo and uses the brand colour for the header and the button', () => {
+    const m = magicLinkEmail('https://x.test/v', 'GoZap', {
+      logoUrl: 'https://x.test/email-logo.png',
+      color: '#687848',
+      onColor: '#ffffff'
+    })
+    expect(m.html).toContain('src="https://x.test/email-logo.png"')
+    expect(m.html).toContain('alt="GoZap"')
+    expect(m.html.match(/#687848/g)!.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('escapes the logo address and colour', () => {
+    const m = magicLinkEmail('https://x.test/v', 'A', {
+      logoUrl: 'https://x.test/"><script>',
+      color: '"><script>'
+    })
+    expect(m.html).not.toContain('<script>')
   })
 })

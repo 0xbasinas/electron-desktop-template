@@ -6,6 +6,7 @@ import { betterAuth } from 'better-auth'
 import { magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
 import { schema } from './db'
+import { BRAND } from './brand'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
 import type { Bindings } from './env'
@@ -81,7 +82,14 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
                 console.warn('Skipped a sign-in email to a suppressed address')
                 return
               }
-              await email.send({ to, ...magicLinkEmail(url, appName) })
+              await email.send({
+                to,
+                ...magicLinkEmail(url, appName, {
+                  logoUrl: new URL('/email-logo.png', env.BETTER_AUTH_URL).href,
+                  color: BRAND.color,
+                  onColor: BRAND.onColor
+                })
+              })
             })().catch((error: unknown) => {
               console.error('Could not send the sign-in email', error)
               // The one failure that silently locks people out, so make sure someone hears about it.
