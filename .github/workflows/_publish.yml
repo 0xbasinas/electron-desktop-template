@@ -118,6 +118,8 @@ jobs:
       - run: pnpm run ${{ matrix.script }} --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Optional: with a Sentry DSN, users can opt in to anonymous crash reports (Settings).
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
       - name: Attest build provenance
         uses: actions/attest-build-provenance@v2
         with:

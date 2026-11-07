@@ -4,7 +4,10 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  main: {},
+  main: {
+    // Crash reporting stays off unless the release build provides a Sentry DSN.
+    define: { __SENTRY_DSN__: JSON.stringify(process.env.SENTRY_DSN ?? '') }
+  },
   preload: {},
   renderer: {
     resolve: {

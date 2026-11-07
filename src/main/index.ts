@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { setupCrashReporting, reportRendererCrash } from './crashReporting'
 import { flushPending, initDeepLinks } from './deeplink'
 import { registerIpcHandlers } from './ipcHandlers'
 import { logger, setupLogging } from './logger'
@@ -55,6 +56,7 @@ function createWindow(): void {
   win.webContents.on('did-finish-load', flushPending)
   win.webContents.on('render-process-gone', (_event, details) => {
     logger.error('[renderer] process gone', details)
+    if (details.reason !== 'clean-exit') reportRendererCrash(details.reason)
   })
 
   hardenWindow(win)
@@ -67,6 +69,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 } else {
   setupLogging()
+  setupCrashReporting()
   initDeepLinks(() => mainWindow)
   app.on('before-quit', () => (quitting = true))
 

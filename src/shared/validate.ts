@@ -2,7 +2,7 @@ import type { Settings } from './ipc'
 
 // The renderer is untrusted: anything it sends over IPC is checked here before main acts on it.
 
-const SETTING_KEYS = ['updateChannel', 'closeToTray', 'launchAtLogin'] as const
+const SETTING_KEYS = ['updateChannel', 'closeToTray', 'launchAtLogin', 'crashReports'] as const
 
 /** Validate a settings patch from the renderer. Throws on anything unexpected. */
 export function parseSettingsPatch(input: unknown): Partial<Settings> {
@@ -24,6 +24,7 @@ export function parseSettingsPatch(input: unknown): Partial<Settings> {
         break
       case 'closeToTray':
       case 'launchAtLogin':
+      case 'crashReports':
         if (typeof value !== 'boolean')
           throw new Error(`Invalid settings: ${key} must be a boolean`)
         patch[key] = value

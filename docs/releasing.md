@@ -58,6 +58,40 @@ random number and only takes the update if that number falls inside the percenta
 Beta releases are always offered to everyone on the beta channel. Set `rollout: 100` in `publish-stable.yml`
 if you don't want staged rollouts. The logic lives in `scripts/lib/rollout.mjs` and is unit tested.
 
+## Rolling back
+
+**Actions > Rollback release** takes the bad tag (and optionally the release to promote instead):
+
+1. the bad release's rollout goes to 0% and the release becomes a draft, so the updater and download page stop showing it;
+2. the previous release of the same kind (stable or pre-release) is marked latest and set to 100%;
+3. an issue is opened so the follow-up is not forgotten.
+
+Installs that already updated keep the bad version, because updaters never downgrade. To fix them, revert the
+change in a pull request and merge it: that publishes a higher version.
+
+## Automatic pause on crashes
+
+`rollout-guard.yml` runs every hour. For the newest stable release (under 7 days old) it asks Sentry for the
+crash-free session rate. It sets the rollout to 0% and opens an issue when the rate is below 98%, or more than 2 points
+worse than the previous release, once there are at least 20 sessions. Tune this in `scripts/lib/guard.mjs`.
+
+It needs crash reports, which are opt-in for users and off until you configure them:
+
+1. Create a Sentry project (Electron platform).
+2. Add repository secrets: `SENTRY_DSN` (baked into release builds; with no DSN the app has no crash reporting and Settings
+   hides the switch), and for the guard `SENTRY_AUTH_TOKEN` (org:read, project:read), `SENTRY_ORG` (slug), `SENTRY_PROJECT` (numeric id).
+3. Users turn on **Settings > Send anonymous crash reports**. Reports carry the version and channel, not name or IP.
+
+Without the secrets the guard does nothing. The decision logic is unit tested, but the Sentry request has only been
+checked against Sentry's documented response shape, so watch the first run (Actions > Rollout guard > Run workflow).
+
+## Security checks
+
+- **CodeQL** scans the app code and the workflows on every pull request, on `main` and weekly.
+- **Dependency audit** (`pnpm audit`, high severity and above) is a required check on pull requests, and also runs daily; a failure
+  opens an issue, because advisories appear without any change to the repo.
+- **OpenSSF Scorecard** runs weekly and on `main`; the badge in the README shows the score.
+
 ## What's new
 
 The release notes (grouped from Conventional Commits) are written to `build/release-notes.md` during the

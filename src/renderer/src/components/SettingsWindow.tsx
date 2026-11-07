@@ -157,6 +157,15 @@ export function SettingsWindow(): React.JSX.Element {
               onChange={(launchAtLogin) => update({ launchAtLogin })}
             />
           )}
+          {info?.crashReportingAvailable && (
+            <Toggle
+              label="Send anonymous crash reports"
+              hint="Helps fix crashes faster. Includes the app version, never your name or IP address. Applies after a restart."
+              checked={settings?.crashReports ?? false}
+              disabled={!settings}
+              onChange={(crashReports) => update({ crashReports })}
+            />
+          )}
         </Section>
 
         <Section title="About and troubleshooting">

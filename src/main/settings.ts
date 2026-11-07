@@ -3,8 +3,12 @@ import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { Settings } from '../shared/ipc'
 
-const defaults: Settings = { updateChannel: 'latest', closeToTray: false, launchAtLogin: false }
-
+const defaults: Settings = {
+  updateChannel: 'latest',
+  closeToTray: false,
+  launchAtLogin: false,
+  crashReports: false
+}
 /** What is stored on disk: the user's settings plus bookkeeping the renderer never sets. */
 interface Stored extends Settings {
   lastSeenVersion: string
@@ -19,6 +23,7 @@ function readStored(): Stored {
       updateChannel: saved.updateChannel === 'beta' ? 'beta' : defaults.updateChannel,
       closeToTray: saved.closeToTray === true,
       launchAtLogin: saved.launchAtLogin === true,
+      crashReports: saved.crashReports === true,
       lastSeenVersion: typeof saved.lastSeenVersion === 'string' ? saved.lastSeenVersion : ''
     }
   } catch {
@@ -31,8 +36,8 @@ function writeStored(stored: Stored): void {
 }
 
 export function getSettings(): Settings {
-  const { updateChannel, closeToTray, launchAtLogin } = readStored()
-  return { updateChannel, closeToTray, launchAtLogin }
+  const { updateChannel, closeToTray, launchAtLogin, crashReports } = readStored()
+  return { updateChannel, closeToTray, launchAtLogin, crashReports }
 }
 
 type Listener = (next: Settings, previous: Settings) => void
