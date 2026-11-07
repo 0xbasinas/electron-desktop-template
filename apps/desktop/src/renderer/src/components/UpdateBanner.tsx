@@ -1,4 +1,4 @@
-import { Button } from '@renderer/components/ui/button'
+import { Button } from '@repo/ui'
 import type { UpdaterState } from '@renderer/hooks/useUpdater'
 
 /** Slim banner under the title bar for update progress, "restart now" and check results. */

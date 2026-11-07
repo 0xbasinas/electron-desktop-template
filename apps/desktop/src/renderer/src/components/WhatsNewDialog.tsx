@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { WhatsNew } from '../../../shared/ipc'
-import { Button } from '@renderer/components/ui/button'
+import { Button } from '@repo/ui'
 import { Markdown } from '@renderer/components/Markdown'
 
 /** Welcome screen on first run, and release notes after an update. */
