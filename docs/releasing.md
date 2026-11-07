@@ -12,9 +12,9 @@ Both publish workflows run the same steps (`_publish.yml`): CI gate, version, bu
 
 **The CI gate.** Each publish workflow calls CI first and only publishes if it passes: lint, types, unit tests, bundle size, and a smoke test that launches the packaged app on all three operating systems.
 
-**Path filter.** A push only publishes if it changes `src/` (not `*.test.ts(x)`), `build/`, `resources/`, `package.json`, `pnpm-lock.yaml`, `electron-builder.yml` or `electron.vite.config.ts`. Anything else (docs, tests, CI) is checked by CI but does not ship a build.
+**Path filter.** A push only publishes if it changes `apps/desktop/src/` (not `*.test.ts(x)`), `apps/desktop/build/`, `apps/desktop/resources/`, `apps/desktop/package.json`, `pnpm-lock.yaml`, `apps/desktop/electron-builder.yml` or `apps/desktop/electron.vite.config.ts`. Anything else (docs, tests, CI) is checked by CI but does not ship a build.
 
-**Release notes.** `scripts/release-notes.mjs` groups the commits since the previous release by Conventional Commit type (Breaking changes, Features, Bug fixes, Performance, ...). Preview them locally with `pnpm release-notes v0.0.7 stable`.
+**Release notes.** `apps/desktop/scripts/release-notes.mjs` groups the commits since the previous release by Conventional Commit type (Breaking changes, Features, Bug fixes, Performance, ...). Preview them locally with `pnpm release-notes v0.0.7 stable`.
 
 ## Channels
 
@@ -23,8 +23,8 @@ Both publish workflows run the same steps (`_publish.yml`): CI gate, version, bu
 | `main` | stable (`latest`) | normal release | `0.0.12`        |
 | `beta` | `beta`            | pre-release    | `0.0.15-beta`   |
 
-- Version = `<major>.<minor>.<commit count>`. `major.minor` come from `package.json` (start: `0.0.0`),
-  and the patch is the commit count of the pushed branch. Edit `package.json` to move to `0.1.x` or `1.0.x`.
+- Version = `<major>.<minor>.<commit count>`. `major.minor` come from `apps/desktop/package.json` (start: `0.0.0`),
+  and the patch is the commit count of the pushed branch. Edit `apps/desktop/package.json` to move to `0.1.x` or `1.0.x`.
 - Pushing to `beta` publishes a GitHub pre-release. Pushing to `main` publishes a stable release.
 
 To start a beta line, create the branch once and push work to it:
@@ -52,7 +52,7 @@ random number and only takes the update if that number falls inside the percenta
 
 1. Publish. About 10% of installs are offered the new version.
 2. **Automatic promotion:** `rollout-guard.yml` runs hourly and raises the newest stable release on a schedule while it
-   looks healthy: 25% after 1 day, 50% after 2, 100% after 3 (`scripts/lib/promote.mjs`). "Healthy" means the guard
+   looks healthy: 25% after 1 day, 50% after 2, 100% after 3 (`apps/desktop/scripts/lib/promote.mjs`). "Healthy" means the guard
    (below) saw enough crash data and found nothing wrong. With no crash data nothing is promoted on its own; set the
    repository variable `AUTO_PROMOTE_WITHOUT_CRASH_DATA` to `true` to let age alone decide.
 3. **By hand:** run **Actions > Set release rollout** with the tag (for example `v0.1.42`) and a percentage, up to
@@ -61,12 +61,12 @@ random number and only takes the update if that number falls inside the percenta
    release stays paused until you raise it. Then ship a fix, or run **Rollback release**.
 
 Beta releases are always offered to everyone on the beta channel. Set `rollout: 100` in `publish-stable.yml`
-if you don't want staged rollouts. The logic lives in `scripts/lib/rollout.mjs` and is unit tested.
+if you don't want staged rollouts. The logic lives in `apps/desktop/scripts/lib/rollout.mjs` and is unit tested.
 
 ## Release dry run
 
 Every pull request builds the real installers on Windows, macOS and Linux (`electron-builder --publish never`) and runs
-`pnpm check:release` (`scripts/check-release-artifacts.mjs`). It fails when:
+`pnpm check:release` (`apps/desktop/scripts/check-release-artifacts.mjs`). It fails when:
 
 - the update manifest (`latest.yml`, `latest-mac.yml` or `latest-linux.yml`) is missing or has a different version than the app;
 - a file the manifest lists is missing, or its size or sha512 differs;
@@ -83,7 +83,7 @@ Releases are built with Electron fuses (see "Security model" in [architecture.md
 
 - the release dry run builds the real installers and runs `pnpm check:fuses`, which fails unless the packaged app has the
   hardened settings (inspector flags off, ASAR integrity on, `runAsNode` off, ...);
-- the smoke test job runs `node scripts/check-fuses.mjs --test-build` on the unpacked build used for Playwright.
+- the smoke test job runs `node apps/desktop/scripts/check-fuses.mjs --test-build` on the unpacked build used for Playwright.
 
 Playwright needs the Node inspector flags, so `pnpm build:unpack` and the update test turn that one fuse on (and only for those
 test builds). Never publish those builds. If Playwright cannot launch the app and times out, check that fuse first.
@@ -103,7 +103,7 @@ change in a pull request and merge it: that publishes a higher version.
 
 `rollout-guard.yml` runs every hour. For the newest stable release (under 7 days old) it asks Sentry for the
 crash-free session rate. It sets the rollout to 0% and opens an issue when the rate is below 98%, or more than 2 points
-worse than the previous release, once there are at least 20 sessions. Tune this in `scripts/lib/guard.mjs`.
+worse than the previous release, once there are at least 20 sessions. Tune this in `apps/desktop/scripts/lib/guard.mjs`.
 
 It needs crash reports, which are opt-in for users and off until you configure them:
 
@@ -124,8 +124,8 @@ checked against Sentry's documented response shape, so watch the first run (Acti
 
 ## What's new
 
-The release notes (grouped from Conventional Commits) are written to `build/release-notes.md` during the
-release build and shipped inside the app as `resources/release-notes.md`. After an update, the app shows them
+The release notes (grouped from Conventional Commits) are written to `apps/desktop/build/release-notes.md` during the
+release build and shipped inside the app as `apps/desktop/resources/release-notes.md`. After an update, the app shows them
 once; on first launch it shows a short welcome instead. Users can reopen them from Help > What's New.
 
 ## Testing updates
@@ -160,4 +160,4 @@ The attestation proves the file was built by this repo's workflow from the tagge
 ## Limits to know about
 
 - macOS and Windows installers are not code-signed yet. macOS auto-update needs signing and notarization.
-- The bundle size budget (`bundle-budget.json`) is checked in CI. Raise it on purpose, not by accident.
+- The bundle size budget (`apps/desktop/bundle-budget.json`) is checked in CI. Raise it on purpose, not by accident.

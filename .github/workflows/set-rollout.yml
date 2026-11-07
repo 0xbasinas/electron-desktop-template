@@ -36,5 +36,5 @@ jobs:
         run: |
           mkdir manifests
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir manifests --pattern '*.yml'
-          node scripts/set-rollout.mjs "$PERCENT" manifests/*.yml
+          node apps/desktop/scripts/set-rollout.mjs "$PERCENT" manifests/*.yml
           gh release upload "$TAG" manifests/*.yml --clobber --repo "$GITHUB_REPOSITORY"

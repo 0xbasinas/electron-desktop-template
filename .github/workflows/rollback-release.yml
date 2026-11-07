@@ -59,7 +59,7 @@ jobs:
         run: |
           mkdir bad
           gh release download "$BAD" --repo "$GITHUB_REPOSITORY" --dir bad --pattern '*.yml'
-          node scripts/set-rollout.mjs 0 bad/*.yml
+          node apps/desktop/scripts/set-rollout.mjs 0 bad/*.yml
           gh release upload "$BAD" bad/*.yml --clobber --repo "$GITHUB_REPOSITORY"
           gh release edit "$BAD" --repo "$GITHUB_REPOSITORY" --draft
 
@@ -69,7 +69,7 @@ jobs:
         run: |
           mkdir prev
           gh release download "$PREV" --repo "$GITHUB_REPOSITORY" --dir prev --pattern '*.yml'
-          node scripts/set-rollout.mjs 100 prev/*.yml
+          node apps/desktop/scripts/set-rollout.mjs 100 prev/*.yml
           gh release upload "$PREV" prev/*.yml --clobber --repo "$GITHUB_REPOSITORY"
           if [ "$(gh release view "$PREV" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)" = "false" ]; then
             gh release edit "$PREV" --repo "$GITHUB_REPOSITORY" --latest

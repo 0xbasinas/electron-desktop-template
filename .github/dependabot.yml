@@ -7,7 +7,7 @@ version: 2
 updates:
   # Application dependencies (pnpm is read through the "npm" ecosystem).
   - package-ecosystem: npm
-    directory: /
+    directories: ['/', '/apps/*', '/packages/*']
     schedule:
       interval: weekly
       day: monday
