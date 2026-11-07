@@ -9,17 +9,18 @@ on:
     paths:
       - '.github/**'
       - 'docs/**'
-      - 'tests/**'
-      - 'scripts/**'
+      - 'apps/*/tests/**'
+      - 'apps/desktop/scripts/**'
       - '**.md'
       - '**/*.test.ts'
       - '**/*.test.tsx'
       - 'eslint.config.mjs'
-      - 'vitest.config.ts'
-      - 'playwright.config.ts'
-      - 'playwright.update.config.ts'
+      - 'turbo.json'
+      - 'apps/desktop/vitest.config.ts'
+      - 'apps/desktop/playwright.config.ts'
+      - 'apps/desktop/playwright.update.config.ts'
       - 'commitlint.config.mjs'
-      - 'bundle-budget.json'
+      - 'apps/desktop/bundle-budget.json'
       - '.prettier*'
 
 permissions:
@@ -70,6 +71,7 @@ jobs:
       - name: Package the app (unpacked)
         run: pnpm build:unpack
       - name: Check the Electron fuses (test build)
+        working-directory: apps/desktop
         run: node scripts/check-fuses.mjs --test-build
       - name: Launch the packaged app and check the window opens
         if: runner.os != 'Linux'
@@ -96,12 +98,15 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build old and new versions
+        working-directory: apps/desktop
         run: node scripts/prepare-update-e2e.mjs
       - name: Old version updates to the new one
         if: runner.os != 'Linux'
+        working-directory: apps/desktop
         run: pnpm exec playwright test -c playwright.update.config.ts
       - name: Old version updates to the new one (virtual display)
         if: runner.os == 'Linux'
+        working-directory: apps/desktop
         run: xvfb-run -a pnpm exec playwright test -c playwright.update.config.ts
 
   audit:

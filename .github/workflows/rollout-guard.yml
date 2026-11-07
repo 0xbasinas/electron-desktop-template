@@ -8,7 +8,7 @@ name: Rollout guard
 #   SENTRY_PROJECT     numeric project id
 # Without crash data nothing is promoted automatically, unless the repository variable
 # AUTO_PROMOTE_WITHOUT_CRASH_DATA is set to true (then age alone decides).
-# Thresholds live in scripts/lib/guard.mjs, the schedule in scripts/lib/promote.mjs.
+# Thresholds live in apps/desktop/scripts/lib/guard.mjs, the schedule in apps/desktop/scripts/lib/promote.mjs.
 on:
   schedule:
     - cron: '7 * * * *'
@@ -38,10 +38,10 @@ jobs:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
-        run: node scripts/rollout-guard.mjs
+        run: node apps/desktop/scripts/rollout-guard.mjs
       - name: Promote the rollout
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GUARD_VERDICT: ${{ steps.guard.outputs.verdict }}
           AUTO_PROMOTE_WITHOUT_CRASH_DATA: ${{ vars.AUTO_PROMOTE_WITHOUT_CRASH_DATA }}
-        run: node scripts/rollout-promote.mjs
+        run: node apps/desktop/scripts/rollout-promote.mjs

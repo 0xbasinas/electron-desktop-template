@@ -5,15 +5,19 @@ on:
   push:
     branches: [beta]
     paths:
-      - 'src/**'
-      - '!src/**/*.test.ts'
-      - '!src/**/*.test.tsx'
-      - 'build/**'
-      - 'resources/**'
-      - 'package.json'
+      - 'apps/desktop/src/**'
+      - '!apps/desktop/src/**/*.test.ts'
+      - '!apps/desktop/src/**/*.test.tsx'
+      - 'apps/desktop/build/**'
+      - 'apps/desktop/resources/**'
+      - 'apps/desktop/package.json'
+      - 'apps/desktop/electron-builder.yml'
+      - 'apps/desktop/electron.vite.config.ts'
+      - 'packages/**'
+      - '!packages/**/*.test.ts'
+      - '!packages/**/*.test.tsx'
       - 'pnpm-lock.yaml'
-      - 'electron-builder.yml'
-      - 'electron.vite.config.ts'
+      - 'pnpm-workspace.yaml'
 
 permissions:
   contents: write

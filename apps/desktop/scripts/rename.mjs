@@ -17,8 +17,8 @@ if (!name || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(name)) {
 }
 
 const read = (f) => readFileSync(f, 'utf8')
-const builder = read('electron-builder.yml')
-const pkg = JSON.parse(read('package.json'))
+const builder = read('apps/desktop/electron-builder.yml')
+const pkg = JSON.parse(read('apps/desktop/package.json'))
 
 const oldName = pkg.name
 const oldTitle = builder.match(/^productName: (.*)$/m)[1].trim()
@@ -35,11 +35,11 @@ const title =
 const newId = `com.${owner}.${name}`
 
 const edits = {
-  'package.json': (s) =>
+  'apps/desktop/package.json': (s) =>
     s
       .replace(`"name": "${oldName}"`, `"name": "${name}"`)
       .replace(/"author": ".*"/, `"author": "${owner}"`),
-  'electron-builder.yml': (s) =>
+  'apps/desktop/electron-builder.yml': (s) =>
     s
       .replace(/^appId: .*$/m, `appId: ${newId}`)
       .replace(/^productName: .*$/m, `productName: ${title}`)
@@ -48,11 +48,14 @@ const edits = {
       .replace(/^ {2}repo: .*$/m, `  repo: ${name}`)
       .replace(/^ {2}maintainer: .*$/m, `  maintainer: ${owner}`)
       .replace(new RegExp(`^( {6}- )${oldName}$`, 'm'), `$1${name}`),
-  'src/main/menu.ts': (s) => s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
-  'src/main/deeplink.ts': (s) => s.replace(`PROTOCOL = '${oldName}'`, `PROTOCOL = '${name}'`),
-  'src/main/index.ts': (s) => s.replace(oldId, newId),
-  'src/renderer/index.html': (s) => s.replace(/<title>.*<\/title>/, `<title>${title}</title>`),
-  'src/renderer/src/App.tsx': (s) => s.replaceAll(oldTitle, title),
+  'apps/desktop/src/main/menu.ts': (s) =>
+    s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
+  'apps/desktop/src/main/deeplink.ts': (s) =>
+    s.replace(`PROTOCOL = '${oldName}'`, `PROTOCOL = '${name}'`),
+  'apps/desktop/src/main/index.ts': (s) => s.replace(oldId, newId),
+  'apps/desktop/src/renderer/index.html': (s) =>
+    s.replace(/<title>.*<\/title>/, `<title>${title}</title>`),
+  'apps/desktop/src/renderer/src/App.tsx': (s) => s.replaceAll(oldTitle, title),
   'README.md': (s) =>
     s.replace(/^# .*$/m, `# ${title}`).replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
   'docs/releasing.md': (s) => s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),
