@@ -10,6 +10,8 @@ import {
   normalizeSiteUrl,
   parseArgs,
   parseDatabaseId,
+  patchPreviewDatabase,
+  PREVIEW_DB_PLACEHOLDER,
   patchWranglerConfig,
   recordExists,
   toCloudflareRecords,
@@ -166,4 +168,15 @@ test('dmarcRecord and webhookEndpoint', () => {
     'https://app.example.com/api/webhooks/resend'
   )
   assert.equal(webhookEndpoint('http://localhost:8787'), null)
+})
+
+test('patchPreviewDatabase points the preview entry at the real database and leaves production alone', () => {
+  const text = `{"d1_databases":[{"database_name":"app","database_id":"prod-id"}],
+  "previews":{"d1_databases":[{"database_name": "app-preview","database_id":"${PREVIEW_DB_PLACEHOLDER}"}]}}`
+  const out = patchPreviewDatabase(text, { name: 'my-app-preview', id: 'abc-123' })
+  assert.match(out, /"database_name": "my-app-preview"/)
+  assert.match(out, /"database_id":"abc-123"/)
+  assert.match(out, /"database_name":"app"/)
+  assert.match(out, /"prod-id"/)
+  assert.throws(() => patchPreviewDatabase('{}', { name: 'x', id: 'y' }))
 })

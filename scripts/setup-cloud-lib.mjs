@@ -89,6 +89,21 @@ export function patchWranglerConfig(text, { databaseId, siteUrl, from, routeHost
   return out
 }
 
+/** Placeholder id of the shared preview database in wrangler.jsonc and wrangler.preview-migrations.jsonc. */
+export const PREVIEW_DB_PLACEHOLDER = '00000000-0000-0000-0000-000000000001'
+
+/** Point the preview database entry (name ending in "-preview", placeholder id) at the real database. */
+export function patchPreviewDatabase(text, { name, id }) {
+  if (!text.includes(PREVIEW_DB_PLACEHOLDER) && !text.includes(id))
+    throw new Error('No preview database entry found to update')
+  return text
+    .replace(
+      /("database_name":\s*)"[^"]*-preview"/g,
+      () => `"database_name": ${JSON.stringify(name)}`
+    )
+    .replaceAll(PREVIEW_DB_PLACEHOLDER, id)
+}
+
 /** Read the id of a D1 database out of `wrangler d1 info --json` / `d1 create` output. */
 export function parseDatabaseId(output) {
   const match = /"?(?:database_id|uuid)"?\s*[:=]\s*"([0-9a-f]{8}-[0-9a-f-]{27})"/i.exec(output)

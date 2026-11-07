@@ -1,6 +1,7 @@
 import * as Sentry from '@sentry/cloudflare'
 import { createApp } from './app'
 import type { Bindings } from './env'
+import { withPreviewUrl } from './preview'
 
 export type { AppType } from './app'
 export type { Bindings } from './env'
@@ -18,5 +19,5 @@ export default Sentry.withSentry(
     tracesSampleRate: 0,
     dataCollection: { userInfo: false }
   }),
-  { fetch: (request, env: Bindings, ctx) => app.fetch(request, env, ctx) }
+  { fetch: (request, env: Bindings, ctx) => app.fetch(request, withPreviewUrl(request, env), ctx) }
 )

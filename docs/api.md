@@ -185,3 +185,14 @@ pnpm --filter @repo/api exec wrangler d1 execute my-app-restored --remote --file
 
 The restore of the encrypted file is the one step the workflow cannot test for you: try it once now, with a manual run of the
 workflow, so you know it works before you need it.
+
+## Previews (a live copy for every pull request)
+
+With deploys on (`CLOUDFLARE_DEPLOY=true`), a pull request that changes `apps/web`, `apps/api` or `packages` gets its own live copy of the Worker through Cloudflare's [Previews](https://developers.cloudflare.com/workers/previews/). `.github/workflows/preview.yml` builds the site, applies the migrations, runs `wrangler preview --name pr-<number>`, checks `/api/health`, and comments the address on the pull request. Closing the pull request deletes the preview.
+
+- **Database:** all previews share one staging database (`<name>-preview`, created by `pnpm setup:cloud`). It never holds production data. Reset it with `wrangler d1 execute DB --remote --config apps/api/wrangler.preview-migrations.jsonc --command "DELETE FROM user"` (cascades to the rest). A separate database per pull request would need one of your 10 free D1 databases each, so it is shared on purpose.
+- **Settings:** a preview does not inherit production variables, bindings or secrets. Its settings are the `previews` block in `apps/api/wrangler.jsonc`. `PREVIEW=true` there makes the Worker take its address from the request (`src/preview.ts`), so cookies, magic links and passkeys belong to that preview's own URL.
+- **Email:** without `RESEND_API_KEY` in the preview, sign-in links are printed to the Worker log (`wrangler tail`) instead of emailed. To send real email from previews, run `wrangler preview base-config secret put RESEND_API_KEY` (and `BETTER_AUTH_SECRET`; use a different value from production).
+- **Who can trigger it:** only pull requests from this repository (not forks, not Dependabot), because the job uses the Cloudflare token. Anyone who can push a branch here can run code with that token, so keep the token limited to this account and the Workers/D1 permissions, and do not give write access to people you do not trust.
+- **Limits:** the free plan keeps up to 100 previews per Worker and deletes the oldest. Preview URLs are public but not indexed (`X-Robots-Tag: noindex`).
+- Set `BETTER_AUTH_SECRET` for previews once: `wrangler preview base-config secret put BETTER_AUTH_SECRET`. Without it sign-in fails in the preview.

@@ -15,4 +15,6 @@ export interface Bindings {
   SENTRY_DSN?: string
   /** Optional, comma separated: extra origins allowed to call the API (for example a custom desktop scheme). */
   TRUSTED_ORIGINS?: string
+  /** "true" only in preview deploys: the site address is then taken from each request (see preview.ts). */
+  PREVIEW?: string
 }

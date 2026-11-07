@@ -20,6 +20,7 @@ import {
   normalizeSiteUrl,
   parseArgs,
   parseDatabaseId,
+  patchPreviewDatabase,
   patchWranglerConfig,
   recordExists,
   secretsFileContent,
@@ -177,6 +178,23 @@ if (databaseId) {
   ok(`Created database "${dbName}"`)
 }
 
+// The shared staging database for pull request previews (never production data).
+const previewDbName = `${WORKER_NAME}-preview`
+let previewInfo = wrangler(['d1', 'info', previewDbName, '--json'], { allowFail: true })
+let previewDatabaseId = previewInfo.ok ? parseDatabaseId(previewInfo.out) : null
+if (previewDatabaseId) {
+  ok(`Preview database "${previewDbName}" already exists`)
+} else {
+  wrangler(['d1', 'create', previewDbName])
+  previewInfo = wrangler(['d1', 'info', previewDbName, '--json'])
+  previewDatabaseId = parseDatabaseId(previewInfo.out)
+  if (!previewDatabaseId)
+    fail(
+      'Created the preview database but could not read its id. Run `wrangler d1 info` and paste it into wrangler.jsonc and wrangler.preview-migrations.jsonc.'
+    )
+  ok(`Created preview database "${previewDbName}"`)
+}
+
 // 4 -------------------------------------------------------------------------------------------------------------------
 let from
 let workerResendKey
@@ -323,6 +341,11 @@ config = patchWranglerConfig(config, {
   routeHost: useCustomDomain ? siteHost : ''
 })
 writeFileSync(CONFIG_PATH, config)
+const PREVIEW_MIGRATIONS_PATH = 'apps/api/wrangler.preview-migrations.jsonc'
+for (const path of [CONFIG_PATH, PREVIEW_MIGRATIONS_PATH]) {
+  const text = readFileSync(path, 'utf8')
+  writeFileSync(path, patchPreviewDatabase(text, { name: previewDbName, id: previewDatabaseId }))
+}
 ok(
   'database_id, BETTER_AUTH_URL' +
     (from ? ', EMAIL_FROM' : '') +
