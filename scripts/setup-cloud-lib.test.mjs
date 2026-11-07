@@ -195,3 +195,10 @@ test('findDatabaseId finds a database by name in the account list', () => {
   assert.equal(findDatabaseId(list, 'missing'), null)
   assert.equal(findDatabaseId('no json here', 'mine'), null)
 })
+
+test('patchWranglerConfig sets APP_NAME everywhere and fails when there is none', () => {
+  const text = `{ "vars": { "APP_NAME": "Old" }, "previews": { "vars": { "APP_NAME": "Old" } } }`
+  const out = patchWranglerConfig(text, { appName: 'My "App"' })
+  assert.equal(out.match(/"APP_NAME": "My \\"App\\""/g).length, 2)
+  assert.throws(() => patchWranglerConfig('{}', { appName: 'X' }), /APP_NAME/)
+})

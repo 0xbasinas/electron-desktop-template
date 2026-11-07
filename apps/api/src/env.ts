@@ -3,6 +3,8 @@ export interface Bindings {
   DB: D1Database
   /** Public address of the site; the API lives on the same origin. */
   BETTER_AUTH_URL: string
+  /** Product name shown in sign-in emails and on passkey prompts. Defaults to the template's name. */
+  APP_NAME?: string
   /** Sender shown on login emails. The domain must be verified in Resend. */
   EMAIL_FROM: string
   /** Secret: signs sessions and tokens. `openssl rand -base64 32`. */

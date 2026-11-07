@@ -33,6 +33,8 @@
     "BETTER_AUTH_URL": "http://localhost:8787",
     // Origins besides the site that may call the API. The desktop app sends its deep-link scheme as its origin.
     "TRUSTED_ORIGINS": "electron-desktop-template:/",
+    // The product name shown in sign-in emails and on passkey prompts. `pnpm setup:cloud` and `pnpm rename` set it.
+    "APP_NAME": "Electron Desktop Template",
     // Sender address. The domain must be verified in Resend.
     "EMAIL_FROM": "Electron Desktop Template <login@example.com>"
   },
@@ -45,6 +47,7 @@
     // its own URL. Without RESEND_API_KEY, sign-in links are printed to the Worker log instead of emailed.
     "vars": {
       "PREVIEW": "true",
+      "APP_NAME": "Electron Desktop Template",
       "BETTER_AUTH_URL": "http://localhost:8787",
       "TRUSTED_ORIGINS": "",
       "EMAIL_FROM": "Preview <preview@example.com>"

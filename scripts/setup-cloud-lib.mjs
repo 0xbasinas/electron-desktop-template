@@ -60,7 +60,7 @@ export function fromAddress(displayName, domain) {
  * Edit apps/api/wrangler.jsonc in place without losing its comments.
  * Every placeholder is replaced by a single targeted substitution; a missing one is an error, not a silent skip.
  */
-export function patchWranglerConfig(text, { databaseId, siteUrl, from, routeHost }) {
+export function patchWranglerConfig(text, { databaseId, siteUrl, from, appName, routeHost }) {
   const swap = (source, pattern, replacement, label) => {
     if (!pattern.test(source)) throw new Error(`wrangler.jsonc has no ${label} line to update`)
     return source.replace(pattern, replacement)
@@ -79,6 +79,12 @@ export function patchWranglerConfig(text, { databaseId, siteUrl, from, routeHost
       () => `"EMAIL_FROM": ${JSON.stringify(from)}`,
       'EMAIL_FROM'
     )
+  }
+  if (appName) {
+    // Every APP_NAME line (production and previews).
+    if (!/"APP_NAME"\s*:/.test(out))
+      throw new Error('wrangler.jsonc has no APP_NAME line to update')
+    out = out.replace(/("APP_NAME":\s*)"[^"]*"/g, () => `"APP_NAME": ${JSON.stringify(appName)}`)
   }
   if (routeHost !== undefined) {
     const routes = routeHost

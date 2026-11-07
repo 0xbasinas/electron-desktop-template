@@ -93,6 +93,24 @@ describe('sign-in with a magic link', () => {
     expect(body.user.email).toBe('ada@example.com')
   })
 
+  it('names the product in the email with APP_NAME, or the default when it is not set', async () => {
+    const named = setup({ APP_NAME: 'GoZap' })
+    await named.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'name@example.com', callbackURL: '/app' })
+    })
+    expect(named.sent[0]!.subject).toBe('Sign in to GoZap')
+
+    const plain = setup({ APP_NAME: undefined })
+    await plain.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'plain@example.com', callbackURL: '/app' })
+    })
+    expect(plain.sent[0]!.subject).toBe('Sign in to Electron Desktop Template')
+  })
+
   it('cannot use the same link twice', async () => {
     const s = setup()
     await s.call('/api/auth/sign-in/magic-link', {
