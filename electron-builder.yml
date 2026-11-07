@@ -41,5 +41,4 @@ publish:
   provider: github
   owner: 0xbasinas
   repo: electron-desktop-template
-  private: true
   releaseType: release

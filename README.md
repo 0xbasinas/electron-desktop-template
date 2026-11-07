@@ -18,7 +18,7 @@ Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-upda
 
 - Every push to `main` runs `.github/workflows/release.yml`, which builds Windows, macOS and Linux and publishes a release named like `v0.0.7 (a1b2c3d)`.
 - The version is `<major>.<minor>.<commit count>`: `major.minor` come from `package.json` (`0.0.0` to start), so the first commit is `0.0.1` and it grows on its own. Edit `package.json` to move to `0.1.x` or `1.0.x`. Markdown-only changes don't release.
-- This repo is private, so installed apps need a `GH_TOKEN` to read releases. For a public app, make the repo public and remove `private: true`.
+- The repo is public, so installed apps can read releases without a token. If you make it private again, add `private: true` to `publish` in `electron-builder.yml` and give installed apps a `GH_TOKEN`.
 - macOS auto-update requires code signing and notarization (not configured here).
 
 ## shadcn/ui
