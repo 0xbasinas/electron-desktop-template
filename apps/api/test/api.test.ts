@@ -12,7 +12,7 @@ const ORIGIN = bindings.BETTER_AUTH_URL
 let nextIp = 1
 
 /** An app whose emails are collected instead of sent. Each setup() is a different client IP, so rate limits do not leak between tests. */
-function setup() {
+function setup(overrides: Partial<Bindings> = {}) {
   const ip = `10.0.${Math.floor(nextIp / 250)}.${nextIp++ % 250}`
   const sent: EmailMessage[] = []
   const app = createApp({ emailSender: () => ({ send: async (m) => void sent.push(m) }) })
@@ -24,7 +24,7 @@ function setup() {
     const ctx = createExecutionContext()
     const response = await app.fetch(
       new Request(`${ORIGIN}${path}`, { ...init, headers, redirect: 'manual' }),
-      bindings,
+      { ...bindings, ...overrides },
       ctx
     )
     await waitOnExecutionContext(ctx)
@@ -510,5 +510,101 @@ describe('the deployed entry point', () => {
       expect(response.status).toBe(200)
       expect(await response.json()).toEqual({ ok: true })
     }
+  })
+})
+
+describe('bounces and complaints (Resend webhook)', () => {
+  const secret = bindings.RESEND_WEBHOOK_SECRET!
+  const b64 = (bytes: ArrayBuffer | Uint8Array): string =>
+    btoa(String.fromCharCode(...new Uint8Array(bytes as ArrayBuffer)))
+
+  /** Signs like Svix/Resend: HMAC-SHA256 of "id.timestamp.body" with the base64 part of the secret. */
+  async function signedPost(
+    s: ReturnType<typeof setup>,
+    event: unknown,
+    options: { sign?: boolean; timestamp?: number } = {}
+  ): Promise<Response> {
+    const body = JSON.stringify(event)
+    const id = 'msg_' + crypto.randomUUID()
+    const timestamp = String(options.timestamp ?? Math.floor(Date.now() / 1000))
+    const key = await crypto.subtle.importKey(
+      'raw',
+      Uint8Array.from(atob(secret.slice('whsec_'.length)), (c) => c.charCodeAt(0)),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    const signature = b64(
+      await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${id}.${timestamp}.${body}`))
+    )
+    return s.call('/api/webhooks/resend', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'svix-id': id,
+        'svix-timestamp': timestamp,
+        'svix-signature': options.sign === false ? 'v1,AAAA' : `v1,${signature}`
+      },
+      body
+    })
+  }
+
+  const bounce = (to: string, type: string): unknown => ({
+    type: 'email.bounced',
+    created_at: new Date().toISOString(),
+    data: { email_id: 'e1', to: [to], bounce: { type } }
+  })
+  const requestLink = (s: ReturnType<typeof setup>, email: string): Promise<Response> =>
+    s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, callbackURL: '/app' })
+    })
+
+  it('refuses unsigned, wrongly signed and stale requests, and is off without a secret', async () => {
+    const s = setup()
+    expect(
+      (await signedPost(s, bounce('x@example.com', 'Permanent'), { sign: false })).status
+    ).toBe(400)
+    const stale = Math.floor(Date.now() / 1000) - 3600
+    expect(
+      (await signedPost(s, bounce('x@example.com', 'Permanent'), { timestamp: stale })).status
+    ).toBe(400)
+    const off = setup({ RESEND_WEBHOOK_SECRET: undefined })
+    expect((await signedPost(off, bounce('x@example.com', 'Permanent'))).status).toBe(404)
+  })
+
+  it('stops emailing an address after a permanent bounce, and tells nobody that it did', async () => {
+    const s = setup()
+    expect((await signedPost(s, bounce('Bad@Example.com', 'Permanent'))).status).toBe(200)
+
+    const response = await requestLink(s, 'bad@example.com')
+    expect(response.status).toBe(200) // same answer as for any address
+    expect(s.sent).toHaveLength(0)
+
+    await requestLink(s, 'good@example.com')
+    expect(s.sent.map((m) => m.to)).toEqual(['good@example.com'])
+  })
+
+  it('ignores temporary bounces, and suppresses spam complaints', async () => {
+    const s = setup()
+    await signedPost(s, bounce('full@example.com', 'Transient'))
+    await requestLink(s, 'full@example.com')
+    expect(s.sent).toHaveLength(1)
+
+    await signedPost(s, { type: 'email.complained', data: { to: ['spam@example.com'] } })
+    await requestLink(s, 'spam@example.com')
+    expect(s.sent).toHaveLength(1)
+  })
+
+  it('tries again after the suppression period', async () => {
+    const s = setup()
+    await signedPost(s, bounce('old@example.com', 'Permanent'))
+    const longAgo = Date.now() - 31 * 86_400_000
+    await bindings.DB.prepare('UPDATE email_suppression SET created_at = ? WHERE email = ?')
+      .bind(longAgo, 'old@example.com')
+      .run()
+    await requestLink(s, 'old@example.com')
+    expect(s.sent).toHaveLength(1)
   })
 })

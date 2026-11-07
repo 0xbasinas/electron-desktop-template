@@ -5,6 +5,13 @@ import { user } from './auth-schema'
 // `pnpm auth:schema`. Our own tables go below.
 export * from './auth-schema'
 
+/** Addresses that bounced or complained (from Resend webhooks). We stop emailing them for a while; see suppression.ts. */
+export const emailSuppression = sqliteTable('email_suppression', {
+  email: text('email').primaryKey(),
+  reason: text('reason').notNull(),
+  createdAt: integer('created_at').notNull()
+})
+
 /** One row per person: their synced preferences (JSON, validated on read) and when they last changed. */
 export const preference = sqliteTable('preference', {
   userId: text('user_id')

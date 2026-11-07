@@ -12,7 +12,9 @@ export default defineConfig({
       miniflare: {
         bindings: {
           TEST_MIGRATIONS: migrations,
-          BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-123'
+          BETTER_AUTH_SECRET: 'test-secret-test-secret-test-secret-123',
+          // whsec_ + base64 of 24 bytes, the format Resend/Svix use.
+          RESEND_WEBHOOK_SECRET: 'whsec_dGVzdC13ZWJob29rLXNlY3JldDEyMzQ1Ng=='
         }
       }
     })

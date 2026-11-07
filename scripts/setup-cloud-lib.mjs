@@ -144,3 +144,21 @@ export function isSentryDsn(value) {
     return false
   }
 }
+
+/**
+ * A starter DMARC policy. `p=none` only asks receivers to report, it never rejects mail, so it cannot break anything.
+ * Gmail and Yahoo expect a DMARC record from anyone who sends email. Tighten it later (p=quarantine, then p=reject)
+ * once the reports show only your own mail.
+ */
+export function dmarcRecord(domain) {
+  return { type: 'TXT', name: `_dmarc.${domain}`, content: 'v=DMARC1; p=none;', ttl: 1 }
+}
+
+/** The address Resend should call with bounces and complaints, or null when the site is not public yet. */
+export function webhookEndpoint(siteUrl) {
+  const url = new URL(siteUrl)
+  if (url.protocol !== 'https:') return null
+  return `${url.origin}/api/webhooks/resend`
+}
+
+export const WEBHOOK_EVENTS = ['email.bounced', 'email.complained']

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import {
   assertDomain,
+  dmarcRecord,
   fromAddress,
   generateSecret,
   isSentryDsn,
@@ -11,7 +12,8 @@ import {
   parseDatabaseId,
   patchWranglerConfig,
   recordExists,
-  toCloudflareRecords
+  toCloudflareRecords,
+  webhookEndpoint
 } from './setup-cloud-lib.mjs'
 
 const CONFIG = `{
@@ -150,4 +152,18 @@ test('isSentryDsn', () => {
   for (const bad of ['', 'http://abc@host/1', 'https://host/1', 'https://abc@host/', 'nope']) {
     assert.ok(!isSentryDsn(bad), bad)
   }
+})
+
+test('dmarcRecord and webhookEndpoint', () => {
+  assert.deepEqual(dmarcRecord('example.com'), {
+    type: 'TXT',
+    name: '_dmarc.example.com',
+    content: 'v=DMARC1; p=none;',
+    ttl: 1
+  })
+  assert.equal(
+    webhookEndpoint('https://app.example.com'),
+    'https://app.example.com/api/webhooks/resend'
+  )
+  assert.equal(webhookEndpoint('http://localhost:8787'), null)
 })

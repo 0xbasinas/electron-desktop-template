@@ -7,6 +7,7 @@ import { magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
 import { schema } from './db'
 import { magicLinkEmail, type EmailSender } from './email'
+import { isSuppressed } from './suppression'
 import type { Bindings } from './env'
 
 export const APP_NAME = 'Electron Desktop Template'
@@ -71,7 +72,14 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         sendMagicLink: async ({ email: to, url }) => {
           // Not awaited: the response time must not reveal whether the address already has an account.
           waitUntil(
-            email.send({ to, ...magicLinkEmail(url, APP_NAME) }).catch((error: unknown) => {
+            (async () => {
+              // An address that bounced or complained recently gets nothing (the answer to the person is the same).
+              if (await isSuppressed(db, to)) {
+                console.warn('Skipped a sign-in email to a suppressed address')
+                return
+              }
+              await email.send({ to, ...magicLinkEmail(url, APP_NAME) })
+            })().catch((error: unknown) => {
               console.error('Could not send the sign-in email', error)
               // The one failure that silently locks people out, so make sure someone hears about it.
               Sentry.captureException(error)

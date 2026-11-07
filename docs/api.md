@@ -142,3 +142,18 @@ including the one that silently locks people out: a sign-in email that could not
   `wrangler secret put SENTRY_DSN`. Use Sentry's alert rules to get an email or chat message on a new issue.
 - It adds about 250 KiB (gzip) to the Worker, which is far below the 3 MiB limit of the free plan.
 - `GET /api/health` is a good URL for an uptime monitor (Cloudflare Health Checks, UptimeRobot, Better Stack).
+
+## Email deliverability: DMARC, bounces and complaints
+
+Sign-in emails only work while mailbox providers trust your domain. Three things protect that, and `pnpm setup:cloud` does them:
+
+- **SPF and DKIM** come from the DNS records Resend asks for (added for you when `CLOUDFLARE_API_TOKEN` is set).
+- **DMARC**: a starter record `_dmarc.<domain>  TXT  "v=DMARC1; p=none;"` is added if none exists. `p=none` only asks receivers
+  to report, it never rejects mail. Gmail and Yahoo expect one from every sender. Tighten it to `p=quarantine`, later
+  `p=reject`, once you are sure all your mail is signed.
+- **Bounces and spam complaints**: Resend calls `POST /api/webhooks/resend` (signed with Svix; the endpoint is off until
+  `RESEND_WEBHOOK_SECRET` is set). A permanent bounce or a spam complaint puts the address in `email_suppression` and the Worker
+  stops emailing it for 30 days (`apps/api/src/suppression.ts`). The person sees the same response as for any address, so this
+  cannot be used to find out which addresses have accounts. Temporary bounces (full mailbox) are ignored. A complaint is also
+  reported to Sentry if it is on. To let a corrected address through earlier:
+  `wrangler d1 execute DB --remote --command "DELETE FROM email_suppression WHERE email = 'a@b.com'"`.

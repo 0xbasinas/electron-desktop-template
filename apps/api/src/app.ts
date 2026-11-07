@@ -22,6 +22,8 @@ import { createDb, schema, type Db } from './db'
 import { createConsoleSender, createResendSender, type EmailSender } from './email'
 import type { Bindings } from './env'
 import { sameOriginOnly } from './origin'
+import { Resend } from 'resend'
+import { suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string }
 type AppEnv = { Bindings: Bindings; Variables: Variables }
@@ -258,6 +260,34 @@ export function createApp(options: AppOptions = {}) {
       .get('/health', (c) => c.json({ ok: true }))
       // Sign-in, sessions and sign-out: handled by Better Auth under /api/auth/*.
       .on(['GET', 'POST'], '/auth/*', (c) => c.var.auth.handler(c.req.raw))
+      // Resend tells us about bounces and spam complaints. Signed (Svix), so only Resend can call it; off without the secret.
+      .post('/webhooks/resend', async (c) => {
+        const secret = c.env.RESEND_WEBHOOK_SECRET
+        if (!secret) throw new HTTPException(404, { message: 'Not found' })
+        const payload = await c.req.text()
+        let event: unknown
+        try {
+          event = new Resend('re_unused').webhooks.verify({
+            payload,
+            headers: {
+              id: c.req.header('svix-id') ?? '',
+              timestamp: c.req.header('svix-timestamp') ?? '',
+              signature: c.req.header('svix-signature') ?? ''
+            },
+            webhookSecret: secret
+          })
+        } catch {
+          throw new HTTPException(400, { message: 'Invalid webhook' })
+        }
+        const items = suppressionsFrom(event)
+        if (items.length > 0) {
+          await suppress(c.var.db, items)
+          if (items.some((i) => i.reason === 'complained')) {
+            Sentry.captureMessage('A recipient marked a sign-in email as spam', 'warning')
+          }
+        }
+        return c.json({ ok: true })
+      })
       .route('/notes', notes)
       .route('/preferences', preferences)
       .route('/account', account)

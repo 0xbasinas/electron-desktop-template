@@ -40,6 +40,8 @@ passed as `RESEND_SETUP_KEY` in the environment. The Worker gets a different key
    (`wrangler deploy --secrets-file`, from a temporary file that is deleted right after) and never printed.
    An existing `BETTER_AUTH_SECRET` is kept, because changing it signs everybody out (`--rotate-secret` does it on purpose).
 7. **Deploy.** Builds the site, applies the D1 migrations to the remote database, then deploys the Worker.
+   In the same step it adds a starter DMARC record, creates the Resend webhook for bounces and complaints, and (if `SENTRY_DSN`
+   is in the environment) stores the Sentry DSN. See "Email deliverability" and "Error reporting" in [api.md](api.md).
 8. **GitHub.** Sets the repository variable `API_URL` (so release builds of the desktop app know where to sign in) and,
    when `CLOUDFLARE_API_TOKEN` is set, the secrets and variable that switch on automatic deploys.
 

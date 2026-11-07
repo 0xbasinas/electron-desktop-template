@@ -7,9 +7,11 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { resolveTxt } from 'node:dns/promises'
 import { createInterface } from 'node:readline/promises'
 import {
   assertDomain,
+  dmarcRecord,
   fromAddress,
   generateSecret,
   isSentryDsn,
@@ -21,7 +23,9 @@ import {
   patchWranglerConfig,
   recordExists,
   secretsFileContent,
-  toCloudflareRecords
+  toCloudflareRecords,
+  WEBHOOK_EVENTS,
+  webhookEndpoint
 } from './setup-cloud-lib.mjs'
 
 const CONFIG_PATH = 'apps/api/wrangler.jsonc'
@@ -281,7 +285,33 @@ if (args.flags.has('skip-resend')) {
   }
 
   // The Worker only ever needs to send mail, from this one domain: give it a key that can do nothing else.
-  workerResendKey = { domainId: domain.id, resend }
+  // DMARC: a starter policy that only asks for reports. Mailbox providers expect one from every sender.
+  const dmarc = dmarcRecord(sendingDomain)
+  const hasDmarc = await resolveTxt(dmarc.name).then(
+    (rows) => rows.some((r) => r.join('').startsWith('v=DMARC1')),
+    () => false
+  )
+  if (hasDmarc) {
+    ok('DMARC record already exists')
+  } else if (process.env.CLOUDFLARE_API_TOKEN) {
+    const cf = 'https://api.cloudflare.com/client/v4'
+    const zones = await api(cf, process.env.CLOUDFLARE_API_TOKEN, `/zones?name=${sendingDomain}`)
+    const zone = zones.json.result?.[0]
+    if (zone) {
+      const res = await api(cf, process.env.CLOUDFLARE_API_TOKEN, `/zones/${zone.id}/dns_records`, {
+        method: 'POST',
+        body: dmarc
+      })
+      if (res.ok) ok('Added a DMARC record (p=none: reports only, nothing is rejected)')
+      else note(`Could not add the DMARC record: ${JSON.stringify(res.json.errors)}`)
+    } else {
+      note(`Add this DNS record yourself: TXT ${dmarc.name} = "${dmarc.content}"`)
+    }
+  } else {
+    note(`Recommended DNS record: TXT ${dmarc.name} = "${dmarc.content}"`)
+  }
+
+  workerResendKey = { domainId: domain.id, resend, endpoint: webhookEndpoint(siteUrl) }
 }
 
 // 5 -------------------------------------------------------------------------------------------------------------------
@@ -336,6 +366,41 @@ if (workerResendKey && !have.has('RESEND_API_KEY')) {
   ok('Created a Resend key that can only send from your domain')
 } else if (workerResendKey) {
   note('RESEND_API_KEY is already set.')
+}
+
+// Bounces and spam complaints: Resend calls the Worker, which stops emailing those addresses (docs/api.md).
+if (workerResendKey && !have.has('RESEND_WEBHOOK_SECRET')) {
+  if (!workerResendKey.endpoint) {
+    note('Bounce handling needs the public https address; run again once the site has one.')
+  } else {
+    const { resend } = workerResendKey
+    const list = await resend('/webhooks')
+    let hook = (list.json.data ?? []).find((w) => w.endpoint === workerResendKey.endpoint)
+    let signingSecret
+    if (hook) {
+      signingSecret = (await resend(`/webhooks/${hook.id}`)).json.signing_secret
+    } else {
+      const created = await resend('/webhooks', {
+        method: 'POST',
+        body: { endpoint: workerResendKey.endpoint, events: WEBHOOK_EVENTS }
+      })
+      if (!created.ok)
+        note(
+          `Resend would not create the webhook yet (${JSON.stringify(created.json)}). Run this again after the first deploy.`
+        )
+      signingSecret = created.ok ? created.json.signing_secret : undefined
+    }
+    if (signingSecret) {
+      secrets.RESEND_WEBHOOK_SECRET = signingSecret
+      ok('Bounce and complaint handling is on (Resend webhook)')
+    } else {
+      note(
+        'Could not read the webhook signing secret; copy it from the Resend dashboard (Webhooks) into RESEND_WEBHOOK_SECRET.'
+      )
+    }
+  }
+} else if (workerResendKey) {
+  note('RESEND_WEBHOOK_SECRET is already set.')
 }
 
 if (process.env.SENTRY_DSN && (!have.has('SENTRY_DSN') || args.flags.has('rotate-secret'))) {
