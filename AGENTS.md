@@ -66,6 +66,8 @@ docs/            architecture.md (how the app works), releasing.md (releases, ro
   `window.api.thing()` from React.
 - **Adding a setting:** add it to `Settings` in `ipc.ts`, `readStored`/`getSettings` in `settings.ts`, the
   allow-list in `validate.ts`, a test, the e2e `getSettings` expectation, and the Settings window.
+- The packaged UI is served from `app://renderer/` (`src/main/appProtocol.ts`), not `file://`. Never load remote or `file://`
+  content into a window, and keep `isTrustedUrl` strict.
 - `src/preload` must not import third-party packages (a sandboxed preload can only `require('electron')`).
 - Keep the renderer small: `bundle-budget.json` fails CI if JS/CSS grows past it. Raise it deliberately, not by accident.
 - Prefer small pure functions with tests (see `scripts/lib/` and `src/shared/validate.ts`) over logic buried in workflows.

@@ -1,3 +1,4 @@
+import { APP_URL } from './appPath'
 import { BrowserWindow, nativeTheme, shell, type BrowserWindowConstructorOptions } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import { join } from 'path'
@@ -42,7 +43,7 @@ export function loadRenderer(win: BrowserWindow, hash = ''): void {
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}${hash ? `#${hash}` : ''}`)
   } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
+    win.loadURL(`${APP_URL}${hash ? `#${hash}` : ''}`)
   }
 }
 
