@@ -20,6 +20,10 @@ export default defineConfig({
     })
   ],
   test: {
+    // Reuse one workerd worker for all files. With a fresh worker per file, a worker that has to be started after
+    // another one finished crashes on start ("WebSocket protocol error 1009: Message is too large"), which showed up on
+    // CI as soon as there were more test files than CPU cores. The tests make their own users, so sharing is safe.
+    isolate: false,
     setupFiles: ['./test/apply-migrations.ts'],
     include: ['test/**/*.test.ts', 'src/**/*.test.ts']
   }
