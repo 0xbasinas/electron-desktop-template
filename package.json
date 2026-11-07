@@ -18,7 +18,7 @@
     "setup:cloud": "node scripts/setup-cloud.mjs",
     "cloud:doctor": "node scripts/doctor.mjs",
     "compat:date": "node scripts/compat-date.mjs --write",
-    "test:scripts": "node --test scripts/",
+    "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "prepare": "husky",
     "check:bundle": "pnpm --filter ./apps/desktop run check:bundle",
     "check:release": "pnpm --filter ./apps/desktop run check:release",
