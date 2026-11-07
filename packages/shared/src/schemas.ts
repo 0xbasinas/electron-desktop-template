@@ -18,5 +18,33 @@ export const noteSchema = z.object({
   updatedAt: z.string()
 })
 
+/** The signed-in person, as shown on the account page. */
+export const accountSchema = z.object({
+  id: z.string(),
+  email: z.string(),
+  name: z.string(),
+  createdAt: z.string()
+})
+
+/** Everything we hold about a person (the "download my data" file). No tokens or secrets are included. */
+export const accountExportSchema = z.object({
+  exportedAt: z.string(),
+  account: accountSchema,
+  notes: z.array(noteSchema),
+  sessions: z.array(
+    z.object({
+      createdAt: z.string(),
+      expiresAt: z.string(),
+      ipAddress: z.string().nullable(),
+      userAgent: z.string().nullable()
+    })
+  )
+})
+
+/** Deleting an account needs the email typed again, so it cannot happen by a stray click or request. */
+export const deleteAccountInputSchema = z.object({ confirmEmail: emailSchema })
+
 export type NoteInput = z.infer<typeof noteInputSchema>
 export type Note = z.infer<typeof noteSchema>
+export type Account = z.infer<typeof accountSchema>
+export type AccountExport = z.infer<typeof accountExportSchema>

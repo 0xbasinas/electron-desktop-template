@@ -85,3 +85,16 @@ which is stored encrypted with the operating system's keychain (Electron `safeSt
 - The Account section only shows in builds that know the API address. Set `API_URL` (a repository **variable**, not a
   secret) to your deployed address for release builds; in development it defaults to `http://localhost:8787`.
 - The Worker already trusts `<scheme>:/` as an origin (`TRUSTED_ORIGINS` in `wrangler.jsonc`); `pnpm rename` updates it.
+
+## Account page, data export and deletion
+
+`/account` on the site (signed-in only) lets a person sign out everywhere, download their data and delete their account.
+The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /api/account` (`apps/api/src/app.ts`).
+
+- These routes ask the database for the session instead of trusting the 5-minute cookie cache, so a deleted account or a
+  revoked session stops working at once.
+- The export lists the account, the notes and the sign-ins (time, IP, browser) and never any token.
+- Deleting needs the email typed again. It removes the user; sessions, linked accounts and notes go with it (`ON DELETE CASCADE`),
+  unused sign-in links are removed, and the response clears the session cookies.
+- **When you add your own tables**, give them `userId ... references user.id ON DELETE CASCADE`, and add their rows to the export
+  in `app.ts`, so deletion and export stay complete. The tests in `apps/api/test/api.test.ts` ("account") show how to check it.

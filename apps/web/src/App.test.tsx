@@ -10,7 +10,8 @@ const auth = vi.hoisted(() => ({
   pending: false,
   magicLink: vi.fn(),
   transfer: vi.fn(),
-  ensureRedirect: vi.fn(() => 0)
+  ensureRedirect: vi.fn(() => 0),
+  revoke: vi.fn()
 }))
 vi.mock('./lib/auth', () => ({
   authClient: {
@@ -18,11 +19,13 @@ vi.mock('./lib/auth', () => ({
     signIn: { magicLink: auth.magicLink },
     signOut: vi.fn(),
     $fetch: auth.transfer,
-    ensureElectronRedirect: auth.ensureRedirect
+    ensureElectronRedirect: auth.ensureRedirect,
+    revokeSessions: auth.revoke
   }
 }))
 const notesApi = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }))
-vi.mock('./lib/api', () => ({ api: { notes: notesApi } }))
+const accountApi = vi.hoisted(() => ({ get: vi.fn(), export: vi.fn(), remove: vi.fn() }))
+vi.mock('./lib/api', () => ({ api: { notes: notesApi, account: accountApi } }))
 
 beforeEach(() => {
   auth.session = null
@@ -33,6 +36,15 @@ beforeEach(() => {
   notesApi.list.mockReset().mockResolvedValue([])
   notesApi.create.mockReset()
   notesApi.remove.mockReset()
+  auth.revoke.mockReset().mockResolvedValue({ data: {}, error: null })
+  accountApi.get.mockReset().mockResolvedValue({
+    id: 'u1',
+    email: 'ada@example.com',
+    name: 'ada',
+    createdAt: '2026-01-01T00:00:00.000Z'
+  })
+  accountApi.export.mockReset()
+  accountApi.remove.mockReset().mockResolvedValue(undefined)
 })
 
 const at = (path: string): void => {
@@ -202,5 +214,43 @@ describe('signing in from the desktop app', () => {
     at('/auth/desktop')
     expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
     expect(auth.ensureRedirect).toHaveBeenCalled()
+  })
+})
+
+describe('account page', () => {
+  it('sends signed-out visitors to the sign-in page', () => {
+    at('/account')
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('only enables deleting once the email is typed exactly, then deletes', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    expect(await screen.findByText('Signed in as ada@example.com')).toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Delete my account' })
+    expect(button).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Confirm your email'), 'ada@example.org')
+    expect(button).toBeDisabled()
+    await userEvent.clear(screen.getByLabelText('Confirm your email'))
+    await userEvent.type(screen.getByLabelText('Confirm your email'), 'Ada@Example.com')
+    expect(button).toBeEnabled()
+    await userEvent.click(button)
+    await waitFor(() => expect(accountApi.remove).toHaveBeenCalledWith('Ada@Example.com'))
+  })
+
+  it('signs out everywhere', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out everywhere' }))
+    await waitFor(() => expect(auth.revoke).toHaveBeenCalled())
+  })
+
+  it('shows an error when the data cannot be downloaded', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    accountApi.export.mockRejectedValue(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/account')
+    await userEvent.click(await screen.findByRole('button', { name: 'Download my data' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not download your data.')
   })
 })

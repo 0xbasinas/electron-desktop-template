@@ -1,4 +1,12 @@
-import { noteSchema, type Note, type NoteInput } from './schemas'
+import {
+  accountExportSchema,
+  accountSchema,
+  noteSchema,
+  type Account,
+  type AccountExport,
+  type Note,
+  type NoteInput
+} from './schemas'
 import { z } from 'zod'
 
 export class ApiError extends Error {
@@ -27,6 +35,13 @@ export interface ApiClient {
     list(): Promise<Note[]>
     create(input: NoteInput): Promise<Note>
     remove(id: string): Promise<void>
+  }
+  account: {
+    get(): Promise<Account>
+    /** Everything we hold about the signed-in person. */
+    export(): Promise<AccountExport>
+    /** Permanently deletes the account and its data. `confirmEmail` must be the account email. */
+    remove(confirmEmail: string): Promise<void>
   }
 }
 
@@ -67,6 +82,12 @@ export function createApiClient({
         request('/notes', noteSchema, { method: 'POST', body: JSON.stringify(input) }),
       remove: (id: string): Promise<void> =>
         request(`/notes/${encodeURIComponent(id)}`, null, { method: 'DELETE' })
+    },
+    account: {
+      get: (): Promise<Account> => request('/account', accountSchema),
+      export: (): Promise<AccountExport> => request('/account/export', accountExportSchema),
+      remove: (confirmEmail: string): Promise<void> =>
+        request('/account', null, { method: 'DELETE', body: JSON.stringify({ confirmEmail }) })
     }
   }
 }

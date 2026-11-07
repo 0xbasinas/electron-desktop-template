@@ -310,3 +310,96 @@ describe('notes', () => {
     expect(response.status).toBe(403)
   })
 })
+
+describe('account', () => {
+  const json = (cookie: string, method: string, body?: unknown): RequestInit => ({
+    method,
+    headers: { cookie, 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  })
+
+  it('needs a session', async () => {
+    const s = setup()
+    expect((await s.call('/api/account')).status).toBe(401)
+    expect((await s.call('/api/account/export')).status).toBe(401)
+    expect(
+      (await s.call('/api/account', json('', 'DELETE', { confirmEmail: 'x@example.com' }))).status
+    ).toBe(401)
+  })
+
+  it('shows the account and exports everything held about it, without tokens', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'zed@example.com')
+    await s.call('/api/notes', json(cookie, 'POST', { title: 'mine' }))
+
+    const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      email: string
+    }
+    expect(me.email).toBe('zed@example.com')
+
+    const response = await s.call('/api/account/export', { headers: { cookie } })
+    expect(response.headers.get('content-disposition')).toContain('attachment')
+    const text = await response.text()
+    const data = JSON.parse(text) as { notes: { title: string }[]; sessions: unknown[] }
+    expect(data.notes.map((n) => n.title)).toEqual(['mine'])
+    expect(data.sessions).toHaveLength(1)
+    expect(text).not.toMatch(/token/i)
+  })
+
+  it("exports only the caller's own data", async () => {
+    const s = setup()
+    const a = await signIn(s, 'a1@example.com')
+    const b = await signIn(s, 'b1@example.com')
+    await s.call('/api/notes', json(a, 'POST', { title: 'a-only' }))
+    const data = (await (
+      await s.call('/api/account/export', { headers: { cookie: b } })
+    ).json()) as {
+      notes: unknown[]
+    }
+    expect(data.notes).toEqual([])
+  })
+
+  it('refuses to delete without the matching email', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'keep@example.com')
+    const wrong = await s.call(
+      '/api/account',
+      json(cookie, 'DELETE', { confirmEmail: 'other@example.com' })
+    )
+    expect(wrong.status).toBe(400)
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
+  })
+
+  it('deletes the account, its notes and its sessions, and blocks cross-site requests', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'gone@example.com')
+    await s.call('/api/notes', json(cookie, 'POST', { title: 'bye' }))
+    const userId = (await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('gone@example.com')
+      .first<{ id: string }>())!.id
+
+    const cross = await s.call('/api/account', {
+      ...json(cookie, 'DELETE', { confirmEmail: 'gone@example.com' }),
+      headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' }
+    })
+    expect(cross.status).toBe(403)
+
+    const deleted = await s.call(
+      '/api/account',
+      json(cookie, 'DELETE', { confirmEmail: 'gone@example.com' })
+    )
+    expect(deleted.status).toBe(204)
+
+    // The old cookie is dead at once (not after the 5-minute cache), and nothing is left in the database.
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(401)
+    const left = async (table: string, column: string): Promise<number | undefined> =>
+      (
+        await bindings.DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`)
+          .bind(userId)
+          .first<{ n: number }>()
+      )?.n
+    expect(await left('user', 'id')).toBe(0)
+    expect(await left('session', 'user_id')).toBe(0)
+    expect(await left('note', 'user_id')).toBe(0)
+  })
+})
