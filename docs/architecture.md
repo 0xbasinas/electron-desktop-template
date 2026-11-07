@@ -123,8 +123,9 @@ while React starts.
   `runAsNode` and `NODE_OPTIONS` are off (so the app cannot be hijacked to run arbitrary Node code), cookies are encrypted,
   and the Node inspector flags are off in releases. **ASAR integrity** is on with `onlyLoadAppFromAsar`: the app refuses to
   start if `app.asar` was modified (it exits with "Integrity check failed for asar archive"). `grantFileProtocolExtraPrivileges`
-  stays on because the renderer loads from `file://`; a custom `app://` protocol would let you turn it off.
+  is off because the UI is not loaded from `file://` (see "The app:// scheme" below).
   `scripts/lib/fuses.mjs` lists the expected state and CI checks it on the packaged app.
+- The packaged UI is served from `app://renderer/`, and `isTrustedUrl` accepts only that origin (or the dev server).
 - Payloads are validated in main (`parseSettingsPatch`), never trusted because the TypeScript type says so.
 - New windows and navigations are blocked by `hardenWindow`; only `http(s)` links open in the browser.
 - The page has a Content-Security-Policy in `index.html`.
@@ -148,3 +149,13 @@ reveals it. Nothing is sent anywhere; point `log.transports.remote` at a server 
 `whatsNew.ts` compares the stored `lastSeenVersion` with the running version. No stored version means first
 run (welcome); a different one means the app was updated (release notes); the same one shows nothing. Closing
 the dialog marks the version as seen.
+
+## The app:// scheme
+
+In production the window loads `app://renderer/index.html`, not a `file://` URL. `src/main/appProtocol.ts` registers the
+scheme (before the app is ready; `standard` and `secure`, so it behaves like https for modules, storage and CORS) and
+answers each request by reading the file from the built renderer folder inside `app.asar`. `resolveAppFile` in `appPath.ts`
+maps the URL to a file and refuses anything that would leave that folder (`..`, encoded dots, sibling folders, NUL bytes);
+it is unit tested. `isTrustedUrl` accepts only `app://renderer/` (or the dev server in development), so `secureIpc` rejects
+every other page. This is what lets the `grantFileProtocolExtraPrivileges` fuse stay off. If you add a new asset type, add
+its extension to the table in `appPath.ts`. The deep-link scheme (`PROTOCOL` in `deeplink.ts`) is a different thing.
