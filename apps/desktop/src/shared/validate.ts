@@ -2,7 +2,13 @@ import type { Settings } from './ipc'
 
 // The renderer is untrusted: anything it sends over IPC is checked here before main acts on it.
 
-const SETTING_KEYS = ['updateChannel', 'closeToTray', 'launchAtLogin', 'crashReports'] as const
+const SETTING_KEYS = [
+  'theme',
+  'updateChannel',
+  'closeToTray',
+  'launchAtLogin',
+  'crashReports'
+] as const
 
 /** Validate a settings patch from the renderer. Throws on anything unexpected. */
 export function parseSettingsPatch(input: unknown): Partial<Settings> {
@@ -21,6 +27,12 @@ export function parseSettingsPatch(input: unknown): Partial<Settings> {
           throw new Error('Invalid settings: updateChannel must be "latest" or "beta"')
         }
         patch.updateChannel = value
+        break
+      case 'theme':
+        if (value !== 'system' && value !== 'light' && value !== 'dark') {
+          throw new Error('Invalid settings: theme must be "system", "light" or "dark"')
+        }
+        patch.theme = value
         break
       case 'closeToTray':
       case 'launchAtLogin':

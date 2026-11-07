@@ -8,6 +8,19 @@
 
 Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-updates, tests and CI/release workflows. Uses **pnpm**.
 
+It is a **monorepo** (pnpm workspaces + Turborepo):
+
+| Folder            | What it is                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `apps/desktop`    | The Electron app. Released to GitHub Releases with staged rollouts.                                        |
+| `apps/web`        | Vite + React site: landing page, download page, sign-in and the app at `/app`.                             |
+| `apps/api`        | Hono API on Cloudflare Workers with D1 (Drizzle) and Better Auth magic-link sign-in; also serves the site. |
+| `packages/ui`     | Shared components and the Tailwind theme.                                                                  |
+| `packages/shared` | zod schemas and the typed API client shared by web, desktop and API.                                       |
+| `scripts/`        | `setup-cloud.mjs`, the one-command Cloudflare + Resend + GitHub setup.                                     |
+
+Start with the desktop app (`pnpm dev`). The website, API and account sign-in are optional: see [Website and API](#website-and-api).
+
 ## Scripts
 
 | Command                                        | What it does                                                                                   |
@@ -24,6 +37,27 @@ Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-upda
 | `pnpm icons`                                   | Regenerate app icons from `apps/desktop/build/icon-source.svg`                                 |
 | `pnpm check:bundle`                            | Fail if the renderer bundle exceeds `apps/desktop/bundle-budget.json` (run after `pnpm build`) |
 | `pnpm rename`                                  | Rename the template for a new app                                                              |
+| `pnpm dev:all`                                 | Run every app that has a dev server (desktop, web, API) through Turborepo                      |
+| `pnpm setup:cloud`                             | Set up Cloudflare, Resend and GitHub for the website and API in one go (docs/setup-cloud.md)   |
+| `pnpm cloud:doctor`                            | Check the whole cloud setup and say what is wrong and how to fix it                            |
+| `pnpm test:scripts`                            | Unit tests for the setup script (`node --test`)                                                |
+
+## Website and API
+
+`apps/web` and `apps/api` deploy as **one Cloudflare Worker**: the API under `/api/*`, the built site as static assets, one origin
+(so the session cookie is first-party and there is no CORS). Sign-in is by emailed magic link (Better Auth + Resend), on the web and in
+the desktop app, which signs in through the system browser and returns through its deep link. It is built to stay inside the free tiers
+(no passwords, cached sessions, rate limits only on sign-in).
+
+```bash
+cp apps/api/.dev.vars.example apps/api/.dev.vars   # local secret
+pnpm --filter @repo/web build && pnpm --filter @repo/api db:migrate:local
+pnpm --filter @repo/api dev                         # http://localhost:8787 (sign-in links print in the terminal)
+pnpm setup:cloud                                    # when you are ready to deploy: Cloudflare + Resend + GitHub
+```
+
+Guides: [docs/setup-cloud.md](docs/setup-cloud.md) (one-command setup, options, manual steps), [docs/api.md](docs/api.md) (API, database,
+sign-in, free-tier notes, security), [docs/monorepo-and-web.md](docs/monorepo-and-web.md) (how the parts connect).
 
 ## Auto-update
 
@@ -40,7 +74,7 @@ Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-upda
 - The repo is public, so installed apps can read releases without a token. If you make it private again, add `private: true` to `publish` in `apps/desktop/electron-builder.yml` and give installed apps a `GH_TOKEN`.
 - macOS auto-update requires code signing and notarization (not configured here).
 
-Details: [docs/releasing.md](docs/releasing.md). How the app is put together: [docs/architecture.md](docs/architecture.md). How the monorepo and the web/API plan fit together: [docs/monorepo-and-web.md](docs/monorepo-and-web.md).
+Details: [docs/releasing.md](docs/releasing.md). How the app is put together: [docs/architecture.md](docs/architecture.md). How the monorepo and the web/API plan fit together: [docs/monorepo-and-web.md](docs/monorepo-and-web.md). Website and API setup: [docs/setup-cloud.md](docs/setup-cloud.md).
 
 ## Security, settings and logs
 
@@ -78,4 +112,4 @@ Click **Use this template** on GitHub, clone your new repo, then rename everythi
 pnpm rename my-cool-app --owner your-github-user --title "My Cool App"
 ```
 
-This updates `apps/desktop/package.json`, `apps/desktop/electron-builder.yml` (app id, product name, publish target), the app user model id, the deep-link scheme, the window title, the README title and the license holder. `--owner` and `--title` are optional. Review `git diff` afterwards.
+This updates `apps/desktop/package.json`, `apps/desktop/electron-builder.yml` (app id, product name, publish target), the app user model id, the deep-link scheme (also in the web app and the Worker's trusted origin), the window title, the README title and the license holder. `--owner` and `--title` are optional. Review `git diff` afterwards.

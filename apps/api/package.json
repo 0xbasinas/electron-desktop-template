@@ -20,9 +20,11 @@
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.7.18",
-    "@repo/shared": "workspace:*",
     "@better-auth/electron": "^1.7.18",
+    "@better-auth/passkey": "^1.7.18",
     "@hono/zod-validator": "^0.9.1",
+    "@repo/shared": "workspace:*",
+    "@sentry/cloudflare": "^11.11.0",
     "better-auth": "^1.7.18",
     "drizzle-orm": "^0.45.4",
     "hono": "4.13.16",

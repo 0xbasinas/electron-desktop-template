@@ -17,7 +17,9 @@ Package manager is **pnpm** (never npm or yarn). Node 24. Run commands from the 
 | Install                             | `pnpm install`                                                                     |
 | Run in development                  | `pnpm dev`                                                                         |
 | Format / lint / typecheck           | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                     |
-| Unit tests (src, scripts)           | `pnpm test`                                                                        |
+| Unit tests (src, scripts)           | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)               |
+| Set up website + API accounts       | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)  |
+| Check the cloud setup               | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)           |
 | Build the app                       | `pnpm build` (typechecks first)                                                    |
 | Bundle size budget                  | `pnpm check:bundle` (after `pnpm build`)                                           |
 | Package unpacked app                | `pnpm build:unpack`                                                                |
@@ -61,7 +63,8 @@ packages/shared/          zod schemas shared by API, web and desktop.
 packages/ui/               @repo/ui: shared React components (Button, cn) and the Tailwind theme (theme.css). Source-only; apps bundle it.
 turbo.json                Task graph (build, typecheck, test). pnpm-workspace.yaml holds the workspace globs and the version catalog.
 .github/                  Workflows. publish-stable / publish-beta call _publish.yml after ci.yml passes.
-docs/                     api.md (API, database, sign-in), architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
+scripts/                  setup-cloud.mjs (+ setup-cloud-lib.mjs, pure and tested with `node --test`): one-command Cloudflare/Resend/GitHub setup.
+docs/                     setup-cloud.md (that setup), api.md (API, database, sign-in), architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
                           monorepo-and-web.md (how the repo is organised and the plan for web + API).
 ```
 
@@ -89,6 +92,25 @@ only third-party runtime modules go in `dependencies` (electron-builder packages
   "Electron Desktop Template" in new code. `pnpm rename` replaces the known occurrences for new apps.
 - TypeScript is strict. No `any` without a reason. Explicit return types on exported functions (ESLint enforces it).
 - Style is Prettier (no semicolons, single quotes). Run `pnpm format`; do not fight it.
+
+## Website, API and sign-in
+
+- Never put secrets in `apps/api/wrangler.jsonc` (it only holds `database_id`, `BETTER_AUTH_URL`, `EMAIL_FROM`, `TRUSTED_ORIGINS` and `routes`).
+  Secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) are set in Cloudflare by `pnpm setup:cloud` or `wrangler secret put`.
+  Do not run `pnpm setup:cloud` for the user: it needs their accounts and keys, so tell them to run it.
+  `pnpm cloud:doctor` only reads, so run it when something about sign-in or deploys looks wrong. Pull request previews
+  (`.github/workflows/preview.yml`) set `PREVIEW=true`, and the Worker then takes its address from the request: do not read
+  `BETTER_AUTH_URL` directly in new code, use the value on `env` that the app already receives.
+- Stay inside the free tiers (see docs/api.md): no password hashing, no work per request that reads many D1 rows, rate limit only
+  sign-in, send email with `waitUntil`.
+- Desktop sign-in is main-process only (`apps/desktop/src/main/auth.ts`). Do not use `@better-auth/electron`'s `setupMain`, do not give the
+  renderer tokens, and check deep links with `authLink.ts` before using them. The Account section shows only when `API_URL` is set at build time.
+- Change the database by editing `apps/api/src/db/schema.ts` then `pnpm --filter @repo/api db:generate`; auth tables come from
+  `pnpm --filter @repo/api auth:schema`. Migrations run before the new code deploys, so keep them backward compatible.
+- Per-person data that must follow them between devices goes through `/api/preferences` (last write wins, local copy first, best-effort sync):
+  see `packages/shared/src/preferences.ts` and the theme in `apps/web/src/lib/theme.ts` and `apps/desktop/src/main/preferencesSync.ts`.
+- Anything you store per person needs `ON DELETE CASCADE` on the user and a place in the account export (`apps/api/src/app.ts`).
+- Web and API deploy from `.github/workflows/deploy-web.yml` (off until `CLOUDFLARE_DEPLOY=true`); it never releases the desktop app.
 
 ## Release system in one paragraph
 

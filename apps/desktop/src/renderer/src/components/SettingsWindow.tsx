@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AppInfo, UpdateChannel, UpdaterEvent, WhatsNew } from '../../../shared/ipc'
+import type { AppInfo, Theme, UpdateChannel, UpdaterEvent, WhatsNew } from '../../../shared/ipc'
 import { TitleBar } from '@renderer/components/TitleBar'
 import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useAccount } from '@renderer/hooks/useAccount'
@@ -170,6 +170,27 @@ export function SettingsWindow(): React.JSX.Element {
         </Section>
 
         <Section title="General">
+          <label className="flex items-center justify-between gap-3 text-sm">
+            <span>
+              Theme
+              <span className="block text-xs text-muted-foreground">
+                {account?.user
+                  ? 'Synced with your other devices.'
+                  : 'Sign in to use the same theme on every device.'}
+              </span>
+            </span>
+            <select
+              aria-label="Theme"
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+              value={settings?.theme ?? 'system'}
+              disabled={!settings}
+              onChange={(event) => update({ theme: event.target.value as Theme })}
+            >
+              <option value="system">Match my system</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
           {platform !== 'darwin' && (
             <Toggle
               label="Keep running in the tray when closed"

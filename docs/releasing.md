@@ -161,3 +161,10 @@ The attestation proves the file was built by this repo's workflow from the tagge
 
 - macOS and Windows installers are not code-signed yet. macOS auto-update needs signing and notarization.
 - The bundle size budget (`apps/desktop/bundle-budget.json`) is checked in CI. Raise it on purpose, not by accident.
+
+## Account sign-in in release builds
+
+To show **Settings > Account** (sign in through the browser), the build needs the address of your deployed API. Add the
+repository **variable** (not a secret; it is a public address) `API_URL`, for example `https://app.example.com`.
+`_publish.yml` passes it to the build. `pnpm setup:cloud` sets it for you (see [setup-cloud.md](setup-cloud.md)). Without
+it the Account section is hidden. Desktop releases are separate from website and API deploys.

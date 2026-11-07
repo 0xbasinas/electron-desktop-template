@@ -1,15 +1,16 @@
 # Monorepo, web app and API
 
 **Decision:** one pnpm + Turborepo monorepo with a desktop app, a web app (marketing/download site plus the product at
-`/app`), a small API, and shared packages. Web and API run on Cloudflare (Pages and Workers). Desktop and web release
+`/app`), a small API, and shared packages. Web and API run as one Cloudflare Worker (static assets plus the API, one origin). Desktop and web release
 independently.
 
 ## Layout
 
 ```
 apps/desktop    Electron app (electron-vite + electron-builder). Released with the existing release system.
-apps/web        Vite + React SPA: marketing/download site and the app at /app.   (done: site, download page, /app placeholder)
+apps/web        Vite + React SPA: marketing/download site, sign-in and the app at /app. (done)
 apps/api        Hono API on Cloudflare Workers: D1 database, magic-link sign-in. (done; see docs/api.md)
+scripts/        setup-cloud.mjs: one-command Cloudflare + Resend + GitHub setup (see docs/setup-cloud.md).
 packages/ui      @repo/ui: shared components and the Tailwind theme (done).
 packages/shared  zod schemas shared by web, desktop and API (done).
 ```
@@ -31,6 +32,20 @@ packages/shared  zod schemas shared by web, desktop and API (done).
 
 1. Workspace + Turborepo, desktop moved to `apps/desktop` (done).
 2. Shared UI package `packages/ui` (done). `packages/shared` arrives with the API, when there is real shared code.
-3. `apps/web`: marketing/download site and `/app` (done; deploy comes in step 5).
-4. `apps/api`: Hono, D1 + Drizzle, Better Auth magic links (done). Next: sign-in UI in `apps/web`, then sign-in in the desktop app (system browser, back through the deep link).
-5. Deploy workflows for Cloudflare, final docs.
+3. `apps/web`: marketing/download site and `/app` (done).
+4. `apps/api`: Hono, D1 + Drizzle, Better Auth magic links (done).
+5. Sign-in on the web (`/sign-in`, `/app`) and in the desktop app (system browser, back through the deep link) (done).
+6. Deploy: `pnpm setup:cloud` for the first time, `.github/workflows/deploy-web.yml` afterwards (done; see [setup-cloud.md](setup-cloud.md)).
+
+## How the three parts connect
+
+```
+desktop app --(Settings > Account > Sign in)--> system browser --> <site>/sign-in --> magic link email (Resend)
+     ^                                                                                      |
+     '---- <scheme>:/auth/callback#token=<one-time code> <---- <site>/auth/desktop <--------'
+web app (/app) -- same-origin cookie --> /api/* on the same Worker --> D1
+```
+
+The desktop app is built with the API address (`API_URL`); without it the Account section is hidden and the app works
+as before, with no account. Releases are independent: desktop releases come from the publish workflows, the site and API
+deploy from `main` through `deploy-web.yml`.

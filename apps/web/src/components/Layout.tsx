@@ -26,6 +26,11 @@ export function Layout(): JSX.Element {
             <NavLink to="/app" className={link}>
               Open web app
             </NavLink>
+            {session && (
+              <NavLink to="/account" className={link}>
+                Account
+              </NavLink>
+            )}
             {session ? (
               <button
                 type="button"

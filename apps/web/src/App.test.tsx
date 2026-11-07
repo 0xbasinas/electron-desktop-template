@@ -10,19 +10,34 @@ const auth = vi.hoisted(() => ({
   pending: false,
   magicLink: vi.fn(),
   transfer: vi.fn(),
-  ensureRedirect: vi.fn(() => 0)
+  ensureRedirect: vi.fn(() => 0),
+  revoke: vi.fn(),
+  signInPasskey: vi.fn(),
+  listPasskeys: vi.fn(),
+  addPasskey: vi.fn(),
+  deletePasskey: vi.fn()
 }))
 vi.mock('./lib/auth', () => ({
   authClient: {
     useSession: () => ({ data: auth.session, isPending: auth.pending }),
-    signIn: { magicLink: auth.magicLink },
+    signIn: { magicLink: auth.magicLink, passkey: auth.signInPasskey },
+    passkey: {
+      listUserPasskeys: auth.listPasskeys,
+      addPasskey: auth.addPasskey,
+      deletePasskey: auth.deletePasskey
+    },
     signOut: vi.fn(),
     $fetch: auth.transfer,
-    ensureElectronRedirect: auth.ensureRedirect
+    ensureElectronRedirect: auth.ensureRedirect,
+    revokeSessions: auth.revoke
   }
 }))
 const notesApi = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }))
-vi.mock('./lib/api', () => ({ api: { notes: notesApi } }))
+const accountApi = vi.hoisted(() => ({ get: vi.fn(), export: vi.fn(), remove: vi.fn() }))
+const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
+vi.mock('./lib/api', () => ({
+  api: { notes: notesApi, account: accountApi, preferences: prefsApi }
+}))
 
 beforeEach(() => {
   auth.session = null
@@ -33,6 +48,22 @@ beforeEach(() => {
   notesApi.list.mockReset().mockResolvedValue([])
   notesApi.create.mockReset()
   notesApi.remove.mockReset()
+  auth.signInPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
+  auth.listPasskeys.mockReset().mockResolvedValue({ data: [], error: null })
+  auth.addPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
+  auth.deletePasskey.mockReset().mockResolvedValue({ data: {}, error: null })
+  auth.revoke.mockReset().mockResolvedValue({ data: {}, error: null })
+  accountApi.get.mockReset().mockResolvedValue({
+    id: 'u1',
+    email: 'ada@example.com',
+    name: 'ada',
+    createdAt: '2026-01-01T00:00:00.000Z'
+  })
+  localStorage.clear()
+  prefsApi.get.mockReset().mockResolvedValue({ preferences: { theme: 'system' }, updatedAt: 0 })
+  prefsApi.put.mockReset().mockImplementation((r: unknown) => Promise.resolve(r))
+  accountApi.export.mockReset()
+  accountApi.remove.mockReset().mockResolvedValue(undefined)
 })
 
 const at = (path: string): void => {
@@ -202,5 +233,102 @@ describe('signing in from the desktop app', () => {
     at('/auth/desktop')
     expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
     expect(auth.ensureRedirect).toHaveBeenCalled()
+  })
+})
+
+describe('account page', () => {
+  it('sends signed-out visitors to the sign-in page', () => {
+    at('/account')
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('only enables deleting once the email is typed exactly, then deletes', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    expect(await screen.findByText('Signed in as ada@example.com')).toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Delete my account' })
+    expect(button).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Confirm your email'), 'ada@example.org')
+    expect(button).toBeDisabled()
+    await userEvent.clear(screen.getByLabelText('Confirm your email'))
+    await userEvent.type(screen.getByLabelText('Confirm your email'), 'Ada@Example.com')
+    expect(button).toBeEnabled()
+    await userEvent.click(button)
+    await waitFor(() => expect(accountApi.remove).toHaveBeenCalledWith('Ada@Example.com'))
+  })
+
+  it('signs out everywhere', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out everywhere' }))
+    await waitFor(() => expect(auth.revoke).toHaveBeenCalled())
+  })
+
+  it('shows an error when the data cannot be downloaded', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    accountApi.export.mockRejectedValue(new Error('boom'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/account')
+    await userEvent.click(await screen.findByRole('button', { name: 'Download my data' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not download your data.')
+  })
+})
+
+describe('passkeys', () => {
+  it('offers a passkey button on the sign-in page only when the browser supports passkeys', async () => {
+    at('/sign-in')
+    expect(screen.queryByRole('button', { name: 'Sign in with a passkey' })).toBeNull()
+    vi.stubGlobal('PublicKeyCredential', class {})
+    document.body.innerHTML = ''
+    at('/sign-in')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with a passkey' }))
+    expect(auth.signInPasskey).toHaveBeenCalled()
+  })
+
+  it('lists, adds and removes passkeys on the account page', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    auth.listPasskeys.mockResolvedValue({ data: [{ id: 'p1', name: 'Laptop' }], error: null })
+    at('/account')
+    expect(await screen.findByText('Laptop')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add a passkey' }))
+    await waitFor(() => expect(auth.addPasskey).toHaveBeenCalledWith({ name: 'Passkey 2' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Laptop' }))
+    await waitFor(() => expect(auth.deletePasskey).toHaveBeenCalledWith({ id: 'p1' }))
+  })
+})
+
+describe('theme sync', () => {
+  it('saves a chosen theme here and on the server', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    await waitFor(() =>
+      expect(prefsApi.put).toHaveBeenCalledWith(
+        expect.objectContaining({ preferences: { theme: 'dark' } })
+      )
+    )
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
+    expect(await screen.findByRole('status')).toHaveTextContent('desktop app will use it too')
+  })
+
+  it('takes a newer theme from another device', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    prefsApi.get.mockResolvedValue({
+      preferences: { theme: 'light' },
+      updatedAt: Date.now() + 1000
+    })
+    at('/account')
+    await waitFor(() => expect(screen.getByLabelText('Theme')).toHaveValue('light'))
+    expect(prefsApi.put).not.toHaveBeenCalled()
+  })
+
+  it('keeps working when the server is down', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    prefsApi.put.mockRejectedValue(new Error('offline'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/account')
+    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    expect(await screen.findByRole('status')).toHaveTextContent('Saved on this device')
+    expect(document.documentElement.classList.contains('dark')).toBe(true)
   })
 })

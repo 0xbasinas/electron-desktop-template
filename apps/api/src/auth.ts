@@ -1,10 +1,13 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { electron } from '@better-auth/electron'
+import { passkey } from '@better-auth/passkey'
+import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
 import { schema } from './db'
 import { magicLinkEmail, type EmailSender } from './email'
+import { isSuppressed } from './suppression'
 import type { Bindings } from './env'
 
 export const APP_NAME = 'Electron Desktop Template'
@@ -59,6 +62,9 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     plugins: [
       // Lets the desktop app sign in through the system browser (PKCE, then a one-time code over the deep link).
       electron(),
+      // Sign in with a fingerprint, face or security key instead of waiting for an email. A passkey is tied to the
+      // site's domain (rpID), so it cannot be used on a look-alike site. Passkeys are added from the account page.
+      passkey({ rpID: new URL(env.BETTER_AUTH_URL).hostname, rpName: APP_NAME }),
       magicLink({
         expiresIn: 5 * 60,
         // Store only a hash of the token, so a leaked database cannot be used to sign in.
@@ -66,9 +72,18 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         sendMagicLink: async ({ email: to, url }) => {
           // Not awaited: the response time must not reveal whether the address already has an account.
           waitUntil(
-            email
-              .send({ to, ...magicLinkEmail(url, APP_NAME) })
-              .catch((error: unknown) => console.error('Could not send the sign-in email', error))
+            (async () => {
+              // An address that bounced or complained recently gets nothing (the answer to the person is the same).
+              if (await isSuppressed(db, to)) {
+                console.warn('Skipped a sign-in email to a suppressed address')
+                return
+              }
+              await email.send({ to, ...magicLinkEmail(url, APP_NAME) })
+            })().catch((error: unknown) => {
+              console.error('Could not send the sign-in email', error)
+              // The one failure that silently locks people out, so make sure someone hears about it.
+              Sentry.captureException(error)
+            })
           )
         }
       })

@@ -2,6 +2,7 @@ import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../src/app'
+import worker from '../src/index'
 import type { Bindings } from '../src/env'
 import type { EmailMessage } from '../src/email'
 
@@ -11,7 +12,7 @@ const ORIGIN = bindings.BETTER_AUTH_URL
 let nextIp = 1
 
 /** An app whose emails are collected instead of sent. Each setup() is a different client IP, so rate limits do not leak between tests. */
-function setup() {
+function setup(overrides: Partial<Bindings> = {}) {
   const ip = `10.0.${Math.floor(nextIp / 250)}.${nextIp++ % 250}`
   const sent: EmailMessage[] = []
   const app = createApp({ emailSender: () => ({ send: async (m) => void sent.push(m) }) })
@@ -23,7 +24,7 @@ function setup() {
     const ctx = createExecutionContext()
     const response = await app.fetch(
       new Request(`${ORIGIN}${path}`, { ...init, headers, redirect: 'manual' }),
-      bindings,
+      { ...bindings, ...overrides },
       ctx
     )
     await waitOnExecutionContext(ctx)
@@ -308,5 +309,302 @@ describe('notes', () => {
       body: JSON.stringify({ title: 'x' })
     })
     expect(response.status).toBe(403)
+  })
+})
+
+describe('account', () => {
+  const json = (cookie: string, method: string, body?: unknown): RequestInit => ({
+    method,
+    headers: { cookie, 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  })
+
+  it('needs a session', async () => {
+    const s = setup()
+    expect((await s.call('/api/account')).status).toBe(401)
+    expect((await s.call('/api/account/export')).status).toBe(401)
+    expect(
+      (await s.call('/api/account', json('', 'DELETE', { confirmEmail: 'x@example.com' }))).status
+    ).toBe(401)
+  })
+
+  it('shows the account and exports everything held about it, without tokens', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'zed@example.com')
+    await s.call('/api/notes', json(cookie, 'POST', { title: 'mine' }))
+
+    const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      email: string
+    }
+    expect(me.email).toBe('zed@example.com')
+
+    const response = await s.call('/api/account/export', { headers: { cookie } })
+    expect(response.headers.get('content-disposition')).toContain('attachment')
+    const text = await response.text()
+    const data = JSON.parse(text) as { notes: { title: string }[]; sessions: unknown[] }
+    expect(data.notes.map((n) => n.title)).toEqual(['mine'])
+    expect(data.sessions).toHaveLength(1)
+    expect(text).not.toMatch(/token/i)
+  })
+
+  it("exports only the caller's own data", async () => {
+    const s = setup()
+    const a = await signIn(s, 'a1@example.com')
+    const b = await signIn(s, 'b1@example.com')
+    await s.call('/api/notes', json(a, 'POST', { title: 'a-only' }))
+    const data = (await (
+      await s.call('/api/account/export', { headers: { cookie: b } })
+    ).json()) as {
+      notes: unknown[]
+    }
+    expect(data.notes).toEqual([])
+  })
+
+  it('refuses to delete without the matching email', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'keep@example.com')
+    const wrong = await s.call(
+      '/api/account',
+      json(cookie, 'DELETE', { confirmEmail: 'other@example.com' })
+    )
+    expect(wrong.status).toBe(400)
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
+  })
+
+  it('deletes the account, its notes and its sessions, and blocks cross-site requests', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'gone@example.com')
+    await s.call('/api/notes', json(cookie, 'POST', { title: 'bye' }))
+    await bindings.DB.prepare(
+      "INSERT INTO passkey (id, name, public_key, user_id, credential_id, counter, device_type, backed_up) VALUES ('pk1', 'laptop', 'k', (SELECT id FROM user WHERE email = ?), 'cred1', 0, 'singleDevice', 0)"
+    )
+      .bind('gone@example.com')
+      .run()
+    await s.call(
+      '/api/preferences',
+      json(cookie, 'PUT', { preferences: { theme: 'dark' }, updatedAt: 5 })
+    )
+    const userId = (await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('gone@example.com')
+      .first<{ id: string }>())!.id
+
+    const cross = await s.call('/api/account', {
+      ...json(cookie, 'DELETE', { confirmEmail: 'gone@example.com' }),
+      headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' }
+    })
+    expect(cross.status).toBe(403)
+
+    const deleted = await s.call(
+      '/api/account',
+      json(cookie, 'DELETE', { confirmEmail: 'gone@example.com' })
+    )
+    expect(deleted.status).toBe(204)
+
+    // The old cookie is dead at once (not after the 5-minute cache), and nothing is left in the database.
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(401)
+    const left = async (table: string, column: string): Promise<number | undefined> =>
+      (
+        await bindings.DB.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE ${column} = ?`)
+          .bind(userId)
+          .first<{ n: number }>()
+      )?.n
+    expect(await left('user', 'id')).toBe(0)
+    expect(await left('session', 'user_id')).toBe(0)
+    expect(await left('note', 'user_id')).toBe(0)
+    expect(await left('passkey', 'user_id')).toBe(0)
+    expect(await left('preference', 'user_id')).toBe(0)
+  })
+})
+
+describe('passkeys', () => {
+  it('offers a challenge for the site domain to anyone, and keeps the list private', async () => {
+    const s = setup()
+    const options = await s.call('/api/auth/passkey/generate-authenticate-options')
+    expect(options.status).toBe(200)
+    const body = (await options.json()) as { challenge: string; rpId?: string }
+    expect(body.challenge).toBeTruthy()
+    expect(body.rpId).toBe(new URL(ORIGIN).hostname)
+
+    expect((await s.call('/api/auth/passkey/list-user-passkeys')).status).toBe(401)
+    const cookie = await signIn(s, 'pk@example.com')
+    const list = await s.call('/api/auth/passkey/list-user-passkeys', { headers: { cookie } })
+    expect(await list.json()).toEqual([])
+  })
+
+  it('needs a session to start adding a passkey', async () => {
+    const s = setup()
+    expect((await s.call('/api/auth/passkey/generate-register-options')).status).toBe(401)
+    const cookie = await signIn(s, 'pk2@example.com')
+    const ok = await s.call('/api/auth/passkey/generate-register-options', { headers: { cookie } })
+    expect(ok.status).toBe(200)
+  })
+})
+
+describe('preferences', () => {
+  const put = (cookie: string, theme: string, updatedAt: number): RequestInit => ({
+    method: 'PUT',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ preferences: { theme }, updatedAt })
+  })
+  const get = async (s: ReturnType<typeof setup>, cookie: string): Promise<unknown> =>
+    (await s.call('/api/preferences', { headers: { cookie } })).json()
+
+  it('needs a session and blocks cross-site writes', async () => {
+    const s = setup()
+    expect((await s.call('/api/preferences')).status).toBe(401)
+    const cookie = await signIn(s, 'pref0@example.com')
+    const cross = await s.call('/api/preferences', {
+      ...put(cookie, 'dark', 5),
+      headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' }
+    })
+    expect(cross.status).toBe(403)
+  })
+
+  it('starts with the defaults and keeps the newest edit', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'pref1@example.com')
+    expect(await get(s, cookie)).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+
+    const first = await s.call('/api/preferences', put(cookie, 'dark', 100))
+    expect(await first.json()).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+
+    // An older edit from a device that was offline loses, and gets the newer copy back.
+    const stale = await s.call('/api/preferences', put(cookie, 'light', 50))
+    expect(await stale.json()).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+    expect(await get(s, cookie)).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+
+    const newer = await s.call('/api/preferences', put(cookie, 'light', 200))
+    expect(await newer.json()).toEqual({ preferences: { theme: 'light' }, updatedAt: 200 })
+  })
+
+  it('rejects values it does not know', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'pref2@example.com')
+    expect((await s.call('/api/preferences', put(cookie, 'pink', 5))).status).toBe(400)
+    expect((await s.call('/api/preferences', put(cookie, 'dark', -5))).status).toBe(400)
+  })
+
+  it('cannot pin a time in the far future, and keeps people apart', async () => {
+    const s = setup()
+    const a = await signIn(s, 'pref3@example.com')
+    const b = await signIn(s, 'pref4@example.com')
+    const far = Date.now() + 10 * 365 * 86_400_000
+    const saved = (await (await s.call('/api/preferences', put(a, 'dark', far))).json()) as {
+      updatedAt: number
+    }
+    expect(saved.updatedAt).toBeLessThan(Date.now() + 10 * 60_000)
+    expect(await get(s, b)).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+  })
+})
+
+describe('the deployed entry point', () => {
+  it('serves requests through the error-reporting wrapper, with or without a Sentry DSN', async () => {
+    for (const dsn of [undefined, 'https://public@o0.ingest.sentry.io/0']) {
+      const ctx = createExecutionContext()
+      const response = await worker.fetch(
+        new Request(`${ORIGIN}/api/health`),
+        { ...bindings, SENTRY_DSN: dsn } as Bindings,
+        ctx
+      )
+      await waitOnExecutionContext(ctx)
+      expect(response.status).toBe(200)
+      expect(await response.json()).toEqual({ ok: true })
+    }
+  })
+})
+
+describe('bounces and complaints (Resend webhook)', () => {
+  const secret = bindings.RESEND_WEBHOOK_SECRET!
+  const b64 = (bytes: ArrayBuffer | Uint8Array): string =>
+    btoa(String.fromCharCode(...new Uint8Array(bytes as ArrayBuffer)))
+
+  /** Signs like Svix/Resend: HMAC-SHA256 of "id.timestamp.body" with the base64 part of the secret. */
+  async function signedPost(
+    s: ReturnType<typeof setup>,
+    event: unknown,
+    options: { sign?: boolean; timestamp?: number } = {}
+  ): Promise<Response> {
+    const body = JSON.stringify(event)
+    const id = 'msg_' + crypto.randomUUID()
+    const timestamp = String(options.timestamp ?? Math.floor(Date.now() / 1000))
+    const key = await crypto.subtle.importKey(
+      'raw',
+      Uint8Array.from(atob(secret.slice('whsec_'.length)), (c) => c.charCodeAt(0)),
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    )
+    const signature = b64(
+      await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(`${id}.${timestamp}.${body}`))
+    )
+    return s.call('/api/webhooks/resend', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'svix-id': id,
+        'svix-timestamp': timestamp,
+        'svix-signature': options.sign === false ? 'v1,AAAA' : `v1,${signature}`
+      },
+      body
+    })
+  }
+
+  const bounce = (to: string, type: string): unknown => ({
+    type: 'email.bounced',
+    created_at: new Date().toISOString(),
+    data: { email_id: 'e1', to: [to], bounce: { type } }
+  })
+  const requestLink = (s: ReturnType<typeof setup>, email: string): Promise<Response> =>
+    s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email, callbackURL: '/app' })
+    })
+
+  it('refuses unsigned, wrongly signed and stale requests, and is off without a secret', async () => {
+    const s = setup()
+    expect(
+      (await signedPost(s, bounce('x@example.com', 'Permanent'), { sign: false })).status
+    ).toBe(400)
+    const stale = Math.floor(Date.now() / 1000) - 3600
+    expect(
+      (await signedPost(s, bounce('x@example.com', 'Permanent'), { timestamp: stale })).status
+    ).toBe(400)
+    const off = setup({ RESEND_WEBHOOK_SECRET: undefined })
+    expect((await signedPost(off, bounce('x@example.com', 'Permanent'))).status).toBe(404)
+  })
+
+  it('stops emailing an address after a permanent bounce, and tells nobody that it did', async () => {
+    const s = setup()
+    expect((await signedPost(s, bounce('Bad@Example.com', 'Permanent'))).status).toBe(200)
+
+    const response = await requestLink(s, 'bad@example.com')
+    expect(response.status).toBe(200) // same answer as for any address
+    expect(s.sent).toHaveLength(0)
+
+    await requestLink(s, 'good@example.com')
+    expect(s.sent.map((m) => m.to)).toEqual(['good@example.com'])
+  })
+
+  it('ignores temporary bounces, and suppresses spam complaints', async () => {
+    const s = setup()
+    await signedPost(s, bounce('full@example.com', 'Transient'))
+    await requestLink(s, 'full@example.com')
+    expect(s.sent).toHaveLength(1)
+
+    await signedPost(s, { type: 'email.complained', data: { to: ['spam@example.com'] } })
+    await requestLink(s, 'spam@example.com')
+    expect(s.sent).toHaveLength(1)
+  })
+
+  it('tries again after the suppression period', async () => {
+    const s = setup()
+    await signedPost(s, bounce('old@example.com', 'Permanent'))
+    const longAgo = Date.now() - 31 * 86_400_000
+    await bindings.DB.prepare('UPDATE email_suppression SET created_at = ? WHERE email = ?')
+      .bind(longAgo, 'old@example.com')
+      .run()
+    await requestLink(s, 'old@example.com')
+    expect(s.sent).toHaveLength(1)
   })
 })

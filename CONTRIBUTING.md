@@ -16,6 +16,7 @@ pnpm format
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm test:scripts   # if you touched scripts/
 ```
 
 CI runs the same checks, plus a full installer build on all three systems. Please keep PRs focused, add or update tests for behavior changes, and describe what changed and why.
@@ -35,6 +36,9 @@ and it merges when every required check passes.
 A merge that changes the app (`apps/desktop/src/`, `apps/desktop/build/`, `apps/desktop/resources/`, `apps/desktop/package.json`, the lockfile or build config) publishes a
 release (`<major>.<minor>.<commit count>`), first to 10% of users and then more as it proves healthy. So only merge
 changes that are ready to ship. Docs, tests, scripts and CI changes don't release.
+
+Changes under `apps/web`, `apps/api` and `packages/` deploy the website and API (after setup, see [docs/setup-cloud.md](docs/setup-cloud.md));
+packages are also bundled into the desktop app, so a change there can publish a desktop release too.
 
 Using an AI coding agent? Point it at [AGENTS.md](AGENTS.md).
 

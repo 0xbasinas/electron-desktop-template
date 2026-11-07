@@ -22,6 +22,7 @@ test('packaged app opens and the renderer talks to main', async () => {
     })
     expect(result.platform).toBe(process.platform)
     expect(result.settings).toEqual({
+      theme: 'system',
       updateChannel: 'latest',
       closeToTray: false,
       launchAtLogin: false,
@@ -80,11 +81,33 @@ test('main rejects invalid settings from the renderer', async () => {
       return [
         await attempt({ updateChannel: 'nightly' }),
         await attempt({ closeToTray: 'yes' }),
+        await attempt({ theme: 'pink' }),
         await attempt({ isAdmin: true }),
         await attempt('latest')
       ]
     })
-    expect(outcomes).toEqual(['rejected', 'rejected', 'rejected', 'rejected'])
+    expect(outcomes).toEqual(['rejected', 'rejected', 'rejected', 'rejected', 'rejected'])
+  } finally {
+    await app.close()
+  }
+})
+
+test('the theme setting changes the colours the page sees', async () => {
+  const app = await launchApp()
+  try {
+    const page = await app.firstWindow()
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    // Playwright pins pages to a light colour scheme; let the app's own theme decide.
+    await page.emulateMedia({ colorScheme: null })
+    const dark = (): Promise<boolean> =>
+      page.evaluate(() => window.matchMedia('(prefers-color-scheme: dark)').matches)
+
+    await page.evaluate(() => (window as unknown as WithApi).api.updateSettings({ theme: 'dark' }))
+    await expect.poll(dark).toBe(true)
+    await expect(page.locator('html')).toHaveClass(/dark/)
+    await page.evaluate(() => (window as unknown as WithApi).api.updateSettings({ theme: 'light' }))
+    await expect.poll(dark).toBe(false)
+    await expect(page.locator('html')).not.toHaveClass(/dark/)
   } finally {
     await app.close()
   }

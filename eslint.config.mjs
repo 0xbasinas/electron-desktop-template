@@ -43,7 +43,7 @@ export default defineConfig(
   },
   {
     // The API's value is its inferred types (Hono routes for the typed client, Better Auth options).
-    files: ['apps/api/**/*.ts'],
+    files: ['apps/api/**/*.ts', 'scripts/**/*.mjs'],
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
   },
   eslintConfigPrettier
