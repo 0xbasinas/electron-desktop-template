@@ -57,7 +57,11 @@ const edits = {
     s.replace(/<title>.*<\/title>/, `<title>${title}</title>`),
   'apps/desktop/src/renderer/src/App.tsx': (s) => s.replaceAll(oldTitle, title),
   'apps/web/src/config.ts': (s) =>
-    s.replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`).replaceAll(oldTitle, title),
+    s
+      .replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`)
+      .replace(`DESKTOP_SCHEME = '${oldName}'`, `DESKTOP_SCHEME = '${name}'`)
+      .replaceAll(oldTitle, title),
+  'apps/api/wrangler.jsonc': (s) => s.replace(`"${oldName}:/"`, `"${name}:/"`),
   'apps/web/index.html': (s) => s.replace(/<title>.*<[/]title>/, `<title>${title}</title>`),
   'README.md': (s) =>
     s.replace(/^# .*$/m, `# ${title}`).replaceAll(`${oldOwner}/${oldName}`, `${owner}/${name}`),

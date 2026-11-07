@@ -130,6 +130,111 @@ describe('sign-in with a magic link', () => {
   })
 })
 
+describe('desktop sign-in (system browser, PKCE)', () => {
+  const b64url = (bytes: Uint8Array): string =>
+    btoa(String.fromCharCode(...bytes))
+      .replaceAll('+', '-')
+      .replaceAll('/', '_')
+      .replace(/=+$/, '')
+  const linkIn = (text: string): string => /https?:\/\/\S+magic-link\/verify\S+/.exec(text)![0]
+
+  it('hands the desktop app a one-time code that it can exchange for its own session', async () => {
+    const s = setup()
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)))
+    const challenge = b64url(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
+    )
+    const state = 'stateABC123'
+    const query = new URLSearchParams({ client_id: 'electron', code_challenge: challenge, state })
+
+    // The sign-in page forwards the desktop parameters with the magic-link request.
+    const request = await s.call(`/api/auth/sign-in/magic-link?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'desk@example.com', callbackURL: '/auth/desktop' })
+    })
+    expect(request.status).toBe(200)
+    const transfer = request.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0])
+      .join('; ')
+    expect(transfer).toContain('transfer_token')
+
+    // The emailed link is opened in the same browser, so it carries the transfer cookie.
+    const link = linkIn(s.sent[0]!.text)
+    const verify = await s.call(new URL(link).pathname + new URL(link).search, {
+      headers: { cookie: transfer }
+    })
+    expect(verify.status).toBe(302)
+    const redirectCookie = verify.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0]!)
+      .find((c) => c.startsWith('better-auth.electron='))
+    expect(redirectCookie).toBeTruthy()
+    const { identifier, state: returnedState } = JSON.parse(
+      atob(decodeURIComponent(redirectCookie!.split('=')[1]!).replace(/-/g, '+').replace(/_/g, '/'))
+    ) as { identifier: string; state: string }
+    expect(returnedState).toBe(state)
+
+    // The desktop app exchanges the code (with its secret verifier) for a session. Its origin is the app scheme.
+    const exchange = await s.call('/api/auth/electron/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'electron-desktop-template:/' },
+      body: JSON.stringify({ token: identifier, state, code_verifier: verifier })
+    })
+    expect(exchange.status).toBe(200)
+    const body = (await exchange.json()) as { user: { email: string } }
+    expect(body.user.email).toBe('desk@example.com')
+    expect(exchange.headers.getSetCookie().join(';')).toContain('session_token')
+
+    // The code works once.
+    const again = await s.call('/api/auth/electron/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'electron-desktop-template:/' },
+      body: JSON.stringify({ token: identifier, state, code_verifier: verifier })
+    })
+    expect(again.status).toBeGreaterThanOrEqual(400)
+  })
+
+  it('refuses a wrong code verifier', async () => {
+    const s = setup()
+    const challenge = b64url(
+      new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('right')))
+    )
+    const query = new URLSearchParams({
+      client_id: 'electron',
+      code_challenge: challenge,
+      state: 'st'
+    })
+    const request = await s.call(`/api/auth/sign-in/magic-link?${query}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'pkce@example.com', callbackURL: '/auth/desktop' })
+    })
+    const transfer = request.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0])
+      .join('; ')
+    const link = linkIn(s.sent[0]!.text)
+    const verify = await s.call(new URL(link).pathname + new URL(link).search, {
+      headers: { cookie: transfer }
+    })
+    const cookie = verify.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0]!)
+      .find((c) => c.startsWith('better-auth.electron='))!
+    const { identifier } = JSON.parse(
+      atob(decodeURIComponent(cookie.split('=')[1]!).replace(/-/g, '+').replace(/_/g, '/'))
+    ) as { identifier: string }
+    const exchange = await s.call('/api/auth/electron/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'electron-desktop-template:/' },
+      body: JSON.stringify({ token: identifier, state: 'st', code_verifier: 'wrong' })
+    })
+    expect(exchange.status).toBe(400)
+  })
+})
+
 describe('rate limiting', () => {
   it('slows down repeated sign-in requests from one address', async () => {
     const s = setup()

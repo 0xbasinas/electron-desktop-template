@@ -1,4 +1,5 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
+import { electron } from '@better-auth/electron'
 import { betterAuth } from 'better-auth'
 import { magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
@@ -56,6 +57,8 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       backgroundTasks: { handler: waitUntil }
     },
     plugins: [
+      // Lets the desktop app sign in through the system browser (PKCE, then a one-time code over the deep link).
+      electron(),
       magicLink({
         expiresIn: 5 * 60,
         // Store only a hash of the token, so a leaked database cannot be used to sign in.

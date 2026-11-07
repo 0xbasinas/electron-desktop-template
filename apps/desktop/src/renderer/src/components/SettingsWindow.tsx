@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AppInfo, UpdateChannel, UpdaterEvent, WhatsNew } from '../../../shared/ipc'
 import { TitleBar } from '@renderer/components/TitleBar'
 import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
+import { useAccount } from '@renderer/hooks/useAccount'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useUpdater } from '@renderer/hooks/useUpdater'
 import { Button, cn } from '@repo/ui'
@@ -80,6 +81,8 @@ function Toggle({
 export function SettingsWindow(): React.JSX.Element {
   const { settings, update } = useSettings()
   const updater = useUpdater()
+  const { account, signIn, signOut } = useAccount()
+  const [signingIn, setSigningIn] = useState(false)
   const [info, setInfo] = useState<AppInfo>()
   const [whatsNew, setWhatsNew] = useState<WhatsNew>()
 
@@ -95,6 +98,39 @@ export function SettingsWindow(): React.JSX.Element {
     <>
       <TitleBar />
       <main className="mx-auto max-w-lg space-y-8 p-6 pt-16">
+        {account?.available && (
+          <Section title="Account">
+            {account.user ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm">
+                  Signed in as <strong>{account.user.email}</strong>
+                </span>
+                <Button variant="outline" size="sm" onClick={() => void signOut()}>
+                  Sign out
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  disabled={signingIn}
+                  onClick={() => {
+                    setSigningIn(true)
+                    void signIn().finally(() => setSigningIn(false))
+                  }}
+                >
+                  Sign in
+                </Button>
+                <span role="status" className="text-sm text-muted-foreground">
+                  {signingIn
+                    ? 'Finish signing in in your browser, then come back here.'
+                    : 'Opens your browser. We email you a sign-in link.'}
+                </span>
+              </div>
+            )}
+          </Section>
+        )}
+
         <Section title="Updates">
           <div role="radiogroup" aria-label="Update channel" className="grid grid-cols-2 gap-2">
             {CHANNELS.map((channel) => {

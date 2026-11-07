@@ -2,6 +2,7 @@ import { app, type BrowserWindow } from 'electron'
 import { existsSync } from 'fs'
 import { resolve } from 'path'
 import { IPC } from '../shared/ipc'
+import { handleAuthCallback, isAuthCallback } from './auth'
 import { showWindow } from './windowUtils'
 
 // URL scheme for deep links, e.g. electron-desktop-template://open/42
@@ -32,10 +33,21 @@ export function flushPending(): void {
   queued.forEach(({ channel, payload }) => dispatch(channel, payload))
 }
 
+/** A deep link: the sign-in callback is handled here in main; everything else goes to the page. */
+function route(url: string): void {
+  if (isAuthCallback(url)) {
+    const win = getWindow()
+    if (win) showWindow(win)
+    void handleAuthCallback(url)
+    return
+  }
+  dispatch(IPC.deepLink, url)
+}
+
 function handleArgv(argv: string[]): void {
   for (const arg of argv) {
-    if (arg.startsWith(`${PROTOCOL}://`)) {
-      dispatch(IPC.deepLink, arg)
+    if (arg.startsWith(`${PROTOCOL}:`)) {
+      route(arg)
     } else if (FILE_EXTENSIONS.some((ext) => arg.toLowerCase().endsWith(ext)) && existsSync(arg)) {
       dispatch(IPC.openFile, resolve(arg))
     }
@@ -56,7 +68,7 @@ export function initDeepLinks(windowGetter: () => BrowserWindow | undefined): vo
   // macOS
   app.on('open-url', (event, url) => {
     event.preventDefault()
-    dispatch(IPC.deepLink, url)
+    route(url)
   })
   app.on('open-file', (event, path) => {
     event.preventDefault()
