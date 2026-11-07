@@ -1,14 +1,41 @@
 name: Release
+# Every push to main publishes a release. Version = <major>.<minor from package.json>.<commit count>,
+# so the first commit is 0.0.1 and it grows by itself. Bump major/minor by editing package.json.
 on:
   push:
-    tags: ['v*']
+    branches: [main]
+    paths-ignore:
+      - '**.md'
+      - '.github/workflows/ci.yml'
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 jobs:
-  release:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      sha: ${{ steps.v.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: v
+        run: |
+          base=$(node -p "require('./package.json').version.split('.').slice(0,2).join('.')")
+          count=$(git rev-list --count HEAD)
+          echo "version=$base.$count" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -26,6 +53,18 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm run ${{ matrix.script }} --publish always
+      - run: pnpm run ${{ matrix.script }} --publish always -c.extraMetadata.version=${{ needs.version.outputs.version }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  name-release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - run: >
+          gh release edit "v${{ needs.version.outputs.version }}"
+          --repo "${{ github.repository }}"
+          --title "v${{ needs.version.outputs.version }} (${{ needs.version.outputs.sha }})"
+          --notes "Build of commit ${{ needs.version.outputs.sha }}: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
