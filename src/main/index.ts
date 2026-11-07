@@ -15,7 +15,8 @@ const backgroundColor = (): string => (nativeTheme.shouldUseDarkColors ? '#0a0a0
 const overlay = (): Electron.TitleBarOverlayOptions => ({
   color: backgroundColor(),
   symbolColor: nativeTheme.shouldUseDarkColors ? '#fafafa' : '#0a0a0a',
-  height: 40
+  // One pixel shorter than the 40px title bar, so the bar's bottom border stays visible under the controls.
+  height: 39
 })
 
 function createWindow(): void {
