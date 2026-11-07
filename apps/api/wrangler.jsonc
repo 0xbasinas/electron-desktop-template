@@ -7,6 +7,9 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
 
+  // Filled in by `pnpm setup:cloud` when the site has its own domain: [{ "pattern": "app.example.com", "custom_domain": true }]
+  "routes": [],
+
   // The Worker serves the built web app and the API from one origin, so the sign-in cookie is
   // first-party and there is no CORS. Only /api/* runs Worker code; static files are free and unmetered.
   "assets": {

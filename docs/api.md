@@ -28,30 +28,16 @@ pnpm --filter @repo/api dev                          # http://localhost:8787
 
 Without `RESEND_API_KEY`, the sign-in link is printed in the terminal.
 
-## Deploy (one-time setup)
+## Deploy
 
-1. Create the database: `pnpm --filter @repo/api exec wrangler d1 create electron-desktop-template`, then put the printed
-   `database_id` into `apps/api/wrangler.jsonc`.
-2. Apply the schema: `pnpm --filter @repo/api db:migrate:remote`.
-3. Set secrets: `wrangler secret put BETTER_AUTH_SECRET` (a long random string) and `wrangler secret put RESEND_API_KEY`.
-4. In `wrangler.jsonc` set `BETTER_AUTH_URL` to your public address and `EMAIL_FROM` to an address on a domain you have
-   verified in Resend (Resend only sends from verified domains).
-5. Deploy by hand with `pnpm exec turbo run build --filter=@repo/web && pnpm --filter @repo/api exec wrangler deploy`, or let
-   GitHub do it (next section).
+Run `pnpm setup:cloud` once. It creates the D1 database, verifies your sending domain in Resend, generates the secrets,
+applies the migrations, deploys the Worker and sets the GitHub variables. Every step, the options and the manual
+equivalents are in [setup-cloud.md](setup-cloud.md).
 
-### Automatic deploys
-
-`.github/workflows/deploy-web.yml` builds the site, applies pending D1 migrations and deploys the Worker whenever
-`apps/web`, `apps/api` or `packages` change on `main`. It does nothing until you:
-
-1. Create a Cloudflare API token (dashboard → My Profile → API Tokens → _Edit Cloudflare Workers_ template, and add
-   **D1: Edit**). Limit it to your account.
-2. Add repository secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` (Settings → Secrets and variables → Actions).
-   Better still, put them in an environment called `production` so only deploys can read them.
-3. Add the repository variable `CLOUDFLARE_DEPLOY` = `true`.
-
-The Worker's own secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) live in Cloudflare, set once with `wrangler secret put`;
-CI never sees them. Migrations run before the new code, so write them to be compatible with the previous version.
+After that, `.github/workflows/deploy-web.yml` deploys on every merge to `main` that changes `apps/web`, `apps/api` or
+`packages/` (it applies pending D1 migrations first, then deploys; it stays off until the repository variable
+`CLOUDFLARE_DEPLOY` is `true`). The Worker's own secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) live in Cloudflare and
+CI never sees them. Migrations run before the new code, so write each one to work with the previous version too.
 
 ## Changing the database
 
