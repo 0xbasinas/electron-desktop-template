@@ -19,7 +19,9 @@ if (platform === 'darwin') {
   process.exit(0)
 }
 
-const builder = readFileSync('electron-builder.yml', 'utf8')
+const builder = readFileSync('electron-builder.yml', 'utf8').replace(/
+/g, '
+')
 const productName = builder.match(/^productName: (.*)$/m)[1]
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 
