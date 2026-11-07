@@ -18,7 +18,7 @@ pnpm typecheck
 pnpm test
 ```
 
-CI runs the same checks. Please keep PRs focused, add or update tests for behavior changes, and describe what changed and why.
+CI runs the same checks, plus a full installer build on all three systems. Please keep PRs focused, add or update tests for behavior changes, and describe what changed and why.
 
 ## Commit messages
 
@@ -26,9 +26,17 @@ Use [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): 
 
 A git hook checks your message when you commit, and CI checks every commit in a pull request. The release notes are built from these messages.
 
-## Releases
+## Pull requests and releases
 
-A push to `main` that changes the app (`src/`, `build/`, `package.json` and build config) publishes a release (`<major>.<minor>.<commit count>`) once CI passes, so only merge changes that are ready to ship. Docs, tests and CI changes don't release.
+`main` is protected: no direct pushes (admins included). Open a pull request from a branch; the PR **title** must be a
+Conventional Commit, because squash merging uses it as the commit message. Turn on auto-merge (`gh pr merge --auto --squash`)
+and it merges when every required check passes.
+
+A merge that changes the app (`src/`, `build/`, `resources/`, `package.json`, the lockfile or build config) publishes a
+release (`<major>.<minor>.<commit count>`), first to 10% of users and then more as it proves healthy. So only merge
+changes that are ready to ship. Docs, tests, scripts and CI changes don't release.
+
+Using an AI coding agent? Point it at [AGENTS.md](AGENTS.md).
 
 ## Reporting bugs and ideas
 

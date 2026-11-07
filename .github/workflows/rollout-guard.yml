@@ -1,10 +1,14 @@
 name: Rollout guard
-# Every hour: if the newest stable release is crashing more than allowed, stop offering it (0% rollout)
-# and open an issue. Needs crash reports in Sentry; does nothing until the secrets below exist.
+# Every hour, for the newest stable release:
+#   1. guard: if it is crashing more than allowed, stop offering it (0% rollout) and open an issue.
+#   2. promote: if it is healthy, raise the rollout on a schedule (25% after 1 day, 50% after 2, 100% after 3).
+# Needs crash reports in Sentry; the guard does nothing until the secrets below exist.
 #   SENTRY_AUTH_TOKEN  Sentry token with org:read and project:read
 #   SENTRY_ORG         organization slug
 #   SENTRY_PROJECT     numeric project id
-# Thresholds live in scripts/lib/guard.mjs.
+# Without crash data nothing is promoted automatically, unless the repository variable
+# AUTO_PROMOTE_WITHOUT_CRASH_DATA is set to true (then age alone decides).
+# Thresholds live in scripts/lib/guard.mjs, the schedule in scripts/lib/promote.mjs.
 on:
   schedule:
     - cron: '7 * * * *'
@@ -20,7 +24,7 @@ concurrency:
 
 jobs:
   guard:
-    name: Check crash rate
+    name: Check crash rate and promote
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,9 +32,16 @@ jobs:
         with:
           node-version: 24
       - name: Run the guard
+        id: guard
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
         run: node scripts/rollout-guard.mjs
+      - name: Promote the rollout
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GUARD_VERDICT: ${{ steps.guard.outputs.verdict }}
+          AUTO_PROMOTE_WITHOUT_CRASH_DATA: ${{ vars.AUTO_PROMOTE_WITHOUT_CRASH_DATA }}
+        run: node scripts/rollout-promote.mjs

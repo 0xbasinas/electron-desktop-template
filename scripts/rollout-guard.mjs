@@ -5,7 +5,7 @@
 // Needs: SENTRY_AUTH_TOKEN (scope: org:read, project:read), SENTRY_ORG (slug), SENTRY_PROJECT (numeric id),
 // plus the GitHub CLI (`gh`) with GH_TOKEN. Without the Sentry values it does nothing.
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { decide, parseSessions } from './lib/guard.mjs'
@@ -14,11 +14,22 @@ import { readRollout, withRollout } from './lib/rollout.mjs'
 const { SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT, GITHUB_REPOSITORY } = process.env
 const MAX_AGE_DAYS = 7 // a release older than this is no longer "new", so the guard leaves it alone
 
+// Tell the next workflow step what we found: healthy, paused or unknown (not enough data).
+function finish(verdict) {
+  if (process.env.GITHUB_OUTPUT)
+    appendFileSync(
+      process.env.GITHUB_OUTPUT,
+      `verdict=${verdict}
+`
+    )
+  process.exit(0)
+}
+
 if (!SENTRY_AUTH_TOKEN || !SENTRY_ORG || !SENTRY_PROJECT) {
   console.log(
     'Rollout guard is not configured (SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT). Skipping.'
   )
-  process.exit(0)
+  finish('unknown')
 }
 
 const gh = (...args) => execFileSync('gh', args, { encoding: 'utf8' })
@@ -52,21 +63,21 @@ const releases = JSON.parse(
 const [newest, before] = releases
 if (!newest) {
   console.log('No stable release yet.')
-  process.exit(0)
+  finish('unknown')
 }
 
 const ageDays = (Date.now() - new Date(newest.publishedAt).getTime()) / 86_400_000
 if (ageDays > MAX_AGE_DAYS) {
   console.log(`${newest.tagName} is ${ageDays.toFixed(1)} days old; not guarding it.`)
-  process.exit(0)
+  finish('unknown')
 }
 
 const version = (tag) => tag.replace(/^v/, '')
 const current = await sessionsFor(version(newest.tagName))
 const previous = before ? await sessionsFor(version(before.tagName)) : null
-const { pause, reason } = decide(current, previous)
+const { pause, verdict, reason } = decide(current, previous)
 console.log(`${newest.tagName}: ${reason}`)
-if (!pause) process.exit(0)
+if (!pause) finish(verdict)
 
 // Pause: set every manifest to 0%, unless that has already been done.
 const dir = mkdtempSync(join(tmpdir(), 'guard-'))
@@ -77,7 +88,7 @@ const manifests = readdirSync(dir)
 
 if (manifests.every((file) => readRollout(readFileSync(file, 'utf8')) === 0)) {
   console.log('Already paused.')
-  process.exit(0)
+  finish('paused')
 }
 for (const file of manifests) writeFileSync(file, withRollout(readFileSync(file, 'utf8'), 0))
 gh('release', 'upload', newest.tagName, ...manifests, '--clobber', ...repoArgs)
@@ -94,3 +105,4 @@ gh(
     `- Really broken: run **Actions > Rollback release** for ${newest.tagName}, then ship a fix.`
 )
 console.log(`Paused ${newest.tagName}.`)
+finish('paused')

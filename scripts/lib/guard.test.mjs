@@ -60,6 +60,11 @@ describe('decide', () => {
   })
 
   it('keeps a healthy release going', () => {
-    expect(decide(ok, { sessions: 500, crashFreeRate: 0.996 })).toMatchObject({ pause: false })
+    expect(decide(ok, { sessions: 500, crashFreeRate: 0.996 })).toMatchObject({
+      pause: false,
+      verdict: 'healthy'
+    })
+    expect(decide(null, null).verdict).toBe('unknown')
+    expect(decide({ sessions: 100, crashFreeRate: 0.5 }, null).verdict).toBe('pause')
   })
 })

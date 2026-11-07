@@ -26,7 +26,7 @@ export function parseSessions(response) {
 /**
  * @param {{sessions:number, crashFreeRate:number} | null} current   the release being rolled out
  * @param {{sessions:number, crashFreeRate:number} | null} previous  the release before it, if known
- * @returns {{pause: boolean, reason: string}}
+ * @returns {{pause: boolean, verdict: 'pause' | 'healthy' | 'unknown', reason: string}}
  */
 export function decide(current, previous, thresholds = DEFAULT_THRESHOLDS) {
   const t = { ...DEFAULT_THRESHOLDS, ...thresholds }
@@ -36,6 +36,7 @@ export function decide(current, previous, thresholds = DEFAULT_THRESHOLDS) {
     const seen = current?.sessions ?? 0
     return {
       pause: false,
+      verdict: 'unknown',
       reason: `Only ${seen} sessions so far (need ${t.minSessions}); not judging yet.`
     }
   }
@@ -43,6 +44,7 @@ export function decide(current, previous, thresholds = DEFAULT_THRESHOLDS) {
   if (current.crashFreeRate < t.minCrashFreeRate) {
     return {
       pause: true,
+      verdict: 'pause',
       reason: `Crash-free sessions are ${percent(current.crashFreeRate)}, below the ${percent(t.minCrashFreeRate)} limit (${current.sessions} sessions).`
     }
   }
@@ -52,6 +54,7 @@ export function decide(current, previous, thresholds = DEFAULT_THRESHOLDS) {
     if (drop > t.maxDropFromPrevious) {
       return {
         pause: true,
+        verdict: 'pause',
         reason: `Crash-free sessions fell from ${percent(previous.crashFreeRate)} to ${percent(current.crashFreeRate)}, more than the allowed ${percent(t.maxDropFromPrevious)} drop.`
       }
     }
@@ -59,6 +62,7 @@ export function decide(current, previous, thresholds = DEFAULT_THRESHOLDS) {
 
   return {
     pause: false,
+    verdict: 'healthy',
     reason: `Healthy: ${percent(current.crashFreeRate)} crash-free over ${current.sessions} sessions.`
   }
 }
