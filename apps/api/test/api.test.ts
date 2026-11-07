@@ -72,15 +72,15 @@ describe('api', () => {
     expect(response.headers.get('x-content-type-options')).toBe('nosniff')
   })
 
-  it('refuses notes without a session', async () => {
+  it('refuses private data without a session', async () => {
     const s = setup()
-    expect((await s.call('/api/notes')).status).toBe(401)
-    const post = await s.call('/api/notes', {
-      method: 'POST',
+    expect((await s.call('/api/preferences')).status).toBe(401)
+    const put = await s.call('/api/preferences', {
+      method: 'PUT',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ title: 'x' })
+      body: JSON.stringify({ preferences: { theme: 'dark' }, updatedAt: 1 })
     })
-    expect(post.status).toBe(401)
+    expect(put.status).toBe(401)
   })
 })
 
@@ -252,66 +252,6 @@ describe('rate limiting', () => {
   })
 })
 
-describe('notes', () => {
-  const json = (cookie: string, method: string, body?: unknown): RequestInit => ({
-    method,
-    headers: { cookie, 'content-type': 'application/json' },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) })
-  })
-
-  it('creates, lists and deletes a note', async () => {
-    const s = setup()
-    const cookie = await signIn(s, 'notes@example.com')
-
-    const created = await s.call('/api/notes', json(cookie, 'POST', { title: '  Buy milk ' }))
-    expect(created.status).toBe(201)
-    const note = (await created.json()) as { id: string; title: string }
-    expect(note.title).toBe('Buy milk')
-
-    const list = (await (await s.call('/api/notes', { headers: { cookie } })).json()) as {
-      id: string
-    }[]
-    expect(list.map((n) => n.id)).toEqual([note.id])
-
-    expect((await s.call(`/api/notes/${note.id}`, json(cookie, 'DELETE'))).status).toBe(204)
-    expect(await (await s.call('/api/notes', { headers: { cookie } })).json()).toEqual([])
-  })
-
-  it('validates input', async () => {
-    const s = setup()
-    const cookie = await signIn(s, 'valid@example.com')
-    const response = await s.call('/api/notes', json(cookie, 'POST', { title: '' }))
-    expect(response.status).toBe(400)
-  })
-
-  it("never shows or deletes another user's notes", async () => {
-    const s = setup()
-    const alice = await signIn(s, 'alice@example.com')
-    const bob = await signIn(s, 'bob@example.com')
-
-    const created = await s.call('/api/notes', json(alice, 'POST', { title: 'private' }))
-    const { id } = (await created.json()) as { id: string }
-
-    expect(await (await s.call('/api/notes', { headers: { cookie: bob } })).json()).toEqual([])
-    expect((await s.call(`/api/notes/${id}`, json(bob, 'DELETE'))).status).toBe(404)
-    expect(
-      ((await (await s.call('/api/notes', { headers: { cookie: alice } })).json()) as unknown[])
-        .length
-    ).toBe(1)
-  })
-
-  it('blocks cross-site writes (CSRF)', async () => {
-    const s = setup()
-    const cookie = await signIn(s, 'csrf@example.com')
-    const response = await s.call('/api/notes', {
-      method: 'POST',
-      headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' },
-      body: JSON.stringify({ title: 'x' })
-    })
-    expect(response.status).toBe(403)
-  })
-})
-
 describe('account', () => {
   const json = (cookie: string, method: string, body?: unknown): RequestInit => ({
     method,
@@ -331,7 +271,10 @@ describe('account', () => {
   it('shows the account and exports everything held about it, without tokens', async () => {
     const s = setup()
     const cookie = await signIn(s, 'zed@example.com')
-    await s.call('/api/notes', json(cookie, 'POST', { title: 'mine' }))
+    await s.call(
+      '/api/preferences',
+      json(cookie, 'PUT', { preferences: { theme: 'dark' }, updatedAt: 7 })
+    )
 
     const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
       email: string
@@ -341,8 +284,11 @@ describe('account', () => {
     const response = await s.call('/api/account/export', { headers: { cookie } })
     expect(response.headers.get('content-disposition')).toContain('attachment')
     const text = await response.text()
-    const data = JSON.parse(text) as { notes: { title: string }[]; sessions: unknown[] }
-    expect(data.notes.map((n) => n.title)).toEqual(['mine'])
+    const data = JSON.parse(text) as {
+      preferences: { preferences: { theme: string } }
+      sessions: unknown[]
+    }
+    expect(data.preferences.preferences.theme).toBe('dark')
     expect(data.sessions).toHaveLength(1)
     expect(text).not.toMatch(/token/i)
   })
@@ -351,13 +297,27 @@ describe('account', () => {
     const s = setup()
     const a = await signIn(s, 'a1@example.com')
     const b = await signIn(s, 'b1@example.com')
-    await s.call('/api/notes', json(a, 'POST', { title: 'a-only' }))
+    await s.call(
+      '/api/preferences',
+      json(a, 'PUT', { preferences: { theme: 'dark' }, updatedAt: 7 })
+    )
     const data = (await (
       await s.call('/api/account/export', { headers: { cookie: b } })
     ).json()) as {
-      notes: unknown[]
+      preferences: unknown
     }
-    expect(data.notes).toEqual([])
+    expect(data.preferences).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+  })
+
+  it('blocks cross-site writes (CSRF)', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'csrf@example.com')
+    const response = await s.call('/api/preferences', {
+      method: 'PUT',
+      headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' },
+      body: JSON.stringify({ preferences: { theme: 'dark' }, updatedAt: 1 })
+    })
+    expect(response.status).toBe(403)
   })
 
   it('refuses to delete without the matching email', async () => {
@@ -371,10 +331,9 @@ describe('account', () => {
     expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
   })
 
-  it('deletes the account, its notes and its sessions, and blocks cross-site requests', async () => {
+  it('deletes the account and everything held about it, and blocks cross-site requests', async () => {
     const s = setup()
     const cookie = await signIn(s, 'gone@example.com')
-    await s.call('/api/notes', json(cookie, 'POST', { title: 'bye' }))
     await bindings.DB.prepare(
       "INSERT INTO passkey (id, name, public_key, user_id, credential_id, counter, device_type, backed_up) VALUES ('pk1', 'laptop', 'k', (SELECT id FROM user WHERE email = ?), 'cred1', 0, 'singleDevice', 0)"
     )
@@ -410,7 +369,6 @@ describe('account', () => {
       )?.n
     expect(await left('user', 'id')).toBe(0)
     expect(await left('session', 'user_id')).toBe(0)
-    expect(await left('note', 'user_id')).toBe(0)
     expect(await left('passkey', 'user_id')).toBe(0)
     expect(await left('preference', 'user_id')).toBe(0)
   })

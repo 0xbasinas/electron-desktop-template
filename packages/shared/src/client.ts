@@ -1,12 +1,4 @@
-import {
-  accountExportSchema,
-  accountSchema,
-  noteSchema,
-  type Account,
-  type AccountExport,
-  type Note,
-  type NoteInput
-} from './schemas'
+import { accountExportSchema, accountSchema, type Account, type AccountExport } from './schemas'
 import { preferencesRecordSchema, type PreferencesRecord } from './preferences'
 import { z } from 'zod'
 
@@ -32,11 +24,6 @@ export interface ApiClientOptions {
  * fails loudly here instead of breaking a screen later. Used by the web app and the desktop app.
  */
 export interface ApiClient {
-  notes: {
-    list(): Promise<Note[]>
-    create(input: NoteInput): Promise<Note>
-    remove(id: string): Promise<void>
-  }
   preferences: {
     get(): Promise<PreferencesRecord>
     /** Saves the preferences; the response is whichever copy is newest (the one you sent, or a newer one from another device). */
@@ -82,13 +69,6 @@ export function createApiClient({
   }
 
   return {
-    notes: {
-      list: (): Promise<Note[]> => request('/notes', z.array(noteSchema)),
-      create: (input: NoteInput): Promise<Note> =>
-        request('/notes', noteSchema, { method: 'POST', body: JSON.stringify(input) }),
-      remove: (id: string): Promise<void> =>
-        request(`/notes/${encodeURIComponent(id)}`, null, { method: 'DELETE' })
-    },
     preferences: {
       get: (): Promise<PreferencesRecord> => request('/preferences', preferencesRecordSchema),
       put: (record: PreferencesRecord): Promise<PreferencesRecord> =>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { emailSchema, noteInputSchema } from './schemas'
+import { deleteAccountInputSchema, emailSchema } from './schemas'
 
 describe('emailSchema', () => {
   it('trims and lower-cases', () => {
@@ -11,13 +11,11 @@ describe('emailSchema', () => {
   })
 })
 
-describe('noteInputSchema', () => {
-  it('requires a title and defaults the body', () => {
-    expect(noteInputSchema.parse({ title: ' Hi ' })).toEqual({ title: 'Hi', body: '' })
-    expect(noteInputSchema.safeParse({ title: '   ' }).success).toBe(false)
-  })
-  it('limits the size', () => {
-    expect(noteInputSchema.safeParse({ title: 'x'.repeat(121) }).success).toBe(false)
-    expect(noteInputSchema.safeParse({ title: 'x', body: 'y'.repeat(10_001) }).success).toBe(false)
+describe('deleteAccountInputSchema', () => {
+  it('normalises the confirmation email', () => {
+    expect(deleteAccountInputSchema.parse({ confirmEmail: ' Me@Example.com ' })).toEqual({
+      confirmEmail: 'me@example.com'
+    })
+    expect(deleteAccountInputSchema.safeParse({ confirmEmail: 'nope' }).success).toBe(false)
   })
 })

@@ -2,11 +2,9 @@ export {
   accountExportSchema,
   accountSchema,
   deleteAccountInputSchema,
-  emailSchema,
-  noteInputSchema,
-  noteSchema
+  emailSchema
 } from './schemas'
-export type { Account, AccountExport, Note, NoteInput } from './schemas'
+export type { Account, AccountExport } from './schemas'
 export {
   clampUpdatedAt,
   defaultPreferences,
