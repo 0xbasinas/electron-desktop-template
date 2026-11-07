@@ -16,6 +16,7 @@
     "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test && pnpm test:scripts",
     "rename": "node apps/desktop/scripts/rename.mjs",
     "setup:cloud": "node scripts/setup-cloud.mjs",
+    "compat:date": "node scripts/compat-date.mjs --write",
     "test:scripts": "node --test scripts/",
     "prepare": "husky",
     "check:bundle": "pnpm --filter ./apps/desktop run check:bundle",

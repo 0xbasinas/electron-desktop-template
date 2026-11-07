@@ -2,7 +2,7 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "electron-desktop-template",
   "main": "src/index.ts",
-  "compatibility_date": "2026-11-07",
+  "compatibility_date": "2026-11-04",
   // Better Auth uses AsyncLocalStorage.
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
