@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // One-command setup for the website and API on Cloudflare (+ Resend for email, + GitHub for automatic deploys).
 // Usage: pnpm setup:cloud [--url https://app.example.com] [--email-domain example.com] [--from-name "My App"]
-//                         [--skip-resend] [--skip-github] [--skip-deploy] [--rotate-secret]
+//                         [--skip-resend] [--skip-github] [--skip-deploy] [--rotate-secret] [--yes]
 // It is safe to run again: every step looks at what already exists first. See docs/setup-cloud.md.
 import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -65,6 +65,18 @@ const rl = createInterface({ input: process.stdin, output: process.stdout })
 async function ask(question, fallback) {
   const answer = (await rl.question(`    ${question}${fallback ? ` [${fallback}]` : ''}: `)).trim()
   return answer || fallback || ''
+}
+
+/**
+ * Yes/no question for optional sub-flows, so anything you already did yourself can be skipped.
+ * Without a terminal, or with --yes, the default is taken.
+ */
+async function confirm(question, defaultYes = true) {
+  if (args.flags.has('yes') || !process.stdin.isTTY) return defaultYes
+  const answer = (await rl.question(`    ${question} [${defaultYes ? 'Y/n' : 'y/N'}]: `))
+    .trim()
+    .toLowerCase()
+  return answer === '' ? defaultYes : answer.startsWith('y')
 }
 
 /** Ask for a secret without echoing it back to the terminal. */
@@ -184,6 +196,10 @@ let previewInfo = wrangler(['d1', 'info', previewDbName, '--json'], { allowFail:
 let previewDatabaseId = previewInfo.ok ? parseDatabaseId(previewInfo.out) : null
 if (previewDatabaseId) {
   ok(`Preview database "${previewDbName}" already exists`)
+} else if (
+  !(await confirm('Create a staging database for pull request previews? (not production data)'))
+) {
+  note('Skipped. Previews stay off until you create it (docs/api.md, Previews) or run this again.')
 } else {
   wrangler(['d1', 'create', previewDbName])
   previewInfo = wrangler(['d1', 'info', previewDbName, '--json'])
@@ -240,7 +256,10 @@ if (args.flags.has('skip-resend')) {
     const wanted = toCloudflareRecords(records, sendingDomain)
     const cfToken = process.env.CLOUDFLARE_API_TOKEN
     let added = false
-    if (cfToken) {
+    if (await confirm("Have you already added Resend's DNS records yourself?", false)) {
+      note('Skipping the DNS records; going straight to verification.')
+      added = true
+    } else if (cfToken) {
       const zones = await api(
         'https://api.cloudflare.com/client/v4',
         cfToken,
@@ -311,6 +330,8 @@ if (args.flags.has('skip-resend')) {
   )
   if (hasDmarc) {
     ok('DMARC record already exists')
+  } else if (!(await confirm('Add a starter DMARC record (reports only)?'))) {
+    note('Skipped the DMARC record.')
   } else if (process.env.CLOUDFLARE_API_TOKEN) {
     const cf = 'https://api.cloudflare.com/client/v4'
     const zones = await api(cf, process.env.CLOUDFLARE_API_TOKEN, `/zones?name=${sendingDomain}`)
@@ -329,7 +350,13 @@ if (args.flags.has('skip-resend')) {
     note(`Recommended DNS record: TXT ${dmarc.name} = "${dmarc.content}"`)
   }
 
-  workerResendKey = { domainId: domain.id, resend, endpoint: webhookEndpoint(siteUrl) }
+  workerResendKey = {
+    domainId: domain.id,
+    resend,
+    endpoint: (await confirm('Set up bounce and complaint handling (Resend webhook)?'))
+      ? webhookEndpoint(siteUrl)
+      : null
+  }
 }
 
 // 5 -------------------------------------------------------------------------------------------------------------------
@@ -342,7 +369,7 @@ config = patchWranglerConfig(config, {
 })
 writeFileSync(CONFIG_PATH, config)
 const PREVIEW_MIGRATIONS_PATH = 'apps/api/wrangler.preview-migrations.jsonc'
-for (const path of [CONFIG_PATH, PREVIEW_MIGRATIONS_PATH]) {
+for (const path of previewDatabaseId ? [CONFIG_PATH, PREVIEW_MIGRATIONS_PATH] : []) {
   const text = readFileSync(path, 'utf8')
   writeFileSync(path, patchPreviewDatabase(text, { name: previewDbName, id: previewDatabaseId }))
 }
@@ -394,7 +421,9 @@ if (workerResendKey && !have.has('RESEND_API_KEY')) {
 // Bounces and spam complaints: Resend calls the Worker, which stops emailing those addresses (docs/api.md).
 if (workerResendKey && !have.has('RESEND_WEBHOOK_SECRET')) {
   if (!workerResendKey.endpoint) {
-    note('Bounce handling needs the public https address; run again once the site has one.')
+    note(
+      'Bounce handling is off (it needs the public https address and your OK). Run again to add it.'
+    )
   } else {
     const { resend } = workerResendKey
     const list = await resend('/webhooks')

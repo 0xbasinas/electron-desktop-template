@@ -53,6 +53,7 @@ passed as `RESEND_SETUP_KEY` in the environment. The Worker gets a different key
 
 ```bash
 pnpm setup:cloud --url https://app.example.com --email-domain example.com --from-name "My App"
+pnpm setup:cloud --yes              # no questions: take the recommended answer everywhere
 pnpm setup:cloud --skip-resend      # no email yet: sign-in links are printed in the Worker logs
 pnpm setup:cloud --skip-deploy      # only prepare the settings and secrets
 pnpm setup:cloud --skip-github      # leave the repository settings alone
@@ -113,3 +114,9 @@ exported, restore-tested and encrypted every day. Both are explained in [api.md]
   first, or use the `*.workers.dev` address for now.
 - **Start over**: delete the Worker and database in the Cloudflare dashboard, set `database_id` back to the all-zero
   placeholder, and run the script again.
+
+## Skipping what you already did
+
+The script asks before each optional part, so you can say no to anything you have done yourself: "Have you already added
+Resend's DNS records yourself?" (it then goes straight to verification), the DMARC record, the Resend webhook, and the
+staging database for previews. Without a terminal, or with `--yes`, it takes the recommended answer without asking.

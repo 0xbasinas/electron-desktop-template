@@ -17,7 +17,7 @@ export function parseArgs(argv) {
       if (!value || value.startsWith('--')) throw new Error(`--${key} needs a value`)
       out.values[key] = value
     } else if (
-      ['skip-resend', 'skip-github', 'skip-deploy', 'rotate-secret', 'help'].includes(key)
+      ['skip-resend', 'skip-github', 'skip-deploy', 'rotate-secret', 'yes', 'help'].includes(key)
     ) {
       out.flags.add(key)
     } else {

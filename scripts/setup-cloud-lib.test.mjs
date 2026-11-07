@@ -136,6 +136,7 @@ test('parseArgs', () => {
   const a = parseArgs(['--url', 'https://x.example.com', '--skip-github'])
   assert.equal(a.values.url, 'https://x.example.com')
   assert.ok(a.flags.has('skip-github'))
+  assert.ok(parseArgs(['--yes']).flags.has('yes'))
   assert.throws(() => parseArgs(['--nope']), /Unknown option/)
   assert.throws(() => parseArgs(['--url']), /needs a value/)
   assert.throws(() => parseArgs(['stray']), /Unexpected/)
