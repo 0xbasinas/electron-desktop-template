@@ -104,6 +104,22 @@ export function patchPreviewDatabase(text, { name, id }) {
     .replaceAll(PREVIEW_DB_PLACEHOLDER, id)
 }
 
+/**
+ * The id of the database called `name` in `wrangler d1 list --json` output, or null. Looked up by name in the account
+ * list because `wrangler d1 info <name>` reads wrangler.jsonc first and fails while it still has the placeholder id.
+ */
+export function findDatabaseId(output, name) {
+  const start = output.indexOf('[')
+  if (start < 0) return null
+  try {
+    const rows = JSON.parse(output.slice(start))
+    const row = rows.find((r) => r.name === name)
+    return row?.uuid ?? row?.database_id ?? null
+  } catch {
+    return null
+  }
+}
+
 /** Read the id of a D1 database out of `wrangler d1 info --json` / `d1 create` output. */
 export function parseDatabaseId(output) {
   const match = /"?(?:database_id|uuid)"?\s*[:=]\s*"([0-9a-f]{8}-[0-9a-f-]{27})"/i.exec(output)

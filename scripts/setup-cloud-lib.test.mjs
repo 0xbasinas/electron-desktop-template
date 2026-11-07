@@ -9,6 +9,7 @@ import {
   mask,
   normalizeSiteUrl,
   parseArgs,
+  findDatabaseId,
   parseDatabaseId,
   patchPreviewDatabase,
   PREVIEW_DB_PLACEHOLDER,
@@ -180,4 +181,17 @@ test('patchPreviewDatabase points the preview entry at the real database and lea
   assert.match(out, /"database_name":"app"/)
   assert.match(out, /"prod-id"/)
   assert.throws(() => patchPreviewDatabase('{}', { name: 'x', id: 'y' }))
+})
+
+test('findDatabaseId finds a database by name in the account list', () => {
+  const list = JSON.stringify([
+    { uuid: 'aaaaaaaa-0000-0000-0000-000000000000', name: 'other' },
+    { uuid: 'bbbbbbbb-0000-0000-0000-000000000000', name: 'mine' }
+  ])
+  assert.equal(
+    findDatabaseId(`⛅️ wrangler\n${list}`, 'mine'),
+    'bbbbbbbb-0000-0000-0000-000000000000'
+  )
+  assert.equal(findDatabaseId(list, 'missing'), null)
+  assert.equal(findDatabaseId('no json here', 'mine'), null)
 })
