@@ -31,6 +31,8 @@ export interface Settings {
   closeToTray: boolean
   /** Start the app when you sign in (Windows and macOS, packaged builds only). */
   launchAtLogin: boolean
+  /** Send anonymous crash reports (only offered when this build has a crash-report endpoint). */
+  crashReports: boolean
 }
 
 export type UpdaterEvent =
@@ -47,6 +49,8 @@ export interface AppInfo {
   platform: string
   isPackaged: boolean
   logPath: string
+  /** This build can send crash reports, so the switch in Settings is shown. */
+  crashReportingAvailable: boolean
 }
 
 export interface WhatsNew {

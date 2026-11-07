@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/0xbasinas/electron-desktop-template/actions/workflows/ci.yml/badge.svg)](https://github.com/0xbasinas/electron-desktop-template/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/0xbasinas/electron-desktop-template)](https://github.com/0xbasinas/electron-desktop-template/releases/latest)
+[![CodeQL](https://github.com/0xbasinas/electron-desktop-template/actions/workflows/codeql.yml/badge.svg)](https://github.com/0xbasinas/electron-desktop-template/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/0xbasinas/electron-desktop-template/badge)](https://scorecard.dev/viewer/?uri=github.com/0xbasinas/electron-desktop-template)
 [![License: MIT](https://img.shields.io/github/license/0xbasinas/electron-desktop-template)](LICENSE)
 
 Electron + Vite + React + TypeScript, with Tailwind CSS v4, shadcn/ui, auto-updates, tests and CI/release workflows. Uses **pnpm**.

@@ -8,6 +8,8 @@ describe('parseSettingsPatch', () => {
       closeToTray: true,
       launchAtLogin: false
     })
+    expect(parseSettingsPatch({ crashReports: true })).toEqual({ crashReports: true })
+    expect(() => parseSettingsPatch({ crashReports: 'yes' })).toThrow()
     expect(parseSettingsPatch({})).toEqual({})
   })
 

@@ -24,7 +24,8 @@ test('packaged app opens and the renderer talks to main', async () => {
     expect(result.settings).toEqual({
       updateChannel: 'latest',
       closeToTray: false,
-      launchAtLogin: false
+      launchAtLogin: false,
+      crashReports: false
     })
 
     // Node is not reachable from the renderer.

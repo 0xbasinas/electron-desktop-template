@@ -1,0 +1,36 @@
+name: Rollout guard
+# Every hour: if the newest stable release is crashing more than allowed, stop offering it (0% rollout)
+# and open an issue. Needs crash reports in Sentry; does nothing until the secrets below exist.
+#   SENTRY_AUTH_TOKEN  Sentry token with org:read and project:read
+#   SENTRY_ORG         organization slug
+#   SENTRY_PROJECT     numeric project id
+# Thresholds live in scripts/lib/guard.mjs.
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: rollout-guard
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: Check crash rate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run the guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+        run: node scripts/rollout-guard.mjs

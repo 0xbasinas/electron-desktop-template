@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import { IPC, type AppInfo } from '../shared/ipc'
 import { parseBoolean, parseSettingsPatch } from '../shared/validate'
+import { crashReportingAvailable } from './crashReporting'
 import { logFilePath, revealLogs } from './logger'
 import { handle } from './secureIpc'
 import { getSettings, updateSettings } from './settings'
@@ -23,7 +24,8 @@ export function registerIpcHandlers(): void {
     version: app.getVersion(),
     platform: process.platform,
     isPackaged: app.isPackaged,
-    logPath: logFilePath()
+    logPath: logFilePath(),
+    crashReportingAvailable: crashReportingAvailable()
   }))
 
   handle(IPC.appOpenLogs, () => revealLogs())
