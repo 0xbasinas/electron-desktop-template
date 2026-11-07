@@ -21,6 +21,7 @@ describe('magicLinkEmail', () => {
     expect(m.html).toContain('>Sign in</a>')
     expect(m.html).toContain('Sign in to GoZap')
     expect(m.html).toContain('expires in 5 minutes')
+    expect(m.html).toContain('>G</td>')
     expect(m.text).toContain('Sign in to GoZap')
     expect(m.text).toContain('https://x.test/verify?token=abc')
     expect(m.text).not.toContain('<')
