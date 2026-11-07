@@ -4,6 +4,8 @@
 export default {
   extends: ['@commitlint/config-conventional'],
   rules: {
+    // Dependabot titles start with a capital ("Bump x"); squash merges use the PR title anyway.
+    'subject-case': [0],
     // Co-Authored-By trailers and pasted links are fine.
     'body-max-line-length': [0],
     'footer-max-line-length': [0]
