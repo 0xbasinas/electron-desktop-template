@@ -30,7 +30,9 @@ passed as `RESEND_SETUP_KEY` in the environment. The Worker gets a different key
 1. **Cloudflare sign-in.** Runs `wrangler whoami`; if you are not signed in it opens `wrangler login` in your browser.
 2. **Site address.** Asks for the public address (`https://app.example.com`). On your own domain the script also writes
    the Worker route (`custom_domain`), and Cloudflare creates the certificate. The domain's zone must be in the same account.
-3. **Database.** `wrangler d1 create` (or finds the existing one) and writes its `database_id` into `apps/api/wrangler.jsonc`.
+3. **Databases.** `wrangler d1 create` (or finds the existing one) and writes its `database_id` into `apps/api/wrangler.jsonc`.
+   It also creates a second, separate staging database (`<name>-preview`) for pull request previews and writes its id into
+   `wrangler.jsonc` and `wrangler.preview-migrations.jsonc`.
 4. **Email.** Adds your sending domain to Resend through the Resend API, adds the DNS records it asks for through the
    Cloudflare DNS API (needs `CLOUDFLARE_API_TOKEN` with _Zone → DNS → Edit_; otherwise it prints them for you to add),
    asks Resend to verify, and waits until the domain is verified.
@@ -43,7 +45,9 @@ passed as `RESEND_SETUP_KEY` in the environment. The Worker gets a different key
    In the same step it adds a starter DMARC record, creates the Resend webhook for bounces and complaints, and (if `SENTRY_DSN`
    is in the environment) stores the Sentry DSN. See "Email deliverability" and "Error reporting" in [api.md](api.md).
 8. **GitHub.** Sets the repository variable `API_URL` (so release builds of the desktop app know where to sign in) and,
-   when `CLOUDFLARE_API_TOKEN` is set, the secrets and variable that switch on automatic deploys.
+   when `CLOUDFLARE_API_TOKEN` is set, the secrets and variable that switch on automatic deploys, per-pull-request previews and
+   the daily database backup. It also creates `BACKUP_PASSPHRASE` (the key that encrypts the backups) and **shows it once**:
+   save it in your password manager, because without it a backup cannot be opened.
 
 ## Options
 
@@ -81,6 +85,22 @@ Everything the script does can be done manually; this is also how to fix one ste
 | Migrations      | `pnpm --filter @repo/api db:migrate:remote`                                                                                                                |
 | Deploy          | `pnpm exec turbo run build --filter=@repo/web && pnpm --filter @repo/api exec wrangler deploy`                                                             |
 | GitHub settings | Settings → Secrets and variables → Actions: variable `API_URL`, variable `CLOUDFLARE_DEPLOY=true`, secrets `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` |
+
+## Checking your setup
+
+```bash
+pnpm cloud:doctor
+```
+
+Reads your configuration, Cloudflare login and Worker secrets, the DNS records for email (SPF/DKIM/DMARC), the GitHub
+variables and secrets, and calls `/api/health` on the deployed site. It prints what is wrong and the command that fixes it.
+It never changes anything and never prints a secret value (only whether it exists). It exits with 1 only when something
+that breaks sign-in is wrong; warnings (for example "no DMARC record yet") do not fail it.
+
+## Previews and backups
+
+With deploys on, every pull request that touches the website or API gets its own live copy, and the production database is
+exported, restore-tested and encrypted every day. Both are explained in [api.md](api.md) ("Previews" and "Backups").
 
 ## Troubleshooting
 

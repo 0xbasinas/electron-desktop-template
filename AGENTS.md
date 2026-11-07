@@ -19,6 +19,7 @@ Package manager is **pnpm** (never npm or yarn). Node 24. Run commands from the 
 | Format / lint / typecheck           | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                     |
 | Unit tests (src, scripts)           | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)               |
 | Set up website + API accounts       | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)  |
+| Check the cloud setup               | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)           |
 | Build the app                       | `pnpm build` (typechecks first)                                                    |
 | Bundle size budget                  | `pnpm check:bundle` (after `pnpm build`)                                           |
 | Package unpacked app                | `pnpm build:unpack`                                                                |
@@ -97,6 +98,9 @@ only third-party runtime modules go in `dependencies` (electron-builder packages
 - Never put secrets in `apps/api/wrangler.jsonc` (it only holds `database_id`, `BETTER_AUTH_URL`, `EMAIL_FROM`, `TRUSTED_ORIGINS` and `routes`).
   Secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) are set in Cloudflare by `pnpm setup:cloud` or `wrangler secret put`.
   Do not run `pnpm setup:cloud` for the user: it needs their accounts and keys, so tell them to run it.
+  `pnpm cloud:doctor` only reads, so run it when something about sign-in or deploys looks wrong. Pull request previews
+  (`.github/workflows/preview.yml`) set `PREVIEW=true`, and the Worker then takes its address from the request: do not read
+  `BETTER_AUTH_URL` directly in new code, use the value on `env` that the app already receives.
 - Stay inside the free tiers (see docs/api.md): no password hashing, no work per request that reads many D1 rows, rate limit only
   sign-in, send email with `waitUntil`.
 - Desktop sign-in is main-process only (`apps/desktop/src/main/auth.ts`). Do not use `@better-auth/electron`'s `setupMain`, do not give the

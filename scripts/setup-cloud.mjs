@@ -485,6 +485,26 @@ if (args.flags.has('skip-github')) {
       run('gh', ['secret', 'set', 'CLOUDFLARE_ACCOUNT_ID', '--repo', repo], { input: accountId })
       run('gh', ['variable', 'set', 'CLOUDFLARE_DEPLOY', '--body', 'true', '--repo', repo])
       ok('Cloudflare secrets saved; automatic deploys are on')
+      // Previews do not inherit production secrets. Give them their own signing secret (never the production one).
+      const previewSecrets = wrangler(
+        ['preview', 'base-config', 'secret', 'list', '--format', 'json'],
+        {
+          allowFail: true
+        }
+      )
+      if (previewSecrets.ok && /BETTER_AUTH_SECRET/.test(previewSecrets.out)) {
+        note('Previews already have their own BETTER_AUTH_SECRET.')
+      } else {
+        const put = wrangler(['preview', 'base-config', 'secret', 'put', 'BETTER_AUTH_SECRET'], {
+          allowFail: true,
+          input: generateSecret()
+        })
+        if (put.ok) ok('Previews have their own BETTER_AUTH_SECRET (not the production one)')
+        else
+          note(
+            'Could not give previews a secret. Run: pnpm --filter @repo/api exec wrangler preview base-config secret put BETTER_AUTH_SECRET'
+          )
+      }
       const existingSecrets = run('gh', ['secret', 'list', '--repo', repo], { allowFail: true }).out
       if (!/^BACKUP_PASSPHRASE\b/m.test(existingSecrets)) {
         // GitHub secrets cannot be read back, so this is the only time the passphrase is ever shown.

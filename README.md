@@ -39,6 +39,7 @@ Start with the desktop app (`pnpm dev`). The website, API and account sign-in ar
 | `pnpm rename`                                  | Rename the template for a new app                                                              |
 | `pnpm dev:all`                                 | Run every app that has a dev server (desktop, web, API) through Turborepo                      |
 | `pnpm setup:cloud`                             | Set up Cloudflare, Resend and GitHub for the website and API in one go (docs/setup-cloud.md)   |
+| `pnpm cloud:doctor`                            | Check the whole cloud setup and say what is wrong and how to fix it                            |
 | `pnpm test:scripts`                            | Unit tests for the setup script (`node --test`)                                                |
 
 ## Website and API
