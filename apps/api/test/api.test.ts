@@ -5,6 +5,7 @@ import { createApp } from '../src/app'
 import { createDb } from '../src/db'
 import { deleteDueAccounts } from '../src/deletion'
 import { pruneSignIns } from '../src/signIns'
+import { soloTeamsDeletion } from '../src/teams'
 import worker from '../src/index'
 import type { Bindings } from '../src/env'
 import type { EmailMessage } from '../src/email'
@@ -1498,5 +1499,98 @@ describe('API keys', () => {
       .bind('gone@example.com')
       .run()
     expect((await s.call('/api/v1/me', { headers: { 'x-api-key': key } })).status).toBe(401)
+  })
+})
+
+describe('teams (organization plugin)', () => {
+  const json = { 'content-type': 'application/json' }
+  const post = (
+    s: ReturnType<typeof setup>,
+    cookie: string,
+    path: string,
+    body: unknown
+  ): Promise<Response> =>
+    s.call(`/api/auth/organization/${path}`, {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify(body)
+    })
+
+  it('creates a team, invites by email, and the invited person joins', async () => {
+    const s = setup()
+    const owner = await signIn(s, 'owner@example.com')
+    const made = await post(s, owner, 'create', { name: 'Acme', slug: 'acme-1' })
+    expect(made.status).toBe(200)
+    const team = (await made.json()) as { id: string }
+
+    const before = s.sent.length
+    const invited = await post(s, owner, 'invite-member', {
+      email: 'guest@example.com',
+      role: 'member',
+      organizationId: team.id
+    })
+    expect(invited.status).toBe(200)
+    const mail = s.sent[before]!
+    expect(mail.to).toBe('guest@example.com')
+    const id = /accept-invitation\/([\w-]+)/.exec(mail.text)![1]!
+
+    // Someone else cannot use the invitation.
+    const stranger = await signIn(s, 'stranger@example.com')
+    expect((await post(s, stranger, 'accept-invitation', { invitationId: id })).status).toBe(403)
+
+    const guest = await signIn(s, 'guest@example.com')
+    expect((await post(s, guest, 'accept-invitation', { invitationId: id })).status).toBe(200)
+    const members = await bindings.DB.prepare('SELECT role FROM member WHERE organization_id = ?')
+      .bind(team.id)
+      .all<{ role: string }>()
+    expect(members.results.map((m) => m.role).sort()).toEqual(['member', 'owner'])
+
+    // A plain member cannot invite.
+    const denied = await post(s, guest, 'invite-member', {
+      email: 'third@example.com',
+      role: 'member',
+      organizationId: team.id
+    })
+    expect(denied.status).toBe(403)
+  })
+
+  it('limits how many teams one person can start', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'busy@example.com')
+    for (let i = 0; i < 5; i++) {
+      const made = await post(s, cookie, 'create', { name: `T${i}`, slug: `busy-${i}` })
+      expect(made.status).toBe(200)
+    }
+    expect((await post(s, cookie, 'create', { name: 'Six', slug: 'busy-6' })).status).toBe(403)
+  })
+
+  it('lists teams in the export, and removes only teams nobody else is in when an account goes', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'solo@example.com')
+    const solo = (await (
+      await post(s, cookie, 'create', { name: 'Solo', slug: 'solo-1' })
+    ).json()) as { id: string }
+    const shared = (await (
+      await post(s, cookie, 'create', { name: 'Shared', slug: 'solo-2' })
+    ).json()) as { id: string }
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as { teams: { name: string }[] }
+    expect(exported.teams.map((t) => t.name).sort()).toEqual(['Shared', 'Solo'])
+
+    await signIn(s, 'mate@example.com')
+    await bindings.DB.prepare(
+      "INSERT INTO member (id, organization_id, user_id, role, created_at) SELECT 'm-x', ?, id, 'member', 1 FROM user WHERE email = 'mate@example.com'"
+    )
+      .bind(shared.id)
+      .run()
+    const me = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('solo@example.com')
+      .first<{ id: string }>()
+    await soloTeamsDeletion(createDb(bindings.DB), me!.id)
+    const exists = (id: string): Promise<unknown> =>
+      bindings.DB.prepare('SELECT id FROM organization WHERE id = ?').bind(id).first()
+    expect(await exists(solo.id)).toBeNull()
+    expect(await exists(shared.id)).not.toBeNull()
   })
 })

@@ -17,7 +17,13 @@ const NAMES: Record<string, string> = {
   user_role_updated: 'Role changed',
   user_impersonated: 'Staff signed in as you to help',
   user_impersonated_stopped: 'Staff stopped helping',
-  email_changed: 'Email changed'
+  email_changed: 'Email changed',
+  team_created: 'Team created',
+  team_deleted: 'Team deleted',
+  team_left: 'Left a team',
+  member_invited: 'Someone was invited to a team',
+  invitation_accepted: 'Joined a team',
+  member_removed: 'A team member was removed'
 }
 
 const eventName = (type: string): string => NAMES[type] ?? type.replaceAll('_', ' ')

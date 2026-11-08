@@ -10,6 +10,18 @@ const auth = vi.hoisted(() => ({
   pending: false,
   magicLink: vi.fn(),
   apiKey: { list: vi.fn(), create: vi.fn(), delete: vi.fn() },
+  organization: {
+    list: vi.fn(),
+    create: vi.fn(),
+    getFullOrganization: vi.fn(),
+    inviteMember: vi.fn(),
+    cancelInvitation: vi.fn(),
+    removeMember: vi.fn(),
+    leave: vi.fn(),
+    delete: vi.fn(),
+    getInvitation: vi.fn(),
+    acceptInvitation: vi.fn()
+  },
   admin: {
     listUsers: vi.fn(),
     banUser: vi.fn(),
@@ -38,6 +50,7 @@ vi.mock('./lib/auth', () => ({
     signOut: vi.fn(),
     admin: auth.admin,
     apiKey: auth.apiKey,
+    organization: auth.organization,
     $fetch: auth.transfer,
     ensureElectronRedirect: auth.ensureRedirect,
     revokeSessions: auth.revoke
@@ -824,5 +837,93 @@ describe('security activity on the account page', () => {
     const section = await screen.findByRole('region', { name: 'Security activity' })
     expect(await within(section).findByText('Sign-in failed')).toBeInTheDocument()
     expect(within(section).getByText('Failed')).toBeInTheDocument()
+  })
+})
+
+describe('teams', () => {
+  const team = {
+    id: 't1',
+    name: 'Acme',
+    members: [
+      { id: 'm1', userId: 'u1', role: 'owner', user: { email: 'me@example.com', name: 'Me' } },
+      { id: 'm2', userId: 'u2', role: 'member', user: { email: 'mate@example.com', name: 'Mate' } }
+    ],
+    invitations: [{ id: 'i1', email: 'new@example.com', role: 'member', status: 'pending' }]
+  }
+  beforeEach(() => {
+    auth.session = { user: { email: 'me@example.com', id: 'u1' } } as never
+    auth.organization.list.mockResolvedValue({ data: [{ id: 't1', name: 'Acme' }], error: null })
+    auth.organization.getFullOrganization.mockResolvedValue({ data: team, error: null })
+    auth.organization.create.mockResolvedValue({ data: {}, error: null })
+    auth.organization.inviteMember.mockResolvedValue({ data: {}, error: null })
+    auth.organization.removeMember.mockResolvedValue({ data: {}, error: null })
+  })
+
+  it('creates a team', async () => {
+    at('/teams')
+    await screen.findByText('Acme')
+    await userEvent.type(screen.getByLabelText('Team name'), 'Beta')
+    await userEvent.click(screen.getByRole('button', { name: 'Create team' }))
+    expect(auth.organization.create).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'Beta', slug: expect.stringMatching(/^beta-/) })
+    )
+  })
+
+  it('lets an owner invite and remove people', async () => {
+    at('/teams')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    const section = await screen.findByRole('region', { name: 'Team Acme' })
+    await userEvent.type(within(section).getByLabelText('Email to invite'), 'friend@example.com')
+    await userEvent.click(within(section).getByRole('button', { name: 'Send invitation' }))
+    expect(auth.organization.inviteMember).toHaveBeenCalledWith({
+      email: 'friend@example.com',
+      role: 'member',
+      organizationId: 't1'
+    })
+    await userEvent.click(within(section).getByRole('button', { name: 'Remove' }))
+    expect(auth.organization.removeMember).toHaveBeenCalledWith({
+      memberIdOrEmail: 'm2',
+      organizationId: 't1'
+    })
+  })
+
+  it('shows a plain member no way to invite or remove', async () => {
+    auth.session = { user: { email: 'mate@example.com', id: 'u2' } } as never
+    at('/teams')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    const section = await screen.findByRole('region', { name: 'Team Acme' })
+    expect(within(section).queryByLabelText('Email to invite')).not.toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: 'Leave team' })).toBeInTheDocument()
+  })
+})
+
+describe('accepting an invitation', () => {
+  it('asks a signed-out visitor to sign in and comes back afterwards', async () => {
+    auth.session = null
+    at('/accept-invitation/inv1')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('shows the team and joins it', async () => {
+    auth.session = { user: { email: 'guest@example.com', id: 'u5' } } as never
+    auth.organization.getInvitation.mockResolvedValue({
+      data: { organizationName: 'Acme' },
+      error: null
+    })
+    auth.organization.acceptInvitation.mockResolvedValue({ data: {}, error: null })
+    auth.organization.list.mockResolvedValue({ data: [], error: null })
+    at('/accept-invitation/inv1')
+    await userEvent.click(await screen.findByRole('button', { name: 'Accept invitation' }))
+    expect(auth.organization.acceptInvitation).toHaveBeenCalledWith({ invitationId: 'inv1' })
+  })
+
+  it('sends a signed-in person on to the page they asked for, but only on this site', async () => {
+    auth.session = { user: { email: 'a@b.co', id: 'u1' } } as never
+    at('/sign-in?next=%2Fteams')
+    expect(await screen.findByRole('heading', { name: 'Teams' })).toBeInTheDocument()
+    at('/sign-in?next=%2F%2Fevil.example')
+    expect(screen.queryByText('evil.example')).not.toBeInTheDocument()
   })
 })

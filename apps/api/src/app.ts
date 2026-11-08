@@ -51,6 +51,7 @@ import { listConsents, recordConsent } from './consents'
 import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
 import { recentAudit, recordAudit } from './audit'
+import { teamsOf } from './teams'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
@@ -347,6 +348,7 @@ export function createApp(options: AppOptions = {}) {
         })),
         signInActivity: await recentSignIns(c.var.db, c.var.userId),
         securityActivity: await recentAudit(c.var.db, c.var.userId),
+        teams: await teamsOf(c.var.db, c.var.userId),
         // Never the key itself or its hash: only enough to recognise which key it was.
         apiKeys: (
           await c.var.db

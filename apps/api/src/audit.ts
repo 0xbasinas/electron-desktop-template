@@ -17,6 +17,12 @@ export type AuditType =
   | 'email_changed'
   | 'passkey_added'
   | 'passkey_removed'
+  | 'team_created'
+  | 'team_deleted'
+  | 'team_left'
+  | 'member_invited'
+  | 'invitation_accepted'
+  | 'member_removed'
   | 'api_key_created'
   | 'api_key_deleted'
   | 'user_banned'
@@ -70,6 +76,12 @@ const BY_PATH: Record<string, AuditType> = {
   '/update-user': 'profile_updated',
   '/passkey/verify-registration': 'passkey_added',
   '/passkey/delete-passkey': 'passkey_removed',
+  '/organization/create': 'team_created',
+  '/organization/delete': 'team_deleted',
+  '/organization/leave': 'team_left',
+  '/organization/invite-member': 'member_invited',
+  '/organization/accept-invitation': 'invitation_accepted',
+  '/organization/remove-member': 'member_removed',
   '/api-key/create': 'api_key_created',
   '/api-key/delete': 'api_key_deleted',
   '/admin/ban-user': 'user_banned',

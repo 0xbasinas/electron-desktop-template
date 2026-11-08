@@ -5,7 +5,7 @@ import { apiKey } from '@better-auth/api-key'
 import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
 import { betterAuth } from 'better-auth'
-import { admin, magicLink } from 'better-auth/plugins'
+import { admin, magicLink, organization } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
 import { drizzle } from 'drizzle-orm/d1'
 
@@ -16,6 +16,7 @@ export const auth = betterAuth({
     apiKey({ requireName: true }),
     electron(),
     admin({ ac, roles }),
+    organization(),
     passkey(),
     magicLink({ sendMagicLink: async () => {} })
   ]

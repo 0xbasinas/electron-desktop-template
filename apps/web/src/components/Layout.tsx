@@ -57,6 +57,11 @@ export function Layout(): JSX.Element {
               </NavLink>
             )}
             {session && (
+              <NavLink to="/teams" className={link}>
+                Teams
+              </NavLink>
+            )}
+            {session && (
               <NavLink to="/account" className={link}>
                 Account
               </NavLink>

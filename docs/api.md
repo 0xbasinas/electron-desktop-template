@@ -156,6 +156,15 @@ People make keys on their account page for scripts that act as them (`@better-au
 - `apikey.reference_id` has no foreign key, so the daily deletion job removes a person's keys itself (`deletion.ts`). The data export lists name, first characters and dates, never the key.
 - A key identifies a person, not a permission: new routes that accept keys must check what the key may do. Do not enable `enableSessionForAPIKeys`.
 
+## Teams
+
+The Better Auth `organization` plugin is on (tables `organization`, `member`, `invitation`; `session.active_organization_id`). Anyone signed in can start up to 5 teams; a team holds up to 50 people; the starter is the `owner`. No sub-teams and no custom roles yet.
+
+- `/teams` in the website: create a team, see members, invite by email, cancel an invitation, remove a member, leave (or, for the owner, delete).
+- The invitation email (`teams.ts`) links to `/accept-invitation/<id>`, which asks the person to sign in with the invited address (`/sign-in?next=...`, a path on this site only) and then accept. Someone else's account cannot accept it. Invitations last 7 days, a re-invite cancels the old one, and an address that bounced gets nothing.
+- All foreign keys cascade. Deleting an account also deletes teams nobody else belongs to (`soloTeamsDeletion`, same batch as the deletion); teams with other members stay. The data export lists a person's teams and their role.
+- The audit trail records team created/deleted/left, invitations sent and accepted, and members removed.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics

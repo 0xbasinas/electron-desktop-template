@@ -16,6 +16,9 @@ export function SignInPage(): JSX.Element {
   const { data: session } = authClient.useSession()
   const [params] = useSearchParams()
   const desktop = readDesktopParams(params)
+  // Where to go after signing in: a path on this site only (an invitation page, for example).
+  const wanted = params.get('next') ?? ''
+  const next = /^\/(?![/\\])/.test(wanted) ? wanted : '/app'
   const [email, setEmail] = useState('')
   const [state, setState] = useState<State>('idle')
   // Turnstile: the key comes from the API; with none, no challenge is asked for.
@@ -57,7 +60,7 @@ export function SignInPage(): JSX.Element {
       </p>
     )
   }
-  if (session) return <Navigate to="/app" replace />
+  if (session) return <Navigate to={next} replace />
 
   async function signInWithPasskey(): Promise<void> {
     setError(null)
@@ -83,7 +86,7 @@ export function SignInPage(): JSX.Element {
     const { error: failure } = await authClient.signIn.magicLink({
       email: parsed.data,
       // From the desktop app, the link ends on a page that opens the app; otherwise the web app.
-      callbackURL: desktop ? '/auth/desktop' : '/app',
+      callbackURL: desktop ? '/auth/desktop' : next,
       errorCallbackURL: '/sign-in?error=link',
       ...(desktop || (siteKey && token)
         ? {

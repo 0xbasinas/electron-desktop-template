@@ -46,6 +46,9 @@ export const accountExportSchema = z.object({
   feedback: z.array(feedbackExportSchema).default([]),
   signInActivity: z.array(signInSchema).default([]),
   securityActivity: z.array(securityEventSchema).default([]),
+  teams: z
+    .array(z.object({ name: z.string(), role: z.string(), joinedAt: z.string() }))
+    .default([]),
   apiKeys: z
     .array(
       z.object({

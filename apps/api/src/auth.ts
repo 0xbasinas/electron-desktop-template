@@ -6,12 +6,18 @@ import { betterAuth } from 'better-auth'
 import { count, eq } from 'drizzle-orm'
 import { apiKey } from '@better-auth/api-key'
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
-import { admin, captcha, magicLink } from 'better-auth/plugins'
+import { admin, captcha, magicLink, organization } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
 import { eventForCall, recordAudit } from './audit'
 import type { Db } from './db'
 import { schema } from './db'
 import { BRAND } from './brand'
+import {
+  INVITATION_DAYS,
+  invitationEmail,
+  MAX_MEMBERS_PER_TEAM,
+  MAX_TEAMS_PER_PERSON
+} from './teams'
 import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
@@ -195,6 +201,32 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         rateLimit: { enabled: true, timeWindow: 60_000, maxRequests: 60 },
         // Usage counters are written after the response, so checking a key does not wait for a database write.
         deferUpdates: true
+      }),
+      // Teams: people who share a workspace. Anyone may start up to MAX_TEAMS_PER_PERSON; the owner invites by email.
+      organization({
+        organizationLimit: MAX_TEAMS_PER_PERSON,
+        membershipLimit: MAX_MEMBERS_PER_TEAM,
+        invitationExpiresIn: INVITATION_DAYS * 86_400,
+        cancelPendingInvitationsOnReInvite: true,
+        sendInvitationEmail: async (data) => {
+          // After the response, and never to an address that bounced or complained.
+          waitUntil(
+            (async () => {
+              if (await isSuppressed(db, data.email)) return
+              await email.send({
+                to: data.email,
+                ...invitationEmail(appName, {
+                  teamName: data.organization.name,
+                  inviter: data.inviter.user.name || data.inviter.user.email,
+                  url: new URL(`/accept-invitation/${data.id}`, env.BETTER_AUTH_URL).href
+                })
+              })
+            })().catch((error: unknown) => {
+              console.error('Could not send the invitation', error)
+              Sentry.captureException(error)
+            })
+          )
+        }
       }),
       // Staff tools (roles: admin, support). Banning also ends the person's sessions. Nobody is an admin until
       // `pnpm admin:grant <email>` says so; the sign-up flow never grants a role.
