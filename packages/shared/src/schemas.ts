@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { dataRequestSchema } from './dataRequests'
 import { signInSchema } from './signIns'
 import { feedbackExportSchema } from './feedback'
 import { preferencesRecordSchema } from './preferences'
@@ -32,6 +33,7 @@ export const accountExportSchema = z.object({
   ),
   feedback: z.array(feedbackExportSchema).default([]),
   signInActivity: z.array(signInSchema).default([]),
+  dataRequests: z.array(dataRequestSchema).default([]),
   sessions: z.array(
     z.object({
       createdAt: z.string(),

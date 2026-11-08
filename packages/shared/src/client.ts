@@ -12,6 +12,7 @@ import {
   type EmailChanged
 } from './emailChange'
 import { appConfigSchema, type AppConfig } from './version'
+import { dataRequestsSchema, type DataRequest } from './dataRequests'
 import { privacySummarySchema, type PrivacySummary } from './privacy'
 import { signInsSchema, type SignIn } from './signIns'
 import { devicesSchema, type Device } from './devices'
@@ -69,6 +70,8 @@ export interface ApiClient {
     cancelDeletion(): Promise<void>
     /** Keeps the account using the token from the email (no sign-in needed). */
     cancelDeletionWithToken(token: string): Promise<void>
+    /** Requests about personal data (export, deletion) with their status and deadline. */
+    requests(): Promise<DataRequest[]>
     /** How much of each kind of data we hold about the signed-in person. */
     privacy(): Promise<PrivacySummary>
     /** The last sign-ins to the account, newest first. */
@@ -149,6 +152,7 @@ export function createApiClient({
           method: 'POST',
           body: JSON.stringify(cancelDeletionInputSchema.parse({ token }))
         }),
+      requests: (): Promise<DataRequest[]> => request('/account/requests', dataRequestsSchema),
       privacy: (): Promise<PrivacySummary> => request('/account/privacy', privacySummarySchema),
       signIns: (): Promise<SignIn[]> => request('/account/sign-ins', signInsSchema),
       changeEmail: (newEmail: string): Promise<void> =>

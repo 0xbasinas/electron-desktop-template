@@ -44,6 +44,7 @@ import { createConsoleSender, createResendSender, type EmailSender } from './ema
 import type { Bindings } from './env'
 import { sameOriginOnly } from './origin'
 import { Resend } from 'resend'
+import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
@@ -55,7 +56,7 @@ export interface AppOptions {
   emailSender?: (env: Bindings) => EmailSender
 }
 
-const defaultEmailSender = (env: Bindings): EmailSender =>
+export const defaultEmailSender = (env: Bindings): EmailSender =>
   env.RESEND_API_KEY
     ? createResendSender(env.RESEND_API_KEY, env.EMAIL_FROM)
     : createConsoleSender()
@@ -315,6 +316,8 @@ export function createApp(options: AppOptions = {}) {
         .from(schema.session)
         .leftJoin(schema.sessionNickname, eq(schema.sessionNickname.sessionId, schema.session.id))
         .where(eq(schema.session.userId, c.var.userId))
+      // Asking for the data is itself a request that is answered right away; log it so the page can show it.
+      await openRequest(c.var.db, c.var.userId, 'export', 'done', Date.now())
       const body: AccountExport = {
         exportedAt: new Date().toISOString(),
         account: toAccount(
@@ -336,6 +339,7 @@ export function createApp(options: AppOptions = {}) {
           createdAt: new Date(r.createdAt).toISOString()
         })),
         signInActivity: await recentSignIns(c.var.db, c.var.userId),
+        dataRequests: await listRequests(c.var.db, c.var.userId),
         sessions: sessionRows.map((s) => ({
           createdAt: s.createdAt.toISOString(),
           expiresAt: s.expiresAt.toISOString(),
@@ -413,6 +417,7 @@ export function createApp(options: AppOptions = {}) {
         hasSyncedSettings: prefs !== undefined
       })
     })
+    .get('/requests', async (c) => c.json(await listRequests(c.var.db, c.var.userId)))
     .get('/sign-ins', async (c) => c.json(await recentSignIns(c.var.db, c.var.userId)))
     // Moving to a new address: a link goes to the NEW address and nothing changes until it is used. The answer is the
     // same whether or not the address is already taken, so this cannot be used to find out who has an account.

@@ -41,6 +41,7 @@ const accountApi = vi.hoisted(() => ({
   changeEmail: vi.fn(),
   signIns: vi.fn(),
   privacy: vi.fn(),
+  requests: vi.fn(),
   confirmEmailChange: vi.fn()
 }))
 const appConfigApi = vi.hoisted(() => vi.fn())
@@ -129,6 +130,22 @@ beforeEach(() => {
     feedback: 1,
     hasSyncedSettings: true
   })
+  accountApi.requests.mockReset().mockResolvedValue([
+    {
+      kind: 'deletion',
+      status: 'processing',
+      receivedAt: '2026-11-01T00:00:00.000Z',
+      dueAt: '2026-12-01T00:00:00.000Z',
+      completedAt: null
+    },
+    {
+      kind: 'export',
+      status: 'done',
+      receivedAt: '2026-10-01T00:00:00.000Z',
+      dueAt: '2026-10-31T00:00:00.000Z',
+      completedAt: '2026-10-01T00:00:00.000Z'
+    }
+  ])
   accountApi.changeEmail.mockReset().mockResolvedValue(undefined)
   accountApi.confirmEmailChange.mockReset().mockResolvedValue({ email: 'new@example.com' })
 })
@@ -360,6 +377,11 @@ describe('privacy page', () => {
     expect(screen.getByText(/5 sign-ins from the last 90 days/)).toBeInTheDocument()
     expect(screen.getByText(/1 message you sent us/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Download my data' })).toBeInTheDocument()
+    const requests = await screen.findByRole('region', { name: 'Your requests' })
+    expect(within(requests).getByText('Account deletion')).toBeInTheDocument()
+    expect(within(requests).getByText('In progress')).toBeInTheDocument()
+    expect(within(requests).getByText('Data export')).toBeInTheDocument()
+    expect(within(requests).getByText('Done')).toBeInTheDocument()
   })
 
   it('sends signed-out visitors to the sign-in page', () => {

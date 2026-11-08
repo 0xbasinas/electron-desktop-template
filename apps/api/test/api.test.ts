@@ -1105,3 +1105,67 @@ describe('app config', () => {
     expect(await response.json()).toEqual({ minimumVersion: null })
   })
 })
+
+describe('data requests', () => {
+  type Req = {
+    kind: string
+    status: string
+    receivedAt: string
+    dueAt: string
+    completedAt: string | null
+  }
+  const list = async (s: ReturnType<typeof setup>, cookie: string): Promise<Req[]> =>
+    (await (await s.call('/api/account/requests', { headers: { cookie } })).json()) as Req[]
+  const ask = (cookie: string, email: string): RequestInit => ({
+    method: 'DELETE',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ confirmEmail: email })
+  })
+
+  it('logs an export as answered at once, with a 30-day deadline', async () => {
+    const s = setup()
+    expect((await s.call('/api/account/requests')).status).toBe(401)
+    const cookie = await signIn(s, 'log1@example.com')
+    await s.call('/api/account/export', { headers: { cookie } })
+    const [entry] = await list(s, cookie)
+    expect(entry).toMatchObject({ kind: 'export', status: 'done' })
+    expect(entry!.completedAt).not.toBeNull()
+    const days = (Date.parse(entry!.dueAt) - Date.parse(entry!.receivedAt)) / 86_400_000
+    expect(days).toBe(30)
+  })
+
+  it('follows a deletion from processing to cancelled', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'log2@example.com')
+    await s.call('/api/account', ask(cookie, 'log2@example.com'))
+    await s.call('/api/account', ask(cookie, 'log2@example.com'))
+    expect(await list(s, cookie)).toMatchObject([{ kind: 'deletion', status: 'processing' }])
+    await s.call('/api/account/deletion/cancel', { method: 'POST', headers: { cookie } })
+    expect(await list(s, cookie)).toMatchObject([{ kind: 'deletion', status: 'cancelled' }])
+  })
+
+  it('keeps a done entry without the person after the account is deleted, and tells them', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'log3@example.com')
+    const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      id: string
+    }
+    await s.call('/api/account', ask(cookie, 'log3@example.com'))
+    const told: string[] = []
+    const db = createDb(bindings.DB)
+    await deleteDueAccounts(db, Date.now() + 15 * 86_400_000, 50, async (to) => void told.push(to))
+    expect(told).toContain('log3@example.com')
+    const row = await bindings.DB.prepare(
+      'SELECT kind, status, completed_at FROM data_request WHERE subject_id = ?'
+    )
+      .bind(me.id)
+      .first<{ kind: string; status: string; completed_at: number | null }>()
+    expect(row).toMatchObject({ kind: 'deletion', status: 'done' })
+    expect(row!.completed_at).not.toBeNull()
+    // Nothing in the log can name the person: no email column exists.
+    const columns = await bindings.DB.prepare(
+      "SELECT name FROM pragma_table_info('data_request')"
+    ).all<{ name: string }>()
+    expect(columns.results.map((c) => c.name)).not.toContain('email')
+  })
+})

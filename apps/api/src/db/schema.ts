@@ -36,6 +36,25 @@ export const accountDeletion = sqliteTable(
   (table) => [index('account_deletion_due_idx').on(table.scheduledFor)]
 )
 
+/**
+ * A request about personal data (export, deletion) with a status and a deadline. No link to the user row and no email:
+ * it has to outlive the account it is about, so only a random id, the kind, the status and the dates remain.
+ */
+export const dataRequest = sqliteTable(
+  'data_request',
+  {
+    id: text('id').primaryKey(),
+    /** The user id at the time (a random value; the user row may be gone). */
+    subjectId: text('subject_id').notNull(),
+    kind: text('kind').notNull(),
+    status: text('status').notNull(),
+    receivedAt: integer('received_at').notNull(),
+    dueAt: integer('due_at').notNull(),
+    completedAt: integer('completed_at')
+  },
+  (table) => [index('data_request_subject_idx').on(table.subjectId, table.receivedAt)]
+)
+
 /** One sign-in (a session was created), kept for the activity list and the new-device alert. Pruned after 90 days. */
 export const signInEvent = sqliteTable(
   'sign_in_event',
