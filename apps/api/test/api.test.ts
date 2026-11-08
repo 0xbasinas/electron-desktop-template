@@ -1087,3 +1087,21 @@ describe('privacy summary', () => {
     })
   })
 })
+
+describe('app config', () => {
+  it('says which app version is the oldest allowed, and is public', async () => {
+    const none = await setup().call('/api/app-config')
+    expect(none.status).toBe(200)
+    expect(await none.json()).toEqual({ minimumVersion: null })
+
+    const set = setup({ MIN_APP_VERSION: ' 0.1.42 ' })
+    const response = await set.call('/api/app-config')
+    expect(await response.json()).toEqual({ minimumVersion: '0.1.42' })
+    expect(response.headers.get('cache-control')).toContain('max-age')
+  })
+
+  it('ignores a value that is not a version, so a typo cannot lock anyone out', async () => {
+    const response = await setup({ MIN_APP_VERSION: 'soon' }).call('/api/app-config')
+    expect(await response.json()).toEqual({ minimumVersion: null })
+  })
+})

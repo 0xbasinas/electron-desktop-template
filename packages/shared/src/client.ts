@@ -11,6 +11,7 @@ import {
   emailChangedSchema,
   type EmailChanged
 } from './emailChange'
+import { appConfigSchema, type AppConfig } from './version'
 import { privacySummarySchema, type PrivacySummary } from './privacy'
 import { signInsSchema, type SignIn } from './signIns'
 import { devicesSchema, type Device } from './devices'
@@ -56,6 +57,8 @@ export interface ApiClient {
     /** Sends feedback as the signed-in person. Resolves with the id of the stored message. */
     send(input: FeedbackInput): Promise<{ id: string }>
   }
+  /** What the app needs to know before anything else (the oldest version still allowed). No sign-in needed. */
+  appConfig(): Promise<AppConfig>
   account: {
     get(): Promise<Account>
     /** Everything we hold about the signed-in person. */
@@ -130,6 +133,7 @@ export function createApiClient({
       send: (input: FeedbackInput): Promise<{ id: string }> =>
         request('/feedback', feedbackReceiptSchema, { method: 'POST', body: JSON.stringify(input) })
     },
+    appConfig: (): Promise<AppConfig> => request('/app-config', appConfigSchema),
     account: {
       get: (): Promise<Account> => request('/account', accountSchema),
       export: (): Promise<AccountExport> => request('/account/export', accountExportSchema),

@@ -14,6 +14,7 @@ import {
   feedbackInputSchema,
   newerWins,
   parsePreferences,
+  parseVersion,
   preferencesRecordSchema,
   type PreferencesRecord,
   type Account,
@@ -524,6 +525,12 @@ export function createApp(options: AppOptions = {}) {
           }
         }
         return c.json({ ok: true })
+      })
+      // The desktop app asks this at start-up: the oldest version still allowed. Public, and cached for a few minutes.
+      .get('/app-config', (c) => {
+        const minimum = (c.env.MIN_APP_VERSION ?? '').trim()
+        c.header('cache-control', 'public, max-age=300')
+        return c.json({ minimumVersion: parseVersion(minimum) ? minimum : null })
       })
       .route('/preferences', preferences)
       .route('/devices', devices)
