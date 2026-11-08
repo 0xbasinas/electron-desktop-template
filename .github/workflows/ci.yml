@@ -42,6 +42,17 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # GitHub's release downloads sometimes time out (504). Then fetch Electron from the npmmirror copy instead; the
+      # electron package checks every download against its bundled checksums.json, so a bad file is still rejected.
+      - name: Use the Electron mirror if GitHub downloads are down
+        shell: bash
+        run: |
+          v=$(grep -oE '^  electron@[0-9][0-9.]*' pnpm-lock.yaml | head -1 | cut -d@ -f2)
+          url="https://github.com/electron/electron/releases/download/v$v/SHASUMS256.txt"
+          if ! curl -sfL --retry 2 -m 30 -o /dev/null "$url"; then
+            echo "GitHub release download failed; using the npmmirror Electron mirror."
+            echo "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/" >> "$GITHUB_ENV"
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Commit messages follow Conventional Commits
         if: github.event_name == 'pull_request'
@@ -68,6 +79,17 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # GitHub's release downloads sometimes time out (504). Then fetch Electron from the npmmirror copy instead; the
+      # electron package checks every download against its bundled checksums.json, so a bad file is still rejected.
+      - name: Use the Electron mirror if GitHub downloads are down
+        shell: bash
+        run: |
+          v=$(grep -oE '^  electron@[0-9][0-9.]*' pnpm-lock.yaml | head -1 | cut -d@ -f2)
+          url="https://github.com/electron/electron/releases/download/v$v/SHASUMS256.txt"
+          if ! curl -sfL --retry 2 -m 30 -o /dev/null "$url"; then
+            echo "GitHub release download failed; using the npmmirror Electron mirror."
+            echo "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/" >> "$GITHUB_ENV"
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Package the app (unpacked)
         run: pnpm build:unpack
@@ -97,6 +119,17 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # GitHub's release downloads sometimes time out (504). Then fetch Electron from the npmmirror copy instead; the
+      # electron package checks every download against its bundled checksums.json, so a bad file is still rejected.
+      - name: Use the Electron mirror if GitHub downloads are down
+        shell: bash
+        run: |
+          v=$(grep -oE '^  electron@[0-9][0-9.]*' pnpm-lock.yaml | head -1 | cut -d@ -f2)
+          url="https://github.com/electron/electron/releases/download/v$v/SHASUMS256.txt"
+          if ! curl -sfL --retry 2 -m 30 -o /dev/null "$url"; then
+            echo "GitHub release download failed; using the npmmirror Electron mirror."
+            echo "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/" >> "$GITHUB_ENV"
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Build old and new versions
         working-directory: apps/desktop
@@ -147,6 +180,17 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # GitHub's release downloads sometimes time out (504). Then fetch Electron from the npmmirror copy instead; the
+      # electron package checks every download against its bundled checksums.json, so a bad file is still rejected.
+      - name: Use the Electron mirror if GitHub downloads are down
+        shell: bash
+        run: |
+          v=$(grep -oE '^  electron@[0-9][0-9.]*' pnpm-lock.yaml | head -1 | cut -d@ -f2)
+          url="https://github.com/electron/electron/releases/download/v$v/SHASUMS256.txt"
+          if ! curl -sfL --retry 2 -m 30 -o /dev/null "$url"; then
+            echo "GitHub release download failed; using the npmmirror Electron mirror."
+            echo "ELECTRON_MIRROR=https://npmmirror.com/mirrors/electron/" >> "$GITHUB_ENV"
+          fi
       - run: pnpm install --frozen-lockfile
       - name: Build the installers (nothing is published)
         run: pnpm run ${{ matrix.script }} --publish never
