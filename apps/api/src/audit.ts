@@ -23,6 +23,7 @@ export type AuditType =
   | 'member_invited'
   | 'invitation_accepted'
   | 'member_removed'
+  | 'team_role_changed'
   | 'api_key_created'
   | 'api_key_deleted'
   | 'user_banned'
@@ -82,6 +83,7 @@ const BY_PATH: Record<string, AuditType> = {
   '/organization/invite-member': 'member_invited',
   '/organization/accept-invitation': 'invitation_accepted',
   '/organization/remove-member': 'member_removed',
+  '/organization/update-member-role': 'team_role_changed',
   '/api-key/create': 'api_key_created',
   '/api-key/delete': 'api_key_deleted',
   '/admin/ban-user': 'user_banned',

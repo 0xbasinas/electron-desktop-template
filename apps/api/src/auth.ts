@@ -141,6 +141,30 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       })
     },
     databaseHooks: {
+      user: {
+        create: {
+          // A company's identity provider may only create accounts at the company's own domain. Without this a
+          // provider whose domain was proven could mint accounts (and keep a session) for any address, and the
+          // real owner of that address would later sign in to an account someone else already holds.
+          before: async (created, ctx) => {
+            const path = ctx?.path ?? ''
+            if (!path.startsWith('/sso/callback')) return
+            const providerId = (ctx?.params as { providerId?: string } | undefined)?.providerId
+            const [provider] = providerId
+              ? await db
+                  .select({ domain: schema.ssoProvider.domain })
+                  .from(schema.ssoProvider)
+                  .where(eq(schema.ssoProvider.providerId, providerId))
+              : []
+            const host = created.email.split('@')[1]?.toLowerCase() ?? ''
+            const allowed = (provider?.domain ?? '').toLowerCase()
+            if (!allowed || (host !== allowed && !host.endsWith('.' + allowed)))
+              throw new APIError('FORBIDDEN', {
+                message: 'This address does not belong to the company that signed you in.'
+              })
+          }
+        }
+      },
       session: {
         create: {
           // A new session is a sign-in: remember it for the activity list, and warn by email when it is from a
@@ -209,7 +233,10 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         keyExpiration: { defaultExpiresIn: 90 * 86_400, minExpiresIn: 1, maxExpiresIn: 365 },
         rateLimit: { enabled: true, timeWindow: 60_000, maxRequests: 60 },
         // Usage counters are written after the response, so checking a key does not wait for a database write.
-        deferUpdates: true
+        deferUpdates: true,
+        // A key can only read the account unless a route asks for more; every route that accepts a key names the
+        // permission it needs (see /v1/me).
+        permissions: { defaultPermissions: { account: ['read'] } }
       }),
       // Teams: people who share a workspace. Anyone may start up to MAX_TEAMS_PER_PERSON; the owner invites by email.
       organization({

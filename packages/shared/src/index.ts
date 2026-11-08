@@ -2,7 +2,8 @@ export {
   accountExportSchema,
   accountSchema,
   deleteAccountInputSchema,
-  emailSchema
+  emailSchema,
+  securityEventsSchema
 } from './schemas'
 export type { Account, AccountExport, SecurityEvent } from './schemas'
 export {

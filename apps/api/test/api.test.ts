@@ -1,6 +1,6 @@
 import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../src/app'
 import { createDb } from '../src/db'
 import { deleteDueAccounts } from '../src/deletion'
@@ -1667,5 +1667,292 @@ describe('single sign-on (OpenID Connect)', () => {
     })
     expect(start.status).toBe(401)
     expect(await start.text()).toContain('has not been verified')
+  })
+})
+
+describe('closed gaps', () => {
+  const json = { 'content-type': 'application/json' }
+
+  it('refuses a key that was not given the permission a route needs', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'scope@example.com')
+    const made = await s.call('/api/auth/api-key/create', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ name: 'narrow' })
+    })
+    const { key, id } = (await made.json()) as { key: string; id: string }
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': key } })).status).toBe(200)
+    await bindings.DB.prepare('UPDATE apikey SET permissions = ? WHERE id = ?')
+      .bind(JSON.stringify({ other: ['read'] }), id)
+      .run()
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': key } })).status).toBe(401)
+  })
+
+  it('lets staff, and only staff, read one person security activity', async () => {
+    const s = setup()
+    const target = await signIn(s, 'watched@example.com')
+    void target
+    const row = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('watched@example.com')
+      .first<{ id: string }>()
+    const url = `/api/admin/audit/${row!.id}`
+
+    await signIn(s, 'staff-a@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'support' WHERE email = ?")
+      .bind('staff-a@example.com')
+      .run()
+    const support = await signIn(s, 'staff-a@example.com')
+    const ok = await s.call(url, { headers: { cookie: support } })
+    expect(ok.status).toBe(200)
+    expect(((await ok.json()) as { type: string }[]).map((e) => e.type)).toContain('user_signed_in')
+
+    const plain = await signIn(s, 'plain-b@example.com')
+    expect((await s.call(url, { headers: { cookie: plain } })).status).toBe(403)
+    expect((await s.call(url)).status).toBe(401)
+  })
+})
+
+describe('Turnstile verification (Cloudflare answer faked)', () => {
+  const VERIFY = 'https://challenges.cloudflare.com/turnstile/v0/siteverify'
+  const keys = {
+    TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA',
+    TURNSTILE_SITE_KEY: 'site'
+  }
+  const link = (s: ReturnType<typeof setup>, token?: string): Promise<Response> =>
+    s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(token ? { 'x-captcha-response': token } : {})
+      },
+      body: JSON.stringify({ email: 'captcha@example.com', callbackURL: '/app' })
+    })
+
+  /** Pretends to be Cloudflare: only the dummy token passes. Records what was asked. */
+  function fakeCloudflare(): { asked: { secret: string | null; response: string | null }[] } {
+    const asked: { secret: string | null; response: string | null }[] = []
+    const real = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (!url.startsWith(VERIFY)) return real(input, init)
+      const raw = input instanceof Request ? await input.text() : String(init?.body ?? '')
+      const form = new URLSearchParams(raw)
+      let body: Record<string, string> = {}
+      if (!raw.includes('=') || raw.trim().startsWith('{')) {
+        try {
+          body = JSON.parse(raw) as Record<string, string>
+        } catch {
+          body = {}
+        }
+      }
+      const secret = form.get('secret') ?? body.secret ?? null
+      const response = form.get('response') ?? body.response ?? null
+      asked.push({ secret, response })
+      const success = response === 'XXXX.DUMMY.TOKEN.XXXX'
+      return Response.json({ success, 'error-codes': success ? [] : ['invalid-input-response'] })
+    })
+    return { asked }
+  }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('sends the email when Cloudflare accepts the token, and asks with our secret', async () => {
+    const cloudflare = fakeCloudflare()
+    const s = setup(keys)
+    const response = await link(s, 'XXXX.DUMMY.TOKEN.XXXX')
+    expect(response.status).toBe(200)
+    expect(s.sent).toHaveLength(1)
+    expect(cloudflare.asked).toEqual([
+      { secret: keys.TURNSTILE_SECRET_KEY, response: 'XXXX.DUMMY.TOKEN.XXXX' }
+    ])
+  })
+
+  it('refuses a token Cloudflare rejects, and a missing one never reaches Cloudflare', async () => {
+    const cloudflare = fakeCloudflare()
+    const s = setup(keys)
+    expect((await link(s, 'a-bot-made-this')).status).toBe(403)
+    expect((await link(s)).status).toBe(400)
+    expect(s.sent).toHaveLength(0)
+    expect(cloudflare.asked).toHaveLength(1)
+  })
+
+  it('fails closed when Cloudflare cannot be reached', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url.startsWith(VERIFY)) throw new Error('network down')
+      return fetch(input, init)
+    })
+    const s = setup(keys)
+    const response = await link(s, 'XXXX.DUMMY.TOKEN.XXXX')
+    expect(response.status).toBeGreaterThanOrEqual(500)
+    expect(s.sent).toHaveLength(0)
+  })
+
+  it('does not ask for a token on other sign-in routes', async () => {
+    fakeCloudflare()
+    const s = setup(keys)
+    const response = await s.call('/api/auth/magic-link/verify?token=nope&callbackURL=/app')
+    expect(response.status).toBe(302)
+  })
+})
+
+describe('single sign-on, a whole login against a fake identity provider', () => {
+  const json = { 'content-type': 'application/json' }
+  const IDP = 'https://idp.acme.example'
+  const b64 = (data: ArrayBuffer | string): string => {
+    const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data)
+    let text = ''
+    for (const b of bytes) text += String.fromCharCode(b)
+    return btoa(text).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
+  }
+
+  /** A pretend identity provider: signs id tokens with its own key and publishes the public half. */
+  async function fakeIdp(claims: () => Record<string, unknown>): Promise<void> {
+    const pair = (await crypto.subtle.generateKey(
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256'
+      },
+      true,
+      ['sign', 'verify']
+    )) as CryptoKeyPair
+    const jwk = {
+      ...(await crypto.subtle.exportKey('jwk', pair.publicKey)),
+      kid: 'k1',
+      alg: 'RS256',
+      use: 'sig'
+    }
+    const real = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url === `${IDP}/jwks`) return Response.json({ keys: [jwk] })
+      if (url === `${IDP}/token`) {
+        const head = b64(JSON.stringify({ alg: 'RS256', kid: 'k1', typ: 'JWT' }))
+        const now = Math.floor(Date.now() / 1000)
+        const body = b64(
+          JSON.stringify({ iss: IDP, aud: 'client', iat: now, exp: now + 300, ...claims() })
+        )
+        const sig = await crypto.subtle.sign(
+          'RSASSA-PKCS1-v1_5',
+          pair.privateKey,
+          new TextEncoder().encode(`${head}.${body}`)
+        )
+        return Response.json({
+          access_token: 'at',
+          token_type: 'Bearer',
+          id_token: `${head}.${body}.${b64(sig)}`
+        })
+      }
+      if (url.startsWith(IDP)) return new Response('not found', { status: 404 })
+      return real(input, init)
+    })
+  }
+
+  async function setupCompany(
+    s: ReturnType<typeof setup>,
+    verified: boolean,
+    id: string
+  ): Promise<void> {
+    await signIn(s, 'boss-oidc@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?")
+      .bind('boss-oidc@example.com')
+      .run()
+    const admin = await signIn(s, 'boss-oidc@example.com')
+    const made = await s.call('/api/auth/sso/register', {
+      method: 'POST',
+      headers: { cookie: admin, ...json },
+      body: JSON.stringify({
+        providerId: id,
+        issuer: IDP,
+        domain: `${id}.example`,
+        oidcConfig: {
+          clientId: 'client',
+          clientSecret: 'secret',
+          authorizationEndpoint: `${IDP}/authorize`,
+          tokenEndpoint: `${IDP}/token`,
+          jwksEndpoint: `${IDP}/jwks`,
+          discoveryEndpoint: `${IDP}/.well-known/openid-configuration`,
+          skipDiscovery: true,
+          scopes: ['openid', 'email', 'profile']
+        }
+      })
+    })
+    expect(made.status).toBe(200)
+    if (verified)
+      await bindings.DB.prepare('UPDATE sso_provider SET domain_verified = 1 WHERE provider_id = ?')
+        .bind(id)
+        .run()
+  }
+
+  /** Starts a company login and returns the callback request the identity provider would send back. */
+  async function startLogin(
+    s: ReturnType<typeof setup>,
+    id: string
+  ): Promise<{ path: string; cookie: string }> {
+    const start = await s.call('/api/auth/sign-in/sso', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ email: `ada@${id}.example`, callbackURL: '/app' })
+    })
+    expect(start.status).toBe(200)
+    const { url } = (await start.json()) as { url: string }
+    expect(url.startsWith(`${IDP}/authorize`)).toBe(true)
+    const state = new URL(url).searchParams.get('state')!
+    const cookie = start.headers
+      .getSetCookie()
+      .map((c) => c.split(';')[0])
+      .join('; ')
+    return { path: `/api/auth/sso/callback/${id}?code=abc&state=${state}`, cookie }
+  }
+
+  afterEach(() => vi.restoreAllMocks())
+
+  it('signs a person from the verified company in, creating the account', async () => {
+    await fakeIdp(() => ({
+      sub: 'idp-1',
+      email: 'ada@good-co.example',
+      email_verified: true,
+      name: 'Ada'
+    }))
+    const s = setup()
+    await setupCompany(s, true, 'good-co')
+    const { path, cookie } = await startLogin(s, 'good-co')
+    const back = await s.call(path, { headers: { cookie } })
+    expect(back.status).toBe(302)
+    expect(back.headers.get('location')).toContain('/app')
+    expect(back.headers.getSetCookie().join(';')).toContain('session_token')
+    const person = await bindings.DB.prepare('SELECT email FROM user WHERE email = ?')
+      .bind('ada@good-co.example')
+      .first()
+    expect(person).not.toBeNull()
+  })
+
+  it('does not sign in someone whose address is at another domain', async () => {
+    await fakeIdp(() => ({ sub: 'idp-2', email: 'ada@evil.example', email_verified: true }))
+    const s = setup()
+    await setupCompany(s, true, 'mix-co')
+    const { path, cookie } = await startLogin(s, 'mix-co')
+    const back = await s.call(path, { headers: { cookie } })
+    expect(back.headers.getSetCookie().join(';')).not.toContain('session_token')
+    const person = await bindings.DB.prepare('SELECT email FROM user WHERE email = ?')
+      .bind('ada@evil.example')
+      .first()
+    expect(person).toBeNull()
+  })
+
+  it('does not take over an existing account when the domain was never proven', async () => {
+    await fakeIdp(() => ({ sub: 'idp-3', email: 'ada@unproven-co.example', email_verified: true }))
+    const s = setup()
+    await signIn(s, 'ada@unproven-co.example')
+    await setupCompany(s, false, 'unproven-co')
+    const start = await s.call('/api/auth/sign-in/sso', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ email: 'ada@unproven-co.example', callbackURL: '/app' })
+    })
+    expect(start.status).toBe(401)
   })
 })

@@ -986,3 +986,35 @@ describe('company sign-in', () => {
     expect(screen.queryByLabelText('Provider name')).not.toBeInTheDocument()
   })
 })
+
+describe('admin: one person activity', () => {
+  it('loads and shows the activity of the chosen person', async () => {
+    auth.session = { user: { email: 'me@example.com', id: 'u1', role: 'admin' } } as never
+    auth.admin.listUsers.mockResolvedValue({
+      data: {
+        users: [{ id: 'u2', email: 'them@example.com', role: 'user', banned: false }],
+        total: 1
+      },
+      error: null
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        Response.json([
+          {
+            at: '2026-11-01T10:00:00Z',
+            type: 'user_sign_in_failed',
+            outcome: 'failure',
+            label: null,
+            ipAddress: '1.2.3.4'
+          }
+        ])
+      )
+    )
+    at('/admin')
+    await userEvent.click(await screen.findByRole('button', { name: 'Activity' }))
+    const section = await screen.findByRole('region', { name: 'Activity' })
+    expect(await within(section).findByText(/user sign in failed/)).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith('/api/admin/audit/u2', expect.anything())
+  })
+})

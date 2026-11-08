@@ -128,7 +128,7 @@ The email-link request (`POST /sign-in/magic-link`) is the one endpoint that sen
 - Create a Turnstile widget in the Cloudflare dashboard (hostname: your site). Put the **site key** in `TURNSTILE_SITE_KEY` (a public variable in `apps/api/wrangler.jsonc`) and the **secret key** with `wrangler secret put TURNSTILE_SECRET_KEY`.
 - The check turns on only when **both** are set. `/api/app-config` then returns `turnstileSiteKey`; the sign-in page shows the widget and sends the token in the `x-captcha-response` header. Without a token the API answers 400 and sends no email; a failed check is 403. A token works once, so the page asks for a new one after every try.
 - Only `/sign-in/magic-link` is checked (not the link itself, and not passkeys). A request without a valid token still counts against the sign-in rate limit.
-- To try it locally use Cloudflare's test keys: site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`.
+- The tests fake Cloudflare's answer (a stubbed `siteverify`): a token Cloudflare accepts sends the email with our secret, a rejected one is 403, a missing one never reaches Cloudflare, and an unreachable Cloudflare fails closed (5xx, no email). To try it locally use Cloudflare's test keys: site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`.
 - The page's security headers (`apps/web/public/_headers`) allow `https://challenges.cloudflare.com` for scripts, frames and connections.
 
 ## Security activity (audit trail)
@@ -146,6 +146,7 @@ The Better Auth `admin` plugin is on, with two roles (`apps/api/src/permissions.
 - A role change shows up on their next sign-in, or within 5 minutes (the session cookie cache).
 - `/admin` in the website lists people (search by email, pages of 25) and lets an admin suspend or restore them. Suspending ends their sessions and blocks new ones; the server enforces permissions, the page only hides buttons.
 - Suspending ends the person's sessions at once, but a session cookie already issued can still pass a plain `get-session` for up to 5 minutes (the cookie cache). Account actions and API keys check the database, so they stop immediately.
+- `GET /api/admin/audit/:userId` (admin and support) returns one person's security activity; the "Activity" button on `/admin` shows it.
 - Admin actions are written to the audit trail with `actor_id` set to the staff member.
 - Deleting an account stays on the person's own cooling-off flow; the plugin's delete is not granted to anyone.
 
@@ -154,7 +155,7 @@ The Better Auth `admin` plugin is on, with two roles (`apps/api/src/permissions.
 People make keys on their account page for scripts that act as them (`@better-auth/api-key`, table `apikey`). A key is shown once, is stored as a hash, expires after 90 days by default (at most 365), is limited to 60 requests a minute, needs a name, and a person may hold ten. Send it in the `x-api-key` header; `GET /api/v1/me` is the example call and shows how to check a key on the server (`auth.api.verifyApiKey`, which rejects suspended people). Usage counters are written after the response (`deferUpdates`).
 
 - `apikey.reference_id` has no foreign key, so the daily deletion job removes a person's keys itself (`deletion.ts`). The data export lists name, first characters and dates, never the key.
-- A key identifies a person, not a permission: new routes that accept keys must check what the key may do. Do not enable `enableSessionForAPIKeys`.
+- A key is made with the single permission `account: read`. Every route that accepts a key must name the permission it needs when it checks it (`/api/v1/me` passes `permissions: { account: ['read'] }` to `verifyApiKey`); add a new permission for new kinds of access, never reuse `account`. Do not enable `enableSessionForAPIKeys`.
 
 ## Teams
 
@@ -172,8 +173,9 @@ The Better Auth `organization` plugin is on (tables `organization`, `member`, `i
 - **Who sets it up:** only an `admin` can register a provider (`providersLimit` is 25 for admins and 0 for everyone else), from the "Company sign-in" section of `/admin`: provider name, issuer URL, email domain, client id and secret. The secret is stored in the database row; treat the database as secret-bearing and use `defaultSSO` in code instead if you prefer to keep it out.
 - **Proof of domain:** domain verification is on. A provider cannot sign anyone in until its domain has a DNS TXT record `_better-auth-token-<provider>.<domain>` with the token shown after registering; "Check the record" confirms it (a lookup that uses `node:dns/promises`, which works on Workers with `nodejs_compat`).
 - **Signing in:** "Sign in with your company" on the sign-in page takes the work email, finds the provider by its domain and redirects to the company's login. An unverified domain answers 401. A new person is created on first sign-in; an existing person is linked only when the domain is verified.
+- **A company can only create accounts at its own domain.** A `user.create.before` hook rejects a new account from `/sso/callback/<provider>` when the address is not at the provider's domain (or a subdomain). Without it a provider with a proven domain could create accounts, and keep a session, for any address. Tested.
 - **SAML is refused** (`/sso/register` with a `samlConfig` answers 400). Checking a SAML response took about 10 to 15 ms in a local test, above the 10 ms CPU limit of the free Workers plan. Enable it only on the paid plan, after measuring in production.
-- Tested here with a fake provider (registration rules, SAML refusal, unverified domain). A real login against Google Workspace, Okta or Entra has not been tried: test each in gozap before promising it to a customer. Deleting a provider does not end sessions already created through it.
+- Tested here with a fake provider that signs real RS256 id tokens: a whole login (register, domain proof, authorize, callback, session), a person at another domain, and an unproven domain. A real login against Google Workspace, Okta or Entra has not been tried: test each in gozap before promising it to a customer. Deleting a provider does not end sessions already created through it.
 
 ## Feedback
 

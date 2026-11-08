@@ -548,10 +548,22 @@ export function createApp(options: AppOptions = {}) {
         await next()
       })
       .get('/health', (c) => c.json({ ok: true }))
+      // Staff: one person's security activity. Needs the same permission as looking the person up.
+      .get('/admin/audit/:userId', requireSession(true), async (c) => {
+        const allowed = await c.var.auth.api.userHasPermission({
+          body: { userId: c.var.userId, permissions: { user: ['get'] } }
+        })
+        if (!allowed.success) throw new HTTPException(403, { message: 'Not allowed' })
+        return c.json(await recentAudit(c.var.db, c.req.param('userId')))
+      })
       // The simplest call a script can make with an API key (header x-api-key): who owns this key.
       .get('/v1/me', async (c) => {
         const key = c.req.header('x-api-key')
-        const checked = key ? await c.var.auth.api.verifyApiKey({ body: { key } }) : null
+        const checked = key
+          ? await c.var.auth.api.verifyApiKey({
+              body: { key, permissions: { account: ['read'] } }
+            })
+          : null
         if (!checked?.valid || !checked.key)
           throw new HTTPException(401, { message: 'Invalid key' })
         const [owner] = await c.var.db

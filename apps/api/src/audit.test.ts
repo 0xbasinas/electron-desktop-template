@@ -36,6 +36,12 @@ describe('eventForCall', () => {
     ).toMatchObject({ type: 'user_banned', outcome: 'failure' })
   })
 
+  it('records a changed team role', () => {
+    expect(eventForCall({ path: '/organization/update-member-role', failed: false })?.type).toBe(
+      'team_role_changed'
+    )
+  })
+
   it('ignores everything else', () => {
     expect(eventForCall({ path: '/get-session', failed: false })).toBeNull()
   })
