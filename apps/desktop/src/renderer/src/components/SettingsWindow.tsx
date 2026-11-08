@@ -5,8 +5,8 @@ import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useAccount } from '@renderer/hooks/useAccount'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useUpdater } from '@renderer/hooks/useUpdater'
-import { ACCENTS } from '@repo/shared'
-import { Button, cn } from '@repo/ui'
+import { ACCENTS } from '@repo/shared/accents'
+import { AccentPicker, Button, cn } from '@repo/ui'
 
 const CHANNELS: { value: UpdateChannel; label: string; hint: string }[] = [
   { value: 'latest', label: 'Stable', hint: 'Tested releases. Recommended.' },
@@ -193,7 +193,7 @@ export function SettingsWindow(): React.JSX.Element {
             </select>
           </label>
           <div className="flex items-center justify-between gap-3 text-sm">
-            <span id="accent-label">
+            <span>
               Accent colour
               <span className="block text-xs text-muted-foreground">
                 {account?.user
@@ -201,27 +201,13 @@ export function SettingsWindow(): React.JSX.Element {
                   : 'Sign in to use it on every device.'}
               </span>
             </span>
-            <div role="radiogroup" aria-labelledby="accent-label" className="flex gap-2">
-              {ACCENTS.map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={settings?.accent === value}
-                  aria-label={value}
-                  title={value}
-                  disabled={!settings}
-                  data-accent={value}
-                  onClick={() => void update({ accent: value })}
-                  className={cn(
-                    'size-6 rounded-full bg-primary ring-offset-2 ring-offset-background transition',
-                    settings?.accent === value
-                      ? 'ring-2 ring-ring'
-                      : 'hover:ring-2 hover:ring-ring/50'
-                  )}
-                />
-              ))}
-            </div>
+            <AccentPicker
+              accents={ACCENTS}
+              value={settings?.accent}
+              disabled={!settings}
+              label="Accent colour"
+              onChange={(accent) => void update({ accent })}
+            />
           </div>
           {platform !== 'darwin' && (
             <Toggle

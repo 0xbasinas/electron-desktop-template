@@ -6,6 +6,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./accents": "./src/accents.ts",
     "./client": "./src/client.ts"
   },
   "scripts": {

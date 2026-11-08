@@ -1,45 +1,16 @@
 import { app } from 'electron'
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { ACCENTS } from '@repo/shared'
 import type { Settings } from '../shared/ipc'
-
-const defaults: Settings = {
-  theme: 'system',
-  accent: 'neutral',
-  updateChannel: 'latest',
-  closeToTray: false,
-  launchAtLogin: false,
-  crashReports: false
-}
-/** What is stored on disk: the user's settings plus bookkeeping the renderer never sets. */
-interface Stored extends Settings {
-  lastSeenVersion: string
-  /** When the theme or accent was last changed (ms since 1970); the account sync keeps the newest edit. */
-  preferencesUpdatedAt: number
-}
+import { parseStored, type Stored } from '../shared/storedSettings'
 
 const settingsPath = (): string => join(app.getPath('userData'), 'settings.json')
 
 function readStored(): Stored {
   try {
-    // `themeUpdatedAt` is what older versions called `preferencesUpdatedAt`.
-    const saved = JSON.parse(readFileSync(settingsPath(), 'utf8')) as Partial<Stored> & {
-      themeUpdatedAt?: number
-    }
-    const updatedAt = saved.preferencesUpdatedAt ?? saved.themeUpdatedAt
-    return {
-      theme: saved.theme === 'light' || saved.theme === 'dark' ? saved.theme : 'system',
-      accent: ACCENTS.find((a) => a === saved.accent) ?? defaults.accent,
-      preferencesUpdatedAt: typeof updatedAt === 'number' && updatedAt >= 0 ? updatedAt : 0,
-      updateChannel: saved.updateChannel === 'beta' ? 'beta' : defaults.updateChannel,
-      closeToTray: saved.closeToTray === true,
-      launchAtLogin: saved.launchAtLogin === true,
-      crashReports: saved.crashReports === true,
-      lastSeenVersion: typeof saved.lastSeenVersion === 'string' ? saved.lastSeenVersion : ''
-    }
+    return parseStored(JSON.parse(readFileSync(settingsPath(), 'utf8')))
   } catch {
-    return { ...defaults, lastSeenVersion: '', preferencesUpdatedAt: 0 }
+    return parseStored(undefined)
   }
 }
 
@@ -68,7 +39,7 @@ export function updateSettings(patch: Partial<Settings>): Settings {
   writeStored({
     ...stored,
     ...next,
-    preferencesUpdatedAt: preferencesChanged ? Date.now() : stored.preferencesUpdatedAt
+    themeUpdatedAt: preferencesChanged ? Date.now() : stored.themeUpdatedAt
   })
   listeners.forEach((listener) => listener(next, previous))
   return next
@@ -80,8 +51,8 @@ export function getPreferencesRecord(): {
   accent: Settings['accent']
   updatedAt: number
 } {
-  const { theme, accent, preferencesUpdatedAt } = readStored()
-  return { theme, accent, updatedAt: preferencesUpdatedAt }
+  const { theme, accent, themeUpdatedAt } = readStored()
+  return { theme, accent, updatedAt: themeUpdatedAt }
 }
 
 /** Newer preferences arrived from another device: adopt them with their own timestamp (so they are not pushed back as a new edit). */
@@ -90,7 +61,7 @@ export function applyRemotePreferences(
   updatedAt: number
 ): void {
   const previous = getSettings()
-  writeStored({ ...readStored(), ...prefs, preferencesUpdatedAt: updatedAt })
+  writeStored({ ...readStored(), ...prefs, themeUpdatedAt: updatedAt })
   const next = { ...previous, ...prefs }
   if (next.theme !== previous.theme || next.accent !== previous.accent) {
     listeners.forEach((listener) => listener(next, previous))

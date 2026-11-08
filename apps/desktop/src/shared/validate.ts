@@ -1,4 +1,4 @@
-import { ACCENTS } from '@repo/shared'
+import { ACCENTS, isAccent } from '@repo/shared'
 import type { Settings } from './ipc'
 
 // The renderer is untrusted: anything it sends over IPC is checked here before main acts on it.
@@ -37,10 +37,10 @@ export function parseSettingsPatch(input: unknown): Partial<Settings> {
         patch.theme = value
         break
       case 'accent':
-        if (!(ACCENTS as readonly unknown[]).includes(value)) {
+        if (!isAccent(value)) {
           throw new Error(`Invalid settings: accent must be one of ${ACCENTS.join(', ')}`)
         }
-        patch.accent = value as Settings['accent']
+        patch.accent = value
         break
       case 'closeToTray':
       case 'launchAtLogin':

@@ -1,12 +1,11 @@
 import { z } from 'zod'
+import { ACCENTS } from './accents'
 
 // Per-person preferences that follow them between the web app and the desktop app. Add a field here (with a default)
 // and it syncs. Keep it small: it is stored as one row per person.
 
 export const themeSchema = z.enum(['system', 'light', 'dark'])
 
-/** The accent colour presets. `neutral` is the original black/white look; the others are defined in @repo/ui's theme.css. */
-export const ACCENTS = ['neutral', 'blue', 'violet', 'green', 'orange', 'rose'] as const
 export const accentSchema = z.enum(ACCENTS)
 
 export const preferencesSchema = z.object({

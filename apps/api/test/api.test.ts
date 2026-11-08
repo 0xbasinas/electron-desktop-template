@@ -471,6 +471,30 @@ describe('preferences', () => {
     })
   })
 
+  it('keeps the accent when an older app saves only the theme', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'pref-old@example.com')
+    const withAccent = await s.call('/api/preferences', {
+      method: 'PUT',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ preferences: { theme: 'light', accent: 'blue' }, updatedAt: 100 })
+    })
+    expect(await withAccent.json()).toEqual({
+      preferences: { theme: 'light', accent: 'blue' },
+      updatedAt: 100
+    })
+    // The older app does not know about the accent: its newer theme change must not reset it.
+    const older = await s.call('/api/preferences', put(cookie, 'dark', 200))
+    expect(await older.json()).toEqual({
+      preferences: { theme: 'dark', accent: 'blue' },
+      updatedAt: 200
+    })
+    expect(await get(s, cookie)).toEqual({
+      preferences: { theme: 'dark', accent: 'blue' },
+      updatedAt: 200
+    })
+  })
+
   it('rejects values it does not know', async () => {
     const s = setup()
     const cookie = await signIn(s, 'pref2@example.com')

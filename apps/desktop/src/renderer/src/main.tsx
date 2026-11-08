@@ -2,6 +2,7 @@ import './assets/index.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { isAccent } from '@repo/shared/accents'
 import App from './App'
 import { SettingsWindow } from './components/SettingsWindow'
 
@@ -14,9 +15,23 @@ applyTheme()
 darkQuery.addEventListener('change', applyTheme)
 
 // The accent colour is a setting: put it on <html> now and whenever it changes (from any window, or another device).
+// The last value is remembered in localStorage so the first paint already has it; main's answer then corrects it.
+const ACCENT_KEY = 'accent'
 const applyAccent = (accent: string): void => {
   document.documentElement.dataset.accent = accent
+  try {
+    localStorage.setItem(ACCENT_KEY, accent)
+  } catch {
+    // storage unavailable: the accent still applies for this session
+  }
 }
+let remembered: unknown
+try {
+  remembered = localStorage.getItem(ACCENT_KEY)
+} catch {
+  // storage unavailable
+}
+document.documentElement.dataset.accent = isAccent(remembered) ? remembered : 'neutral'
 void window.api.getSettings().then((s) => applyAccent(s.accent))
 window.api.onSettingsChanged((s) => applyAccent(s.accent))
 

@@ -4,7 +4,7 @@ import { ACCENTS, type Account, type Preferences } from '@repo/shared'
 import { Navigate, useNavigate } from 'react-router'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
-import { cn } from '@repo/ui'
+import { AccentPicker } from '@repo/ui'
 import { currentAccent, currentTheme, setAccent, setTheme, syncTheme } from '../lib/theme'
 
 type ThemeChoice = 'system' | 'light' | 'dark'
@@ -214,24 +214,14 @@ function AccountDetails(): JSX.Element {
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
-        <div role="radiogroup" aria-label="Accent colour" className="flex gap-2 pt-1">
-          {ACCENTS.map((value) => (
-            <button
-              key={value}
-              type="button"
-              role="radio"
-              aria-checked={accent === value}
-              aria-label={`Accent ${value}`}
-              title={value}
-              data-accent={value}
-              onClick={() => void chooseAccent(value)}
-              className={cn(
-                'size-7 rounded-full bg-primary ring-offset-2 ring-offset-background transition',
-                accent === value ? 'ring-2 ring-ring' : 'hover:ring-2 hover:ring-ring/50'
-              )}
-            />
-          ))}
-        </div>
+        <AccentPicker
+          accents={ACCENTS}
+          value={accent}
+          label="Accent colour"
+          itemLabelPrefix="Accent "
+          className="pt-1"
+          onChange={(next) => void chooseAccent(next)}
+        />
       </section>
 
       <section className="space-y-2">
