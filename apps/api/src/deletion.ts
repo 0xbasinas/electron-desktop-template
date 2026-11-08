@@ -100,6 +100,8 @@ export async function deleteDueAccounts(
   for (const { userId, email } of due) {
     await db.batch([
       db.delete(schema.verification).where(eq(schema.verification.identifier, email)),
+      // API keys point at the person without a foreign key, so they are removed here.
+      db.delete(schema.apikey).where(eq(schema.apikey.referenceId, userId)),
       db.delete(schema.user).where(and(eq(schema.user.id, userId)))
     ])
     await closeRequests(db, userId, 'deletion', 'done', now)

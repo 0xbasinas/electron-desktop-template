@@ -1430,3 +1430,67 @@ describe('staff roles (admin plugin)', () => {
     void victim
   })
 })
+
+describe('API keys', () => {
+  const json = { 'content-type': 'application/json' }
+  const make = (s: ReturnType<typeof setup>, cookie: string, name = 'script'): Promise<Response> =>
+    s.call('/api/auth/api-key/create', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ name })
+    })
+
+  it('makes a key that works once in the header, and stops working when deleted', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'keys@example.com')
+    const created = await make(s, cookie)
+    expect(created.status).toBe(200)
+    const body = (await created.json()) as { key: string; id: string; expiresAt: string | null }
+    expect(body.key).toMatch(/^key_/)
+    expect(body.expiresAt).not.toBeNull()
+
+    const me = await s.call('/api/v1/me', { headers: { 'x-api-key': body.key } })
+    expect(me.status).toBe(200)
+    expect(await me.json()).toMatchObject({ email: 'keys@example.com' })
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': 'key_nope' } })).status).toBe(401)
+    expect((await s.call('/api/v1/me')).status).toBe(401)
+
+    // The database holds a hash, never the key.
+    const stored = await bindings.DB.prepare('SELECT key FROM apikey WHERE id = ?')
+      .bind(body.id)
+      .first<{ key: string }>()
+    expect(stored!.key).not.toBe(body.key)
+
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as { apiKeys: { name: string }[] }
+    expect(exported.apiKeys).toHaveLength(1)
+    expect(JSON.stringify(exported)).not.toContain(body.key)
+
+    await s.call('/api/auth/api-key/delete', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ keyId: body.id })
+    })
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': body.key } })).status).toBe(401)
+  })
+
+  it('needs a name, a session, and stops at ten keys', async () => {
+    const s = setup()
+    expect((await make(s, '')).status).toBeGreaterThanOrEqual(401)
+    const cookie = await signIn(s, 'many@example.com')
+    expect((await make(s, cookie, '')).status).toBe(400)
+    for (let i = 0; i < 10; i++) expect((await make(s, cookie, `k${i}`)).status).toBe(200)
+    expect((await make(s, cookie, 'eleventh')).status).toBe(400)
+  })
+
+  it('does not accept a key from a suspended person', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'gone@example.com')
+    const { key } = (await (await make(s, cookie)).json()) as { key: string }
+    await bindings.DB.prepare('UPDATE user SET banned = 1 WHERE email = ?')
+      .bind('gone@example.com')
+      .run()
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': key } })).status).toBe(401)
+  })
+})

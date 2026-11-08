@@ -148,6 +148,13 @@ The Better Auth `admin` plugin is on, with two roles (`apps/api/src/permissions.
 - Admin actions are written to the audit trail with `actor_id` set to the staff member.
 - Deleting an account stays on the person's own cooling-off flow; the plugin's delete is not granted to anyone.
 
+## API keys
+
+People make keys on their account page for scripts that act as them (`@better-auth/api-key`, table `apikey`). A key is shown once, is stored as a hash, expires after 90 days by default (at most 365), is limited to 60 requests a minute, needs a name, and a person may hold ten. Send it in the `x-api-key` header; `GET /api/v1/me` is the example call and shows how to check a key on the server (`auth.api.verifyApiKey`, which rejects suspended people). Usage counters are written after the response (`deferUpdates`).
+
+- `apikey.reference_id` has no foreign key, so the daily deletion job removes a person's keys itself (`deletion.ts`). The data export lists name, first characters and dates, never the key.
+- A key identifies a person, not a permission: new routes that accept keys must check what the key may do. Do not enable `enableSessionForAPIKeys`.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics

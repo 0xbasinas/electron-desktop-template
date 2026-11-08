@@ -9,6 +9,7 @@ const auth = vi.hoisted(() => ({
   session: null as null | { user: { email: string } },
   pending: false,
   magicLink: vi.fn(),
+  apiKey: { list: vi.fn(), create: vi.fn(), delete: vi.fn() },
   admin: { listUsers: vi.fn(), banUser: vi.fn(), unbanUser: vi.fn() },
   transfer: vi.fn(),
   ensureRedirect: vi.fn(() => 0),
@@ -29,6 +30,7 @@ vi.mock('./lib/auth', () => ({
     },
     signOut: vi.fn(),
     admin: auth.admin,
+    apiKey: auth.apiKey,
     $fetch: auth.transfer,
     ensureElectronRedirect: auth.ensureRedirect,
     revokeSessions: auth.revoke
@@ -79,6 +81,9 @@ beforeEach(() => {
   auth.ensureRedirect.mockClear()
   auth.signInPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.listPasskeys.mockReset().mockResolvedValue({ data: [], error: null })
+  auth.apiKey.list.mockReset().mockResolvedValue({ data: { apiKeys: [] }, error: null })
+  auth.apiKey.create.mockReset()
+  auth.apiKey.delete.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.addPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.deletePasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.revoke.mockReset().mockResolvedValue({ data: {}, error: null })
@@ -736,5 +741,37 @@ describe('admin page', () => {
     at('/admin')
     expect(await screen.findByText('them@example.com')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument()
+  })
+})
+
+describe('API keys on the account page', () => {
+  beforeEach(() => {
+    auth.session = { user: { email: 'ada@example.com' } }
+  })
+
+  it('shows a new key once, and lists keys by name', async () => {
+    auth.apiKey.create.mockResolvedValue({ data: { key: 'key_secret123' }, error: null })
+    auth.apiKey.list.mockResolvedValue({
+      data: { apiKeys: [{ id: 'k1', name: 'Backup', start: 'key_ab', expiresAt: null }] },
+      error: null
+    })
+    at('/account')
+    expect(await screen.findByText(/Backup/)).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Key name'), 'Deploy')
+    await userEvent.click(screen.getByRole('button', { name: 'Make a key' }))
+    expect(auth.apiKey.create).toHaveBeenCalledWith({ name: 'Deploy' })
+    expect(await screen.findByText('key_secret123')).toBeInTheDocument()
+  })
+
+  it('deletes a key', async () => {
+    auth.apiKey.list.mockResolvedValue({
+      data: { apiKeys: [{ id: 'k1', name: 'Backup', start: 'key_ab', expiresAt: null }] },
+      error: null
+    })
+    at('/account')
+    await screen.findByText(/Backup/)
+    const list = screen.getByRole('region', { name: 'API keys' })
+    await userEvent.click(within(list).getByRole('button', { name: 'Delete' }))
+    expect(auth.apiKey.delete).toHaveBeenCalledWith({ keyId: 'k1' })
   })
 })

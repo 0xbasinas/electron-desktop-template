@@ -3,8 +3,9 @@ import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
-import { eq } from 'drizzle-orm'
-import { APIError, createAuthMiddleware } from 'better-auth/api'
+import { count, eq } from 'drizzle-orm'
+import { apiKey } from '@better-auth/api-key'
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
 import { admin, captcha, magicLink } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
 import { eventForCall, recordAudit } from './audit'
@@ -15,6 +16,9 @@ import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
 import type { Bindings } from './env'
+
+/** The most API keys one person may have. */
+export const MAX_API_KEYS = 10
 
 /** Used when the variable APP_NAME is not set. */
 export const DEFAULT_APP_NAME = 'Electron Desktop Template'
@@ -63,6 +67,20 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       customRules: { '/get-session': false }
     },
     hooks: {
+      // At most MAX_API_KEYS keys per person, so one account cannot fill the table.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/api-key/create') return
+        const session = ctx.context.session ?? (await getSessionFromCtx(ctx))
+        if (!session) return
+        const [row] = await db
+          .select({ n: count() })
+          .from(schema.apikey)
+          .where(eq(schema.apikey.referenceId, session.user.id))
+        if ((row?.n ?? 0) >= MAX_API_KEYS)
+          throw new APIError('BAD_REQUEST', {
+            message: 'You have the most keys allowed. Delete one first.'
+          })
+      }),
       // The security trail: failed sign-ins and account changes. After the response, and never fatal.
       after: createAuthMiddleware(async (ctx) => {
         const returned = ctx.context.returned
@@ -155,6 +173,16 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
             })
           ]
         : []),
+      // Keys a person makes on their account page to call the API from scripts. Sent in the x-api-key header.
+      apiKey({
+        defaultPrefix: 'key_',
+        requireName: true,
+        // The key is stored as a hash; the full key is shown once, when it is made.
+        keyExpiration: { defaultExpiresIn: 90 * 86_400, minExpiresIn: 1, maxExpiresIn: 365 },
+        rateLimit: { enabled: true, timeWindow: 60_000, maxRequests: 60 },
+        // Usage counters are written after the response, so checking a key does not wait for a database write.
+        deferUpdates: true
+      }),
       // Staff tools (roles: admin, support). Banning also ends the person's sessions. Nobody is an admin until
       // `pnpm admin:grant <email>` says so; the sign-up flow never grants a role.
       admin({

@@ -46,6 +46,16 @@ export const accountExportSchema = z.object({
   feedback: z.array(feedbackExportSchema).default([]),
   signInActivity: z.array(signInSchema).default([]),
   securityActivity: z.array(securityEventSchema).default([]),
+  apiKeys: z
+    .array(
+      z.object({
+        name: z.string().nullable(),
+        start: z.string().nullable(),
+        createdAt: z.string(),
+        expiresAt: z.string().nullable()
+      })
+    )
+    .default([]),
   dataRequests: z.array(dataRequestSchema).default([]),
   consents: z.array(consentEventSchema).default([]),
   sessions: z.array(
