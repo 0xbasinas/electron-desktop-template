@@ -12,20 +12,21 @@ Package manager is **pnpm** (never npm or yarn). Node 24. Run commands from the 
 
 ## Commands
 
-| Task                                | Command                                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------------------- |
-| Install                             | `pnpm install`                                                                     |
-| Run in development                  | `pnpm dev`                                                                         |
-| Format / lint / typecheck           | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                     |
-| Unit tests (src, scripts)           | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)               |
-| Set up website + API accounts       | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)  |
-| Check the cloud setup               | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)           |
-| Build the app                       | `pnpm build` (typechecks first)                                                    |
-| Bundle size budget                  | `pnpm check:bundle` (after `pnpm build`)                                           |
-| Package unpacked app                | `pnpm build:unpack`                                                                |
-| End-to-end tests (packaged app)     | `pnpm build:unpack && pnpm test:e2e`                                               |
-| Update test (old build updates new) | `pnpm test:update` (builds installers; needs a working NSIS/AppImage toolchain)    |
-| Check installers vs update manifest | `pnpm build:win` (or `:mac`, `:linux`) `--publish never` then `pnpm check:release` |
+| Task                                | Command                                                                                |
+| ----------------------------------- | -------------------------------------------------------------------------------------- |
+| Install                             | `pnpm install`                                                                         |
+| Run in development                  | `pnpm dev`                                                                             |
+| Format / lint / typecheck           | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                         |
+| Unit tests (src, scripts)           | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)                   |
+| Set up website + API accounts       | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)      |
+| Update an app from the template     | `pnpm template:update` (apps made from the template only; opens a PR; `--adopt` first) |
+| Check the cloud setup               | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)               |
+| Build the app                       | `pnpm build` (typechecks first)                                                        |
+| Bundle size budget                  | `pnpm check:bundle` (after `pnpm build`)                                               |
+| Package unpacked app                | `pnpm build:unpack`                                                                    |
+| End-to-end tests (packaged app)     | `pnpm build:unpack && pnpm test:e2e`                                                   |
+| Update test (old build updates new) | `pnpm test:update` (builds installers; needs a working NSIS/AppImage toolchain)        |
+| Check installers vs update manifest | `pnpm build:win` (or `:mac`, `:linux`) `--publish never` then `pnpm check:release`     |
 
 Before saying a change is done, run at least: `pnpm format && pnpm lint && pnpm typecheck && pnpm test`. For
 anything touching main, preload, the window or IPC, also `pnpm build:unpack && pnpm test:e2e`.
@@ -63,8 +64,8 @@ packages/shared/          zod schemas shared by API, web and desktop.
 packages/ui/               @repo/ui: shared React components (Button, cn) and the Tailwind theme (theme.css). Source-only; apps bundle it.
 turbo.json                Task graph (build, typecheck, test). pnpm-workspace.yaml holds the workspace globs and the version catalog.
 .github/                  Workflows. publish-stable / publish-beta call _publish.yml after ci.yml passes.
-scripts/                  setup-cloud.mjs (+ setup-cloud-lib.mjs, pure and tested with `node --test`): one-command Cloudflare/Resend/GitHub setup.
-docs/                     setup-cloud.md (that setup), api.md (API, database, sign-in), architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
+scripts/                  template-update.mjs (+ template-update-lib.mjs, pure and tested): `pnpm template:update`. setup-cloud.mjs (+ setup-cloud-lib.mjs, pure and tested with `node --test`): one-command Cloudflare/Resend/GitHub setup.
+docs/                     template-updates.md (keeping an app in sync with the template), setup-cloud.md (that setup), api.md (API, database, sign-in), architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
                           monorepo-and-web.md (how the repo is organised and the plan for web + API).
 ```
 

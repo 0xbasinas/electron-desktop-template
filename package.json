@@ -17,6 +17,8 @@
     "rename": "node apps/desktop/scripts/rename.mjs",
     "setup:cloud": "node scripts/setup-cloud.mjs",
     "cloud:doctor": "node scripts/doctor.mjs",
+    "template:update": "node scripts/template-update.mjs",
+    "template:status": "node scripts/template-update.mjs --check",
     "compat:date": "node scripts/compat-date.mjs --write",
     "test:scripts": "node --test \"scripts/*.test.mjs\"",
     "prepare": "husky",
