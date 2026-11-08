@@ -3337,6 +3337,60 @@ describe('AI apps (MCP): OAuth sign-in and the /api/mcp endpoint', () => {
     await forgetClient()
   })
 
+  it('limits the endpoints that fetch an app address, on the paths Better Auth really uses', async () => {
+    const s = setup()
+    const ip = `203.0.113.${Math.floor(Math.random() * 200) + 1}`
+    const hit = async (path: string): Promise<number> =>
+      (
+        await s.call(path, {
+          method: 'POST',
+          headers: { ...json, 'x-forwarded-for': ip },
+          body: '{}'
+        })
+      ).status
+    for (const [path, max] of [
+      ['/api/auth/device/code', 10],
+      ['/api/auth/oauth2/token', 20]
+    ] as const) {
+      let last = 0
+      for (let i = 0; i < max + 2; i++) last = await hit(path)
+      expect(last, path).toBe(429)
+    }
+  })
+
+  it('keeps app approvals through a time-limited suspension, and removes them for a permanent one', async () => {
+    publishClient()
+    const s = setup()
+    await signIn(s, 'mcp-timed-boss@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?")
+      .bind('mcp-timed-boss@example.com')
+      .run()
+    const staffCookie = await signIn(s, 'mcp-timed-boss@example.com')
+    const consents = async (email: string): Promise<number> =>
+      (await bindings.DB.prepare(
+        'SELECT COUNT(*) AS n FROM oauth_consent c JOIN user u ON u.id = c.user_id WHERE u.email = ?'
+      )
+        .bind(email)
+        .first<{ n: number }>())!.n
+    for (const [email, banExpiresIn, expected] of [
+      ['mcp-timed@example.com', 3600, 1],
+      ['mcp-forever@example.com', undefined, 0]
+    ] as const) {
+      const cookie = await signIn(s, email)
+      await getTokens(s, cookie)
+      const row = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+        .bind(email)
+        .first<{ id: string }>()
+      const ban = await s.call('/api/auth/admin/ban-user', {
+        method: 'POST',
+        headers: { cookie: staffCookie, ...json },
+        body: JSON.stringify({ userId: row!.id, banExpiresIn })
+      })
+      expect(ban.status).toBe(200)
+      expect(await consents(email), email).toBe(expected)
+    }
+  })
+
   it('does not let people create or list clients by hand, or register one', async () => {
     const s = setup()
     const cookie = await signIn(s, 'mcp-clients@example.com')

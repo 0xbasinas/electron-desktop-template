@@ -7,7 +7,7 @@ import { mcp } from '@better-auth/mcp'
 import { DEVICE_CODE_GRANT_TYPE, oauthDeviceAuthorization } from '@better-auth/oauth-provider'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
-import { and, count, eq, inArray } from 'drizzle-orm'
+import { count, eq, inArray } from 'drizzle-orm'
 import { apiKey } from '@better-auth/api-key'
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
 import { admin, captcha, jwt, magicLink, organization } from 'better-auth/plugins'
@@ -28,7 +28,8 @@ import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
 import { isDeprovisioned } from './scimStore'
-import { revokeAppAccess } from './oauthPrune'
+import { revokeAppAccessStatements } from './oauthPrune'
+import { emailInDomains } from './domains'
 import { tombstoneStatements } from './tombstones'
 import type { Bindings } from './env'
 
@@ -68,6 +69,13 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     .filter(Boolean)
 
   const appName = env.APP_NAME || DEFAULT_APP_NAME
+  // Work found by a before hook that must only run once the call is known to have succeeded (one object per request).
+  const sessionsToEnd = new Set<string>()
+  const teamsLosingProviders = new Set<string>()
+  const afterDelete = new Map<
+    string,
+    ReturnType<typeof tombstoneStatements> extends Promise<infer S> ? S : never
+  >()
 
   return betterAuth({
     appName,
@@ -135,81 +143,33 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           )
             throw new APIError('FORBIDDEN', { message: 'Choose the team this sign-in belongs to.' })
         }
-        // "Sign out everywhere" also cuts off the AI apps the person approved.
-        if (ctx.path === '/revoke-sessions') {
-          const caller = ctx.context.session ?? (await getSessionFromCtx(ctx))
-          if (caller) await revokeAppAccess(db, caller.user.id)
-        }
-        // Deleting a provider removes its linked accounts but not the sessions they hold; end those too.
+        // Deleting a provider removes its linked accounts but not the sessions they hold. Note who they are now; the
+        // sessions are ended in the after hook, once the plugin has agreed to the delete.
         if (ctx.path === '/sso/delete-provider') {
           const providerId = (ctx.body as { providerId?: string } | undefined)?.providerId
-          const caller = ctx.context.session ?? (await getSessionFromCtx(ctx))
-          if (providerId && caller) {
-            const [provider] = await db
-              .select({
-                userId: schema.ssoProvider.userId,
-                organizationId: schema.ssoProvider.organizationId
-              })
-              .from(schema.ssoProvider)
-              .where(eq(schema.ssoProvider.providerId, providerId))
-            // Only when the caller may delete it (the plugin refuses everyone else after this hook).
-            let allowed =
-              provider?.userId === caller.user.id ||
-              (caller.user as { role?: string | null }).role === 'admin'
-            if (provider && !allowed && provider.organizationId) {
-              const [seat] = await db
-                .select({ role: schema.member.role })
-                .from(schema.member)
-                .where(
-                  and(
-                    eq(schema.member.organizationId, provider.organizationId),
-                    eq(schema.member.userId, caller.user.id)
-                  )
-                )
-              allowed = seat?.role === 'owner' || seat?.role === 'admin'
-            }
-            if (provider && allowed) {
-              const linked = await db
-                .select({ userId: schema.account.userId })
-                .from(schema.account)
-                .where(eq(schema.account.providerId, providerId))
-              const ids = linked.map((row) => row.userId)
-              if (ids.length)
-                await db.delete(schema.session).where(inArray(schema.session.userId, ids))
-            }
+          if (providerId) {
+            const linked = await db
+              .select({ userId: schema.account.userId })
+              .from(schema.account)
+              .where(eq(schema.account.providerId, providerId))
+            for (const row of linked) sessionsToEnd.add(row.userId)
           }
         }
         // A deleted team takes its company sign-ins with it (the provider table has no foreign key to teams).
         if (ctx.path === '/organization/delete') {
           const organizationId = (ctx.body as { organizationId?: string } | undefined)
             ?.organizationId
-          const caller = ctx.context.session ?? (await getSessionFromCtx(ctx))
-          if (organizationId && caller) {
-            const [seat] = await db
-              .select({ role: schema.member.role })
-              .from(schema.member)
-              .where(
-                and(
-                  eq(schema.member.organizationId, organizationId),
-                  eq(schema.member.userId, caller.user.id)
-                )
+          if (organizationId) {
+            const linked = await db
+              .select({ userId: schema.account.userId })
+              .from(schema.account)
+              .innerJoin(
+                schema.ssoProvider,
+                eq(schema.ssoProvider.providerId, schema.account.providerId)
               )
-            if (seat?.role === 'owner') {
-              const linked = await db
-                .select({ userId: schema.account.userId })
-                .from(schema.account)
-                .innerJoin(
-                  schema.ssoProvider,
-                  eq(schema.ssoProvider.providerId, schema.account.providerId)
-                )
-                .where(eq(schema.ssoProvider.organizationId, organizationId))
-              const ids = linked.map((row) => row.userId)
-              if (ids.length)
-                await db.delete(schema.session).where(inArray(schema.session.userId, ids))
-              await db
-                .delete(schema.ssoProvider)
-                .where(eq(schema.ssoProvider.organizationId, organizationId))
-            }
+              .where(eq(schema.ssoProvider.organizationId, organizationId))
+            for (const row of linked) sessionsToEnd.add(row.userId)
+            teamsLosingProviders.add(organizationId)
           }
         }
         if (ctx.path !== '/api-key/create') return
@@ -235,13 +195,32 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           location: ctx.context.responseHeaders?.get('location'),
           accepted: (ctx.body as { accept?: unknown } | undefined)?.accept === true
         })
-        // A suspended person's AI apps lose access too (their tokens would be refused anyway; this removes them).
-        if (ctx.path === '/admin/ban-user' && !failed) {
-          const target = (ctx.body as { userId?: string } | undefined)?.userId
-          if (target) await revokeAppAccess(db, target)
+        const sessionUser = ctx.context.session?.user.id ?? null
+        if (!failed) {
+          try {
+            const body = ctx.body as
+              { userId?: string; banExpiresIn?: number; organizationId?: string } | undefined
+            // A suspended person's AI apps lose access too. A time-limited ban only pauses them (they are refused
+            // on every call while it lasts), so their approvals are kept.
+            if (ctx.path === '/admin/ban-user' && body?.userId && !body.banExpiresIn)
+              await db.batch(revokeAppAccessStatements(db, body.userId))
+            // "Sign out everywhere" also cuts off the AI apps the person approved.
+            if (ctx.path === '/revoke-sessions' && sessionUser)
+              await db.batch(revokeAppAccessStatements(db, sessionUser))
+            if (sessionsToEnd.size > 0)
+              await db
+                .delete(schema.session)
+                .where(inArray(schema.session.userId, [...sessionsToEnd]))
+            for (const organizationId of teamsLosingProviders)
+              await db
+                .delete(schema.ssoProvider)
+                .where(eq(schema.ssoProvider.organizationId, organizationId))
+          } catch (error) {
+            console.error('Could not finish the clean-up after an auth call', error)
+            Sentry.captureException(error)
+          }
         }
         if (!event) return
-        const sessionUser = ctx.context.session?.user.id ?? null
         const admin = ctx.path.startsWith('/admin/')
         // Who did it and who it was done to. A refused call, or a removed account, has no row to point at.
         let actorId: string | null = null
@@ -277,11 +256,17 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     databaseHooks: {
       user: {
         delete: {
-          // A directory (SCIM) that still lists the person must not quietly create the account again.
+          // A directory (SCIM) that still lists the person must not quietly create the account again. The directory
+          // records go with the account, so they are read now and the blocks are written once the delete is done.
           before: async (deleted) => {
-            await revokeAppAccess(db, deleted.id)
-            const blocks = await tombstoneStatements(db, deleted.id)
-            if (blocks.length > 0) await db.batch(blocks as [(typeof blocks)[0], ...typeof blocks])
+            afterDelete.set(deleted.id, await tombstoneStatements(db, deleted.id))
+          },
+          after: async (deleted) => {
+            await db.batch([
+              ...revokeAppAccessStatements(db, deleted.id),
+              ...(afterDelete.get(deleted.id) ?? [])
+            ])
+            afterDelete.delete(deleted.id)
           }
         },
         create: {
@@ -298,9 +283,7 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
                   .from(schema.ssoProvider)
                   .where(eq(schema.ssoProvider.providerId, providerId))
               : []
-            const host = created.email.split('@')[1]?.toLowerCase() ?? ''
-            const allowed = (provider?.domain ?? '').toLowerCase()
-            if (!allowed || (host !== allowed && !host.endsWith('.' + allowed)))
+            if (!provider || !emailInDomains(created.email, provider.domain))
               throw new APIError('FORBIDDEN', {
                 message: 'This address does not belong to the company that signed you in.'
               })

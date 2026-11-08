@@ -2,6 +2,7 @@ import { and, count, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import type { Db } from './db'
 import { schema } from './db'
 import { revokeAppAccessStatements } from './oauthPrune'
+import { emailInDomains } from './domains'
 import { isTombstoned } from './tombstones'
 import {
   accountEmail,
@@ -165,7 +166,6 @@ async function teamHasRoom(db: Db, organizationId: string): Promise<boolean> {
  * Without this, anyone who can start a team could provision (or rewrite) accounts for strangers' addresses.
  */
 async function mayLink(db: Db, organizationId: string, email: string): Promise<boolean> {
-  const host = email.split('@')[1]?.toLowerCase() ?? ''
   const providers = await db
     .select({ domain: schema.ssoProvider.domain })
     .from(schema.ssoProvider)
@@ -175,12 +175,7 @@ async function mayLink(db: Db, organizationId: string, email: string): Promise<b
         eq(schema.ssoProvider.domainVerified, true)
       )
     )
-  return providers.some((p) =>
-    p.domain
-      .split(',')
-      .map((d) => d.trim().toLowerCase())
-      .some((d) => d && (host === d || host.endsWith('.' + d)))
-  )
+  return providers.some((p) => emailInDomains(email, p.domain))
 }
 
 /** Take the person out of the team. A person who only existed because of the directory is also suspended. */

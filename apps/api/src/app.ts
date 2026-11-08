@@ -582,13 +582,19 @@ export function createApp(options: AppOptions = {}) {
       .use(async (c, next) => {
         const db = createDb(c.env.DB)
         c.set('db', db)
-        c.set(
-          'auth',
-          createAuth({
+        // Built on first use: health checks, SCIM and preferences never touch it, and it is the heavy part.
+        let auth: Auth | undefined
+        const make = (): Auth =>
+          (auth ??= createAuth({
             db,
             env: c.env,
             email: sender(c.env),
             waitUntil: (p) => c.executionCtx.waitUntil(p)
+          }))
+        c.set(
+          'auth',
+          new Proxy({} as Auth, {
+            get: (_target, property) => Reflect.get(make(), property)
           })
         )
         await next()
