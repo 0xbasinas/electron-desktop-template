@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -35,8 +35,9 @@ vi.mock('./lib/auth', () => ({
 const accountApi = vi.hoisted(() => ({ get: vi.fn(), export: vi.fn(), remove: vi.fn() }))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 const feedbackApi = vi.hoisted(() => ({ send: vi.fn() }))
+const devicesApi = vi.hoisted(() => ({ list: vi.fn(), rename: vi.fn(), signOut: vi.fn() }))
 vi.mock('./lib/api', () => ({
-  api: { account: accountApi, preferences: prefsApi, feedback: feedbackApi }
+  api: { account: accountApi, preferences: prefsApi, feedback: feedbackApi, devices: devicesApi }
 }))
 
 beforeEach(() => {
@@ -62,6 +63,26 @@ beforeEach(() => {
     updatedAt: 0
   })
   prefsApi.put.mockReset().mockImplementation((r: unknown) => Promise.resolve(r))
+  devicesApi.list.mockReset().mockResolvedValue([
+    {
+      id: 'd1',
+      label: 'Chrome on Windows',
+      nickname: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSeenAt: '2026-01-02T00:00:00.000Z',
+      current: true
+    },
+    {
+      id: 'd2',
+      label: 'Desktop app on macOS',
+      nickname: 'Work laptop',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastSeenAt: '2026-01-02T00:00:00.000Z',
+      current: false
+    }
+  ])
+  devicesApi.rename.mockReset().mockResolvedValue(undefined)
+  devicesApi.signOut.mockReset().mockResolvedValue(undefined)
   feedbackApi.send.mockReset().mockResolvedValue({ id: 'f1' })
   accountApi.export.mockReset()
   accountApi.remove.mockReset().mockResolvedValue(undefined)
@@ -381,5 +402,32 @@ describe('feedback page', () => {
     await userEvent.type(await screen.findByLabelText('Your message'), 'Something is wrong')
     await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('a lot of feedback')
+  })
+})
+
+describe('devices', () => {
+  it('lists where you are signed in, and signs another one out', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    expect(await screen.findByText('Work laptop')).toBeInTheDocument()
+    expect(screen.getByText('This device')).toBeInTheDocument()
+    // Only the other device can be signed out from here.
+    const buttons = within(screen.getByRole('region', { name: 'Your devices' })).getAllByRole(
+      'button',
+      { name: 'Sign out' }
+    )
+    expect(buttons).toHaveLength(1)
+    await userEvent.click(buttons[0]!)
+    await waitFor(() => expect(devicesApi.signOut).toHaveBeenCalledWith('d2'))
+  })
+
+  it('renames a device', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    await screen.findByText('Work laptop')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Rename' })[0]!)
+    await userEvent.type(screen.getByLabelText('Device name'), 'Home PC')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(devicesApi.rename).toHaveBeenCalledWith('d1', 'Home PC'))
   })
 })

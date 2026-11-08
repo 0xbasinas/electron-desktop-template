@@ -1,7 +1,7 @@
 // IPC channel names and payload types shared by main, preload and renderer.
 // Add new channels here first so all three processes stay in sync.
 
-import type { FeedbackKind, Preferences } from '@repo/shared'
+import type { Device, FeedbackKind, Preferences } from '@repo/shared'
 
 export const IPC = {
   // renderer -> main (invoke)
@@ -15,6 +15,9 @@ export const IPC = {
   appOpenLogs: 'app:open-logs',
   appDiagnostics: 'app:diagnostics',
   feedbackSend: 'feedback:send',
+  devicesList: 'devices:list',
+  devicesRename: 'devices:rename',
+  devicesSignOut: 'devices:sign-out',
   syncStatus: 'sync:status',
   syncRetry: 'sync:retry',
   whatsNewGet: 'whats-new:get',
@@ -90,8 +93,10 @@ export interface WhatsNew {
   notes: string
 }
 
-/** What sending feedback answers: sent, or why not (in words the person can read). */
-export type FeedbackResult = { ok: true } | { ok: false; error: string }
+/** What an account action answers: done, or why not (in words the person can read). */
+export type ActionResult = { ok: true } | { ok: false; error: string }
+export type FeedbackResult = ActionResult
+export type DevicesResult = { ok: true; devices: Device[] } | { ok: false; error: string }
 
 /** What the feedback form sends to main. `includeDiagnostics` attaches the report from Settings. */
 export interface FeedbackRequest {

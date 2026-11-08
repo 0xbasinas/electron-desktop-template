@@ -722,3 +722,111 @@ describe('feedback', () => {
     expect(rows?.n).toBe(0)
   })
 })
+
+describe('devices', () => {
+  type Device = { id: string; label: string; nickname: string | null; current: boolean }
+  const list = async (s: ReturnType<typeof setup>, cookie: string): Promise<Device[]> =>
+    (await (await s.call('/api/devices', { headers: { cookie } })).json()) as Device[]
+  const patch = (cookie: string, nickname: unknown): RequestInit => ({
+    method: 'PATCH',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ nickname })
+  })
+
+  it('needs a session', async () => {
+    const s = setup()
+    expect((await s.call('/api/devices')).status).toBe(401)
+  })
+
+  it('lists every sign-in of the person, with this device first', async () => {
+    const s = setup()
+    const first = await signIn(s, 'dev1@example.com')
+    const second = await signIn(s, 'dev1@example.com')
+    const devices = await list(s, second)
+    expect(devices).toHaveLength(2)
+    expect(devices[0]!.current).toBe(true)
+    expect(devices[1]!.current).toBe(false)
+    expect(JSON.stringify(devices)).not.toMatch(/token/i)
+    // From the other cookie the "current" one is the other entry.
+    const fromFirst = await list(s, first)
+    expect(fromFirst[0]!.id).not.toBe(devices[0]!.id)
+  })
+
+  it('names a device, shows it, and clears it again', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'dev2@example.com')
+    const [mine] = await list(s, cookie)
+    expect((await s.call(`/api/devices/${mine!.id}`, patch(cookie, '  Work laptop '))).status).toBe(
+      204
+    )
+    expect((await list(s, cookie))[0]!.nickname).toBe('Work laptop')
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as {
+      sessions: { nickname: string | null }[]
+    }
+    expect(exported.sessions[0]!.nickname).toBe('Work laptop')
+    expect((await s.call(`/api/devices/${mine!.id}`, patch(cookie, null))).status).toBe(204)
+    expect((await list(s, cookie))[0]!.nickname).toBeNull()
+  })
+
+  it('rejects a name that is too long', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'dev3@example.com')
+    const [mine] = await list(s, cookie)
+    expect((await s.call(`/api/devices/${mine!.id}`, patch(cookie, 'x'.repeat(41)))).status).toBe(
+      400
+    )
+  })
+
+  it('signs out another device at once, but not the one in use', async () => {
+    const s = setup()
+    const first = await signIn(s, 'dev4@example.com')
+    const second = await signIn(s, 'dev4@example.com')
+    const devices = await list(s, second)
+    const other = devices.find((d) => !d.current)!
+    const me = devices.find((d) => d.current)!
+
+    const self = await s.call(`/api/devices/${me.id}`, {
+      method: 'DELETE',
+      headers: { cookie: second }
+    })
+    expect(self.status).toBe(400)
+
+    const gone = await s.call(`/api/devices/${other.id}`, {
+      method: 'DELETE',
+      headers: { cookie: second }
+    })
+    expect(gone.status).toBe(204)
+    expect((await s.call('/api/account', { headers: { cookie: first } })).status).toBe(401)
+    expect((await s.call('/api/account', { headers: { cookie: second } })).status).toBe(200)
+    expect(await list(s, second)).toHaveLength(1)
+  })
+
+  it("cannot see, rename or sign out another person's devices", async () => {
+    const s = setup()
+    const a = await signIn(s, 'dev5a@example.com')
+    const b = await signIn(s, 'dev5b@example.com')
+    const [theirs] = await list(s, a)
+    expect(await list(s, b)).toHaveLength(1)
+    expect((await list(s, b))[0]!.id).not.toBe(theirs!.id)
+    expect((await s.call(`/api/devices/${theirs!.id}`, patch(b, 'Hacked'))).status).toBe(404)
+    expect(
+      (await s.call(`/api/devices/${theirs!.id}`, { method: 'DELETE', headers: { cookie: b } }))
+        .status
+    ).toBe(404)
+    expect((await s.call('/api/account', { headers: { cookie: a } })).status).toBe(200)
+  })
+
+  it('blocks cross-site writes', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'dev6@example.com')
+    const [mine] = await list(s, cookie)
+    const response = await s.call(`/api/devices/${mine!.id}`, {
+      method: 'PATCH',
+      headers: { cookie, 'content-type': 'application/json', origin: 'https://evil.example' },
+      body: JSON.stringify({ nickname: 'x' })
+    })
+    expect(response.status).toBe(403)
+  })
+})

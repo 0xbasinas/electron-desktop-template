@@ -31,7 +31,8 @@ export const accountExportSchema = z.object({
       createdAt: z.string(),
       expiresAt: z.string(),
       ipAddress: z.string().nullable(),
-      userAgent: z.string().nullable()
+      userAgent: z.string().nullable(),
+      nickname: z.string().nullable().default(null)
     })
   )
 })

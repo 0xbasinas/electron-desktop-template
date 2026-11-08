@@ -2,7 +2,9 @@ import { ipcRenderer, type IpcRendererEvent } from 'electron'
 import {
   IPC,
   type Account,
+  type ActionResult,
   type AppInfo,
+  type DevicesResult,
   type FeedbackRequest,
   type FeedbackResult,
   type Settings,
@@ -49,6 +51,12 @@ export const api = {
   getAccount: (): Promise<Account> => ipcRenderer.invoke(IPC.accountGet),
   signIn: (): Promise<void> => ipcRenderer.invoke(IPC.accountSignIn),
   signOut: (): Promise<void> => ipcRenderer.invoke(IPC.accountSignOut),
+
+  // Where the person is signed in (main calls the API as them)
+  listDevices: (): Promise<DevicesResult> => ipcRenderer.invoke(IPC.devicesList),
+  renameDevice: (id: string, nickname: string | null): Promise<ActionResult> =>
+    ipcRenderer.invoke(IPC.devicesRename, id, nickname),
+  signOutDevice: (id: string): Promise<ActionResult> => ipcRenderer.invoke(IPC.devicesSignOut, id),
 
   // Feedback (sent by main, as the signed-in person)
   sendFeedback: (request: FeedbackRequest): Promise<FeedbackResult> =>

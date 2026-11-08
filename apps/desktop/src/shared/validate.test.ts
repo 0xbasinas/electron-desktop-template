@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { parseBoolean, parseFeedbackRequest, parseSettingsPatch } from './validate'
+import {
+  parseBoolean,
+  parseDeviceId,
+  parseFeedbackRequest,
+  parseNickname,
+  parseSettingsPatch
+} from './validate'
 
 describe('parseSettingsPatch', () => {
   it('accepts valid partial settings', () => {
@@ -67,5 +73,21 @@ describe('parseFeedbackRequest', () => {
     ]) {
       expect(() => parseFeedbackRequest(bad)).toThrow()
     }
+  })
+})
+
+describe('device arguments', () => {
+  it('accepts plain ids and rejects anything that could change the request path', () => {
+    expect(parseDeviceId('abc_123-XYZ')).toBe('abc_123-XYZ')
+    for (const bad of ['', '../account', 'a/b', 'a?b', 5, null, 'x'.repeat(200)]) {
+      expect(() => parseDeviceId(bad)).toThrow()
+    }
+  })
+  it('trims nicknames, turns blank into null and refuses long or non-text ones', () => {
+    expect(parseNickname('  Work laptop ')).toBe('Work laptop')
+    expect(parseNickname('   ')).toBeNull()
+    expect(parseNickname(null)).toBeNull()
+    expect(() => parseNickname('x'.repeat(41))).toThrow()
+    expect(() => parseNickname(5)).toThrow()
   })
 })

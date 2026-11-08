@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Button } from '@repo/ui'
 import { ACCENTS, type Account, type Preferences } from '@repo/shared'
 import { Navigate, useNavigate } from 'react-router'
+import { DevicesSection } from '../components/DevicesSection'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
 import { AccentPicker, ThemePicker, type ThemeChoice } from '@repo/ui'
@@ -251,6 +252,8 @@ function AccountDetails(): JSX.Element {
           Sign out everywhere
         </Button>
       </section>
+
+      <DevicesSection />
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Your data</h2>

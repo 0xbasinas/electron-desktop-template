@@ -3,6 +3,7 @@ import type { AppInfo, UpdateChannel, UpdaterEvent, WhatsNew } from '../../../sh
 import { TitleBar } from '@renderer/components/TitleBar'
 import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useAccount } from '@renderer/hooks/useAccount'
+import { DevicesSection } from '@renderer/components/DevicesSection'
 import { FeedbackSection } from '@renderer/components/FeedbackSection'
 import { useSyncStatus } from '@renderer/hooks/useSyncStatus'
 import { describeSync } from '../../../shared/syncStatus'
@@ -159,6 +160,12 @@ export function SettingsWindow(): React.JSX.Element {
         {account?.available && (
           <Section title="Send feedback">
             <FeedbackSection signedIn={account.user !== null} />
+          </Section>
+        )}
+
+        {account?.user && (
+          <Section title="Your devices">
+            <DevicesSection />
           </Section>
         )}
 
