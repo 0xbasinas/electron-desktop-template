@@ -50,7 +50,7 @@ import { evaluateFlags, loadRules } from './flags'
 import { listConsents, recordConsent } from './consents'
 import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
-import { recentAudit } from './audit'
+import { recentAudit, recordAudit } from './audit'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
@@ -494,6 +494,16 @@ export function createApp(options: AppOptions = {}) {
       const changed = await confirmEmailChange(c.var.db, c.req.valid('json').token, Date.now())
       if (!changed)
         throw new HTTPException(404, { message: 'This link has expired or was already used' })
+      c.executionCtx.waitUntil(
+        recordAudit(c.var.db, {
+          type: 'email_changed',
+          outcome: 'success',
+          userId: changed.userId,
+          ipAddress: c.req.header('cf-connecting-ip') ?? null,
+          userAgent: c.req.header('user-agent') ?? null,
+          now: Date.now()
+        }).catch((error: unknown) => console.error('Could not record the audit event', error))
+      )
       // Tell the old address, so a takeover does not go unnoticed.
       c.executionCtx.waitUntil(
         sender(c.env)

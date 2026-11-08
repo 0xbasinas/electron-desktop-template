@@ -63,6 +63,21 @@ export function AdminPage(): JSX.Element {
     else setReload((n) => n + 1)
   }
 
+  async function changeRole(person: Person, next: string): Promise<void> {
+    const { error: failure } = await authClient.admin.setRole({
+      userId: person.id,
+      role: next as 'user' | 'admin'
+    })
+    if (failure) setError('That did not work.')
+    else setReload((n) => n + 1)
+  }
+
+  async function signInAs(person: Person): Promise<void> {
+    const { error: failure } = await authClient.admin.impersonateUser({ userId: person.id })
+    if (failure) setError('That did not work.')
+    else window.location.assign('/account')
+  }
+
   function submit(event: FormEvent): void {
     event.preventDefault()
     setPage(0)
@@ -102,14 +117,36 @@ export function AdminPage(): JSX.Element {
           {people.map((p) => (
             <tr key={p.id} className="border-t border-border">
               <td className="py-2">{p.email}</td>
-              <td>{p.role ?? 'user'}</td>
+              <td>
+                {role === 'admin' && p.id !== session?.user.id ? (
+                  <select
+                    aria-label={`Role of ${p.email}`}
+                    value={p.role ?? 'user'}
+                    onChange={(e) => void changeRole(p, e.target.value)}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="user">user</option>
+                    <option value="support">support</option>
+                    <option value="admin">admin</option>
+                  </select>
+                ) : (
+                  (p.role ?? 'user')
+                )}
+              </td>
               <td>{p.banned ? 'Suspended' : 'Active'}</td>
               {role === 'admin' && (
-                <td className="text-right">
+                <td className="space-x-2 text-right">
                   {p.id !== session?.user.id && (
-                    <Button variant="outline" size="sm" onClick={() => void toggleBan(p)}>
-                      {p.banned ? 'Restore' : 'Suspend'}
-                    </Button>
+                    <>
+                      {!p.banned && p.role !== 'admin' && (
+                        <Button variant="outline" size="sm" onClick={() => void signInAs(p)}>
+                          Sign in as
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => void toggleBan(p)}>
+                        {p.banned ? 'Restore' : 'Suspend'}
+                      </Button>
+                    </>
                   )}
                 </td>
               )}

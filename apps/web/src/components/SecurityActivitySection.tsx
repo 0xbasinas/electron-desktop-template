@@ -20,7 +20,7 @@ const NAMES: Record<string, string> = {
   email_changed: 'Email changed'
 }
 
-export const eventName = (type: string): string => NAMES[type] ?? type.replaceAll('_', ' ')
+const eventName = (type: string): string => NAMES[type] ?? type.replaceAll('_', ' ')
 
 /** Security events about the account: sign-ins and failures, signed-out devices, passkey and key changes, staff actions. */
 export function SecurityActivitySection(): JSX.Element {

@@ -49,6 +49,7 @@ export async function requestEmailChange(
 }
 
 export interface EmailChanged {
+  userId: string
   oldEmail: string
   newEmail: string
 }
@@ -87,7 +88,7 @@ export async function confirmEmailChange(
     await db.delete(schema.emailChange).where(eq(schema.emailChange.userId, pending.userId))
     return null
   }
-  return { oldEmail: current.email, newEmail: pending.newEmail }
+  return { userId: pending.userId, oldEmail: current.email, newEmail: pending.newEmail }
 }
 
 const escape = (s: string): string =>

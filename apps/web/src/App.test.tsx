@@ -10,7 +10,14 @@ const auth = vi.hoisted(() => ({
   pending: false,
   magicLink: vi.fn(),
   apiKey: { list: vi.fn(), create: vi.fn(), delete: vi.fn() },
-  admin: { listUsers: vi.fn(), banUser: vi.fn(), unbanUser: vi.fn() },
+  admin: {
+    listUsers: vi.fn(),
+    banUser: vi.fn(),
+    unbanUser: vi.fn(),
+    setRole: vi.fn(),
+    impersonateUser: vi.fn(),
+    stopImpersonating: vi.fn()
+  },
   transfer: vi.fn(),
   ensureRedirect: vi.fn(() => 0),
   revoke: vi.fn(),
@@ -748,6 +755,25 @@ describe('admin page', () => {
     expect(buttons).toHaveLength(1)
     await userEvent.click(buttons[0]!)
     expect(auth.admin.banUser).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u2' }))
+  })
+
+  it("lets an admin change another person's role", async () => {
+    auth.session = { user: { email: 'me@example.com', id: 'u1', role: 'admin' } } as never
+    auth.admin.listUsers.mockResolvedValue(people)
+    auth.admin.setRole.mockResolvedValue({ data: {}, error: null })
+    at('/admin')
+    await screen.findByText('them@example.com')
+    await userEvent.selectOptions(screen.getByLabelText('Role of them@example.com'), 'support')
+    expect(auth.admin.setRole).toHaveBeenCalledWith({ userId: 'u2', role: 'support' })
+  })
+
+  it('shows a banner with a stop button while helping someone', () => {
+    auth.session = {
+      user: { email: 'them@example.com', id: 'u2' },
+      session: { impersonatedBy: 'u1' }
+    } as never
+    at('/account')
+    expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
   })
 
   it('shows support the list without any buttons to change it', async () => {

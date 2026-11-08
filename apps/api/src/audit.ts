@@ -14,6 +14,7 @@ export type AuditType =
   | 'session_revoked'
   | 'all_sessions_revoked'
   | 'profile_updated'
+  | 'email_changed'
   | 'passkey_added'
   | 'passkey_removed'
   | 'api_key_created'

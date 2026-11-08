@@ -92,15 +92,28 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           location: ctx.context.responseHeaders?.get('location')
         })
         if (!event) return
-        const userId = ctx.context.session?.user.id ?? null
-        const actorId = ctx.path.startsWith('/admin/') ? userId : null
-        const target = ctx.path.startsWith('/admin/')
-          ? ((ctx.body as { userId?: string } | undefined)?.userId ?? null)
-          : userId
+        const sessionUser = ctx.context.session?.user.id ?? null
+        const admin = ctx.path.startsWith('/admin/')
+        // Who did it and who it was done to. A refused call, or a removed account, has no row to point at.
+        let actorId: string | null = null
+        let userId: string | null = sessionUser
+        if (admin) {
+          const stopping = ctx.path === '/admin/stop-impersonating'
+          actorId = stopping
+            ? ((ctx.context.session?.session as { impersonatedBy?: string | null } | undefined)
+                ?.impersonatedBy ?? null)
+            : sessionUser
+          const asked = (ctx.body as { userId?: string } | undefined)?.userId ?? null
+          userId = stopping
+            ? sessionUser
+            : event.outcome === 'success' && ctx.path !== '/admin/remove-user'
+              ? asked
+              : null
+        }
         waitUntil(
           recordAudit(db, {
             ...event,
-            userId: ctx.path.startsWith('/admin/') ? target : userId,
+            userId,
             actorId,
             ipAddress: ctx.headers?.get('cf-connecting-ip') ?? null,
             userAgent: ctx.headers?.get('user-agent') ?? null,

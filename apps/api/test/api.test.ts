@@ -996,6 +996,10 @@ describe('email change', () => {
       pendingEmail: string | null
     }
     expect(me).toMatchObject({ email: 'new@example.com', pendingEmail: null })
+    const trail = await bindings.DB.prepare(
+      "SELECT type FROM audit_event WHERE type = 'email_changed'"
+    ).all()
+    expect(trail.results.length).toBeGreaterThanOrEqual(1)
     expect((await s.call('/api/account/email-change/confirm', confirm(token))).status).toBe(404)
   })
 
