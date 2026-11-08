@@ -144,6 +144,14 @@ describe('routes', () => {
     expect(screen.getByRole('heading', { name: /v2-beta/ })).toBeInTheDocument()
   })
 
+  it('lists the sub-processors', () => {
+    at('/sub-processors')
+    expect(screen.getByRole('heading', { name: 'Sub-processors' })).toBeInTheDocument()
+    for (const name of ['Cloudflare', 'Resend', 'GitHub']) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    }
+  })
+
   it('falls back to GitHub when the lookup fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     vi.spyOn(console, 'error').mockImplementation(() => {})
@@ -297,7 +305,7 @@ describe('theme sync', () => {
   it('saves a chosen theme here and on the server', async () => {
     auth.session = { user: { email: 'ada@example.com' } }
     at('/account')
-    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }))
     await waitFor(() =>
       expect(prefsApi.put).toHaveBeenCalledWith(
         expect.objectContaining({ preferences: { theme: 'dark', accent: 'neutral' } })
@@ -314,14 +322,14 @@ describe('theme sync', () => {
       updatedAt: Date.now() + 1000
     })
     at('/account')
-    await waitFor(() => expect(screen.getByLabelText('Theme')).toHaveValue('light'))
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Light' })).toBeChecked())
     expect(prefsApi.put).not.toHaveBeenCalled()
   })
 
   it('saves a chosen accent colour without resetting the theme', async () => {
     auth.session = { user: { email: 'ada@example.com' } }
     at('/account')
-    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }))
     await userEvent.click(await screen.findByRole('radio', { name: 'Accent blue' }))
     await waitFor(() =>
       expect(prefsApi.put).toHaveBeenLastCalledWith(
@@ -337,7 +345,7 @@ describe('theme sync', () => {
     prefsApi.put.mockRejectedValue(new Error('offline'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     at('/account')
-    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Saved on this device')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
   })

@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { AppInfo, Theme, UpdateChannel, UpdaterEvent, WhatsNew } from '../../../shared/ipc'
+import type { AppInfo, UpdateChannel, UpdaterEvent, WhatsNew } from '../../../shared/ipc'
 import { TitleBar } from '@renderer/components/TitleBar'
 import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useAccount } from '@renderer/hooks/useAccount'
+import { useSyncStatus } from '@renderer/hooks/useSyncStatus'
+import { describeSync } from '../../../shared/syncStatus'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useUpdater } from '@renderer/hooks/useUpdater'
 import { ACCENTS } from '@repo/shared/accents'
-import { AccentPicker, Button, cn } from '@repo/ui'
+import { AccentPicker, Button, ThemePicker, cn } from '@repo/ui'
 
 const CHANNELS: { value: UpdateChannel; label: string; hint: string }[] = [
   { value: 'latest', label: 'Stable', hint: 'Tested releases. Recommended.' },
@@ -83,6 +85,7 @@ export function SettingsWindow(): React.JSX.Element {
   const { settings, update } = useSettings()
   const updater = useUpdater()
   const { account, signIn, signOut } = useAccount()
+  const sync = useSyncStatus()
   const [signingIn, setSigningIn] = useState(false)
   const [info, setInfo] = useState<AppInfo>()
   const [whatsNew, setWhatsNew] = useState<WhatsNew>()
@@ -104,14 +107,32 @@ export function SettingsWindow(): React.JSX.Element {
         {account?.available && (
           <Section title="Account">
             {account.user ? (
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-sm">
-                  Signed in as <strong>{account.user.email}</strong>
-                </span>
-                <Button variant="outline" size="sm" onClick={() => void signOut()}>
-                  Sign out
-                </Button>
-              </div>
+              <>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-sm">
+                    Signed in as <strong>{account.user.email}</strong>
+                  </span>
+                  <Button variant="outline" size="sm" onClick={() => void signOut()}>
+                    Sign out
+                  </Button>
+                </div>
+                {sync.status && (
+                  <div className="flex items-center justify-between gap-3">
+                    <span role="status" className="text-sm text-muted-foreground">
+                      {describeSync(sync.status, sync.now)}
+                    </span>
+                    {sync.status.state === 'offline' && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void window.api.retrySync()}
+                      >
+                        Retry now
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </>
             ) : (
               <div className="flex items-center gap-3">
                 <Button
@@ -173,7 +194,7 @@ export function SettingsWindow(): React.JSX.Element {
         </Section>
 
         <Section title="General">
-          <label className="flex items-center justify-between gap-3 text-sm">
+          <div className="flex items-center justify-between gap-3 text-sm">
             <span>
               Theme
               <span className="block text-xs text-muted-foreground">
@@ -182,18 +203,12 @@ export function SettingsWindow(): React.JSX.Element {
                   : 'Sign in to use the same theme on every device.'}
               </span>
             </span>
-            <select
-              aria-label="Theme"
-              className="h-8 rounded-md border border-input bg-background px-2 text-sm"
-              value={settings?.theme ?? 'system'}
+            <ThemePicker
+              value={settings?.theme}
               disabled={!settings}
-              onChange={(event) => update({ theme: event.target.value as Theme })}
-            >
-              <option value="system">Match my system</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
-            </select>
-          </label>
+              onChange={(theme) => void update({ theme })}
+            />
+          </div>
           <div className="flex items-center justify-between gap-3 text-sm">
             <span>
               Accent colour
@@ -269,12 +284,14 @@ export function SettingsWindow(): React.JSX.Element {
             <Button
               variant="outline"
               size="sm"
+              aria-expanded={report !== undefined}
               onClick={() => {
                 setCopied(false)
-                void window.api.getDiagnostics().then(setReport)
+                if (report !== undefined) setReport(undefined)
+                else void window.api.getDiagnostics().then(setReport)
               }}
             >
-              Show diagnostics
+              {report !== undefined ? 'Hide diagnostics' : 'Show diagnostics'}
             </Button>
           </div>
           {report !== undefined && (
