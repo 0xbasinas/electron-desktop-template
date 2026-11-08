@@ -36,6 +36,22 @@ export const accountDeletion = sqliteTable(
   (table) => [index('account_deletion_due_idx').on(table.scheduledFor)]
 )
 
+/** One sign-in (a session was created), kept for the activity list and the new-device alert. Pruned after 90 days. */
+export const signInEvent = sqliteTable(
+  'sign_in_event',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    at: integer('at').notNull(),
+    label: text('label').notNull(),
+    ipAddress: text('ip_address'),
+    newDevice: integer('new_device', { mode: 'boolean' }).notNull().default(false)
+  },
+  (table) => [index('sign_in_event_user_at_idx').on(table.userId, table.at)]
+)
+
 /** A pending move to a new email address: it happens when the link sent to the new address is used. */
 export const emailChange = sqliteTable('email_change', {
   userId: text('user_id')

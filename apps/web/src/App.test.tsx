@@ -39,6 +39,7 @@ const accountApi = vi.hoisted(() => ({
   cancelDeletion: vi.fn(),
   cancelDeletionWithToken: vi.fn(),
   changeEmail: vi.fn(),
+  signIns: vi.fn(),
   confirmEmailChange: vi.fn()
 }))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
@@ -98,6 +99,20 @@ beforeEach(() => {
   accountApi.remove.mockReset().mockResolvedValue({ scheduledFor: '2026-12-01T00:00:00.000Z' })
   accountApi.cancelDeletion.mockReset().mockResolvedValue(undefined)
   accountApi.cancelDeletionWithToken.mockReset().mockResolvedValue(undefined)
+  accountApi.signIns.mockReset().mockResolvedValue([
+    {
+      at: '2026-01-02T00:00:00.000Z',
+      label: 'Safari on macOS',
+      ipAddress: '1.2.3.4',
+      newDevice: true
+    },
+    {
+      at: '2026-01-01T00:00:00.000Z',
+      label: 'Chrome on Windows',
+      ipAddress: null,
+      newDevice: false
+    }
+  ])
   accountApi.changeEmail.mockReset().mockResolvedValue(undefined)
   accountApi.confirmEmailChange.mockReset().mockResolvedValue({ email: 'new@example.com' })
 })
@@ -274,6 +289,17 @@ describe('signing in from the desktop app', () => {
     at('/auth/desktop')
     expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
     expect(auth.ensureRedirect).toHaveBeenCalled()
+  })
+})
+
+describe('sign-in activity', () => {
+  it('lists recent sign-ins and marks a new device', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    const region = await screen.findByRole('region', { name: 'Recent sign-ins' })
+    expect(await within(region).findByText('Safari on macOS')).toBeInTheDocument()
+    expect(within(region).getByText('Chrome on Windows')).toBeInTheDocument()
+    expect(within(region).getByText('New')).toBeInTheDocument()
   })
 })
 

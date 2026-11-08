@@ -53,3 +53,5 @@ export {
   emailChangedSchema
 } from './emailChange'
 export type { EmailChanged } from './emailChange'
+export { SIGN_IN_ACTIVITY_LIMIT, signInSchema, signInsSchema } from './signIns'
+export type { SignIn } from './signIns'

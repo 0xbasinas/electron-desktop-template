@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { createApp } from '../src/app'
 import { createDb } from '../src/db'
 import { deleteDueAccounts } from '../src/deletion'
+import { pruneSignIns } from '../src/signIns'
 import worker from '../src/index'
 import type { Bindings } from '../src/env'
 import type { EmailMessage } from '../src/email'
@@ -36,11 +37,16 @@ function setup(overrides: Partial<Bindings> = {}) {
 }
 
 /** Runs the whole magic-link flow and returns the session cookie. */
-async function signIn(s: ReturnType<typeof setup>, email: string): Promise<string> {
+async function signIn(
+  s: ReturnType<typeof setup>,
+  email: string,
+  userAgent?: string
+): Promise<string> {
+  const agent: Record<string, string> = userAgent ? { 'user-agent': userAgent } : {}
   const before = s.sent.length
   const request = await s.call('/api/auth/sign-in/magic-link', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', ...agent },
     body: JSON.stringify({ email, callbackURL: '/app' })
   })
   expect(request.status).toBe(200)
@@ -50,7 +56,9 @@ async function signIn(s: ReturnType<typeof setup>, email: string): Promise<strin
   const link = /https?:\/\/\S+magic-link\/verify\S+/.exec(message.text)?.[0]
   expect(link).toBeTruthy()
 
-  const verify = await s.call(new URL(link!).pathname + new URL(link!).search)
+  const verify = await s.call(new URL(link!).pathname + new URL(link!).search, {
+    headers: agent
+  })
   expect(verify.status).toBe(302)
   expect(verify.headers.get('location')).toContain('/app')
   const cookies = verify.headers
@@ -1001,5 +1009,58 @@ describe('email change', () => {
       body: JSON.stringify({ token: 'x'.repeat(43) })
     })
     expect(cross.status).toBe(403)
+  })
+})
+
+describe('sign-in activity', () => {
+  const CHROME =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36'
+  const SAFARI =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 Version/17.0 Safari/605.1.15'
+
+  it('lists sign-ins, and warns by email only for a browser and system not seen before', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'watch@example.com', CHROME)
+    const alerts = (): number => s.sent.filter((m) => /New sign-in/.test(m.subject)).length
+    expect(alerts()).toBe(0) // the first sign-in is not a surprise
+
+    await signIn(s, 'watch@example.com', CHROME)
+    expect(alerts()).toBe(0) // same browser and system
+
+    await signIn(s, 'watch@example.com', SAFARI)
+    expect(alerts()).toBe(1)
+    const alert = s.sent.find((m) => /New sign-in/.test(m.subject))!
+    expect(alert.to).toBe('watch@example.com')
+    expect(alert.text).toContain('Safari on macOS')
+
+    const list = (await (
+      await s.call('/api/account/sign-ins', { headers: { cookie } })
+    ).json()) as {
+      label: string
+      newDevice: boolean
+    }[]
+    expect(list.map((e) => e.label)).toEqual(
+      expect.arrayContaining(['Chrome on Windows', 'Safari on macOS'])
+    )
+    expect(list.length).toBe(3)
+    expect(list[0]!.newDevice).toBe(true)
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as {
+      signInActivity: unknown[]
+    }
+    expect(exported.signInActivity.length).toBe(3)
+  })
+
+  it('needs a session, and old entries are pruned', async () => {
+    const s = setup()
+    expect((await s.call('/api/account/sign-ins')).status).toBe(401)
+    await signIn(s, 'prune@example.com', CHROME)
+    const db = createDb(bindings.DB)
+    await pruneSignIns(db, Date.now() + 91 * 86_400_000)
+    const left = await bindings.DB.prepare('SELECT COUNT(*) AS n FROM sign_in_event').first<{
+      n: number
+    }>()
+    expect(left?.n).toBe(0)
   })
 })
