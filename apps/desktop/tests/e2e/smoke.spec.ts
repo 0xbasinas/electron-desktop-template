@@ -217,3 +217,42 @@ test('closing the window hides it to the tray when that setting is on', async ()
     await app.close()
   }
 })
+
+test('the command palette opens with Ctrl+K and runs a command', async () => {
+  const app = await launchApp()
+  try {
+    const page = await app.firstWindow()
+    await page.getByRole('dialog').getByRole('button', { name: 'Get started' }).click()
+
+    await page.keyboard.press('Control+k')
+    const palette = page.getByRole('dialog', { name: 'Command palette' })
+    await expect(palette).toBeVisible()
+    await page.keyboard.type('dark')
+    await expect(palette.getByRole('option')).toHaveCount(1)
+    await page.keyboard.press('Enter')
+    await expect(palette).toBeHidden()
+
+    await expect
+      .poll(() =>
+        page.evaluate(async () => (await (window as unknown as WithApi).api.getSettings()).theme)
+      )
+      .toBe('dark')
+  } finally {
+    await app.close()
+  }
+})
+
+test('the diagnostics report has no account details or home folder,', async () => {
+  const app = await launchApp()
+  try {
+    const page = await app.firstWindow()
+    const report = await page.evaluate(() => (window as unknown as WithApi).api.getDiagnostics())
+    expect(report).toContain('## GPU')
+    expect(report).toContain('## Settings')
+    expect(report).toContain('notifications: true')
+    const home = await app.evaluate(({ app: a }) => a.getPath('home'))
+    expect(report).not.toContain(home)
+  } finally {
+    await app.close()
+  }
+})
