@@ -43,6 +43,7 @@ import { createConsoleSender, createResendSender, type EmailSender } from './ema
 import type { Bindings } from './env'
 import { sameOriginOnly } from './origin'
 import { Resend } from 'resend'
+import { recentSignIns } from './signIns'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
@@ -333,6 +334,7 @@ export function createApp(options: AppOptions = {}) {
           hasDiagnostics: r.diagnostics !== null,
           createdAt: new Date(r.createdAt).toISOString()
         })),
+        signInActivity: await recentSignIns(c.var.db, c.var.userId),
         sessions: sessionRows.map((s) => ({
           createdAt: s.createdAt.toISOString(),
           expiresAt: s.expiresAt.toISOString(),
@@ -382,6 +384,7 @@ export function createApp(options: AppOptions = {}) {
       await cancelDeletion(c.var.db, c.var.userId)
       return c.body(null, 204)
     })
+    .get('/sign-ins', async (c) => c.json(await recentSignIns(c.var.db, c.var.userId)))
     // Moving to a new address: a link goes to the NEW address and nothing changes until it is used. The answer is the
     // same whether or not the address is already taken, so this cannot be used to find out who has an account.
     .post('/email-change', zValidator('json', changeEmailInputSchema), async (c) => {

@@ -133,6 +133,11 @@ The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /
   required, so link scanners cannot confirm). Then the account uses the new address and the old address gets a notice. The answer is the same for an
   address that is already taken (so addresses cannot be probed), asking again within a minute gives 429, and `pendingEmail` shows on the account and export.
 
+- **Sign-in activity.** Every new session is recorded in `sign_in_event` (time, a readable browser and system label, IP address) by a Better Auth
+  database hook in `auth.ts`, after the response. A sign-in from a browser and system the account has not used before (never the first sign-in of an
+  account) also sends an alert email. `GET /api/account/sign-ins` lists the last 20, they appear in the export, and the daily cron prunes entries older
+  than 90 days. The label is a rough match (`describeDevice`), so a browser update does not trigger alerts but a different browser or system does.
+
 - **When you add your own tables**, give them `userId ... references user.id ON DELETE CASCADE`, and add their rows to the export
   in `app.ts`, so deletion and export stay complete. The tests in `apps/api/test/api.test.ts` ("account") show how to check it.
 

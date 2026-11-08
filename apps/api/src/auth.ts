@@ -3,10 +3,12 @@ import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
+import { eq } from 'drizzle-orm'
 import { magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
 import { schema } from './db'
 import { BRAND } from './brand'
+import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
 import type { Bindings } from './env'
@@ -56,6 +58,41 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       window: 60,
       max: 30,
       customRules: { '/get-session': false }
+    },
+    databaseHooks: {
+      session: {
+        create: {
+          // A new session is a sign-in: remember it for the activity list, and warn by email when it is from a
+          // browser and system the account has not used before. After the response, and never fatal.
+          after: async (created) => {
+            waitUntil(
+              (async () => {
+                const now = Date.now()
+                const ipAddress = created.ipAddress ?? null
+                const recorded = await recordSignIn(db, {
+                  userId: created.userId,
+                  ipAddress,
+                  userAgent: created.userAgent ?? null,
+                  now
+                })
+                if (!recorded.newDevice) return
+                const [owner] = await db
+                  .select({ email: schema.user.email })
+                  .from(schema.user)
+                  .where(eq(schema.user.id, created.userId))
+                if (!owner || (await isSuppressed(db, owner.email))) return
+                await email.send({
+                  to: owner.email,
+                  ...newDeviceEmail(appName, recorded.label, ipAddress, now)
+                })
+              })().catch((error: unknown) => {
+                console.error('Could not record the sign-in', error)
+                Sentry.captureException(error)
+              })
+            )
+          }
+        }
+      }
     },
     advanced: {
       // Cloudflare sets this header on every request and overwrites any value the client sends.
