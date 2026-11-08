@@ -9,6 +9,7 @@ const auth = vi.hoisted(() => ({
   session: null as null | { user: { email: string } },
   pending: false,
   magicLink: vi.fn(),
+  admin: { listUsers: vi.fn(), banUser: vi.fn(), unbanUser: vi.fn() },
   transfer: vi.fn(),
   ensureRedirect: vi.fn(() => 0),
   revoke: vi.fn(),
@@ -27,6 +28,7 @@ vi.mock('./lib/auth', () => ({
       deletePasskey: auth.deletePasskey
     },
     signOut: vi.fn(),
+    admin: auth.admin,
     $fetch: auth.transfer,
     ensureElectronRedirect: auth.ensureRedirect,
     revokeSessions: auth.revoke
@@ -694,5 +696,45 @@ describe('devices', () => {
     await userEvent.type(screen.getByLabelText('Device name'), 'Home PC')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(devicesApi.rename).toHaveBeenCalledWith('d1', 'Home PC'))
+  })
+})
+
+describe('admin page', () => {
+  const people = {
+    data: {
+      users: [
+        { id: 'u1', email: 'me@example.com', role: 'admin', banned: false },
+        { id: 'u2', email: 'them@example.com', role: 'user', banned: false }
+      ],
+      total: 2
+    },
+    error: null
+  }
+
+  it('sends people who are not staff away', () => {
+    auth.session = { user: { email: 'a@b.co', id: 'u9', role: 'user' } } as never
+    at('/admin')
+    expect(auth.admin.listUsers).not.toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'People' })).not.toBeInTheDocument()
+  })
+
+  it('lets an admin list and suspend people, but not themselves', async () => {
+    auth.session = { user: { email: 'me@example.com', id: 'u1', role: 'admin' } } as never
+    auth.admin.listUsers.mockResolvedValue(people)
+    auth.admin.banUser.mockResolvedValue({ data: {}, error: null })
+    at('/admin')
+    expect(await screen.findByText('them@example.com')).toBeInTheDocument()
+    const buttons = screen.getAllByRole('button', { name: 'Suspend' })
+    expect(buttons).toHaveLength(1)
+    await userEvent.click(buttons[0]!)
+    expect(auth.admin.banUser).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u2' }))
+  })
+
+  it('shows support the list without any buttons to change it', async () => {
+    auth.session = { user: { email: 'help@example.com', id: 'u3', role: 'support' } } as never
+    auth.admin.listUsers.mockResolvedValue(people)
+    at('/admin')
+    expect(await screen.findByText('them@example.com')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument()
   })
 })

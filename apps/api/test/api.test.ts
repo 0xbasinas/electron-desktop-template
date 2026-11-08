@@ -1364,3 +1364,69 @@ describe('security activity (audit trail)', () => {
     expect(exported.securityActivity.length).toBeGreaterThanOrEqual(2)
   })
 })
+
+describe('staff roles (admin plugin)', () => {
+  const json = { 'content-type': 'application/json' }
+  /** Makes the account, gives it the role, then signs in again so the new session carries the role. */
+  async function staff(s: ReturnType<typeof setup>, email: string, role: string): Promise<string> {
+    await signIn(s, email)
+    await bindings.DB.prepare('UPDATE user SET role = ? WHERE email = ?').bind(role, email).run()
+    return signIn(s, email)
+  }
+  const list = (s: ReturnType<typeof setup>, cookie: string): Promise<Response> =>
+    s.call('/api/auth/admin/list-users?limit=5', { headers: { cookie } })
+
+  it('lets an admin list people, and nobody else', async () => {
+    const s = setup()
+    const admin = await staff(s, 'boss@example.com', 'admin')
+    expect((await list(s, admin)).status).toBe(200)
+    const plain = await signIn(s, 'plain@example.com')
+    expect((await list(s, plain)).status).toBe(403)
+    expect((await list(s, '')).status).toBeGreaterThanOrEqual(401)
+  })
+
+  it('gives support a read-only view', async () => {
+    const s = setup()
+    const support = await staff(s, 'help@example.com', 'support')
+    expect((await list(s, support)).status).toBe(200)
+    const ban = await s.call('/api/auth/admin/ban-user', {
+      method: 'POST',
+      headers: { cookie: support, ...json },
+      body: JSON.stringify({ userId: 'whoever' })
+    })
+    expect(ban.status).toBe(403)
+  })
+
+  it('bans a person: their sessions end, they cannot sign in again, and it is in the trail', async () => {
+    const s = setup()
+    const admin = await staff(s, 'boss2@example.com', 'admin')
+    const victim = await signIn(s, 'victim@example.com')
+    const row = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('victim@example.com')
+      .first<{ id: string }>()
+    const ban = await s.call('/api/auth/admin/ban-user', {
+      method: 'POST',
+      headers: { cookie: admin, ...json },
+      body: JSON.stringify({ userId: row!.id, banReason: 'abuse' })
+    })
+    expect(ban.status).toBe(200)
+    const events = await bindings.DB.prepare(
+      "SELECT actor_id FROM audit_event WHERE user_id = ? AND type = 'user_banned'"
+    )
+      .bind(row!.id)
+      .all()
+    expect(events.results).toHaveLength(1)
+    expect(events.results[0]!.actor_id).not.toBeNull()
+    // A new link no longer signs them in.
+    const before = s.sent.length
+    await s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ email: 'victim@example.com', callbackURL: '/app' })
+    })
+    const link = /https?:\/\/\S+magic-link\/verify\S+/.exec(s.sent[before]!.text)![0]
+    const verify = await s.call(new URL(link).pathname + new URL(link).search)
+    expect(verify.headers.getSetCookie().join(';')).not.toContain('session_token')
+    void victim
+  })
+})

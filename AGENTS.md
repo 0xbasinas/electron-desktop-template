@@ -19,6 +19,7 @@ Package manager is **pnpm** (never npm or yarn). Node 24. Run commands from the 
 | Format / lint / typecheck                | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                         |
 | Unit tests (src, scripts)                | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)                   |
 | Fill the local database with fake people | `pnpm seed:dev [--users N]` (local D1 only; never touches the real database)           |
+| Give or remove a staff role              | `pnpm admin:grant <email> [admin                                                       | support]`/`pnpm admin:revoke <email>` (`--remote` for the real database) |
 | Set up website + API accounts            | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)      |
 | Update an app from the template          | `pnpm template:update` (apps made from the template only; opens a PR; `--adopt` first) |
 | Check the cloud setup                    | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)               |

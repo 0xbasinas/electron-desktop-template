@@ -5,7 +5,8 @@ import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { eq } from 'drizzle-orm'
 import { APIError, createAuthMiddleware } from 'better-auth/api'
-import { captcha, magicLink } from 'better-auth/plugins'
+import { admin, captcha, magicLink } from 'better-auth/plugins'
+import { ac, roles } from './permissions'
 import { eventForCall, recordAudit } from './audit'
 import type { Db } from './db'
 import { schema } from './db'
@@ -154,6 +155,14 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
             })
           ]
         : []),
+      // Staff tools (roles: admin, support). Banning also ends the person's sessions. Nobody is an admin until
+      // `pnpm admin:grant <email>` says so; the sign-up flow never grants a role.
+      admin({
+        ac,
+        roles,
+        defaultRole: 'user',
+        bannedUserMessage: 'This account has been suspended.'
+      }),
       // Lets the desktop app sign in through the system browser (PKCE, then a one-time code over the deep link).
       electron(),
       // Sign in with a fingerprint, face or security key instead of waiting for an email. A passkey is tied to the

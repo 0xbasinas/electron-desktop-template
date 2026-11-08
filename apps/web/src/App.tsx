@@ -2,6 +2,7 @@ import type { JSX } from 'react'
 import { Route, Routes } from 'react-router'
 import { Layout } from './components/Layout'
 import { AccountPage } from './pages/AccountPage'
+import { AdminPage } from './pages/AdminPage'
 import { AppPage } from './pages/AppPage'
 import { CancelDeletionPage } from './pages/CancelDeletionPage'
 import { ConfirmEmailPage } from './pages/ConfirmEmailPage'
@@ -27,6 +28,7 @@ export function App(): JSX.Element {
         <Route path="feedback" element={<FeedbackPage />} />
         <Route path="sub-processors" element={<SubprocessorsPage />} />
         <Route path="sign-in" element={<SignInPage />} />
+        <Route path="admin" element={<AdminPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="account/cancel-deletion" element={<CancelDeletionPage />} />
         <Route path="account/privacy" element={<PrivacyPage />} />
