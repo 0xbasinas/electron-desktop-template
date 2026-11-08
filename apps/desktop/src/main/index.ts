@@ -7,6 +7,7 @@ import { registerIpcHandlers } from './ipcHandlers'
 import { logger, setupLogging } from './logger'
 import { setupMenu } from './menu'
 import { getSettings } from './settings'
+import { startFlags } from './flags'
 import { startMinimumVersionCheck } from './minimumVersion'
 import { startPreferencesSync } from './preferencesSync'
 import { setupSettingsEffects } from './settingsEffects'
@@ -97,6 +98,7 @@ if (!app.requestSingleInstanceLock()) {
     setupSettingsEffects()
     startPreferencesSync()
     startMinimumVersionCheck()
+    startFlags()
     setupAutoUpdater()
 
     app.on('activate', function () {

@@ -68,3 +68,5 @@ export {
   dataRequestsSchema
 } from './dataRequests'
 export type { DataRequest } from './dataRequests'
+export { FLAG_CHANNELS, flagKeySchema, flagsQuerySchema, flagsSchema, isFlagOn } from './flags'
+export type { FlagChannel, FlagRule, Flags } from './flags'

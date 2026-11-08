@@ -13,6 +13,7 @@ import {
   FEEDBACK_PER_HOUR,
   feedbackInputSchema,
   newerWins,
+  flagsQuerySchema,
   parsePreferences,
   parseVersion,
   preferencesRecordSchema,
@@ -44,6 +45,7 @@ import { createConsoleSender, createResendSender, type EmailSender } from './ema
 import type { Bindings } from './env'
 import { sameOriginOnly } from './origin'
 import { Resend } from 'resend'
+import { evaluateFlags, loadRules } from './flags'
 import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
@@ -52,6 +54,8 @@ type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
 type AppEnv = { Bindings: Bindings; Variables: Variables }
 
 export interface AppOptions {
+  /** How long one Worker instance keeps the flag table in memory. Tests use 0. */
+  flagCacheMs?: number
   /** Replace how emails are sent (tests). By default: Resend when a key is set, otherwise the log. */
   emailSender?: (env: Bindings) => EmailSender
 }
@@ -536,6 +540,13 @@ export function createApp(options: AppOptions = {}) {
         const minimum = (c.env.MIN_APP_VERSION ?? '').trim()
         c.header('cache-control', 'public, max-age=300')
         return c.json({ minimumVersion: parseVersion(minimum) ? minimum : null })
+      })
+      // Feature flags for one install. Public (no sign-in) and cheap: the table is read at most once per cache period.
+      .get('/flags', zValidator('query', flagsQuerySchema), async (c) => {
+        const { channel, id } = c.req.valid('query')
+        const rules = await loadRules(c.var.db, Date.now(), options.flagCacheMs ?? 30_000)
+        c.header('cache-control', 'private, max-age=60')
+        return c.json({ flags: evaluateFlags(rules, channel, id) })
       })
       .route('/preferences', preferences)
       .route('/devices', devices)

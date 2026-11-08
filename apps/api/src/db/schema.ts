@@ -37,6 +37,20 @@ export const accountDeletion = sqliteTable(
 )
 
 /**
+ * A feature flag: who gets a feature without a new release. `killed` is the kill switch (off for everyone, at once).
+ * Not per person, so it needs no link to a user. Edited with `pnpm flags`.
+ */
+export const featureFlag = sqliteTable('feature_flag', {
+  key: text('key').primaryKey(),
+  description: text('description').notNull().default(''),
+  killed: integer('killed', { mode: 'boolean' }).notNull().default(false),
+  /** Comma separated channels ("stable,beta"); empty means all of them. */
+  channels: text('channels').notNull().default(''),
+  percent: integer('percent').notNull().default(0),
+  updatedAt: integer('updated_at').notNull()
+})
+
+/**
  * A request about personal data (export, deletion) with a status and a deadline. No link to the user row and no email:
  * it has to outlive the account it is about, so only a random id, the kind, the status and the dates remain.
  */

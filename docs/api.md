@@ -100,6 +100,18 @@ use the 5-minute session cookie cache (preferences, feedback) can take up to 5 m
 The web app shows this on `/account` ("Your devices") and the desktop app in Settings. A nickname belongs to a session, so signing
 in again on the same device starts without one. Nicknames are listed in the data export.
 
+## Feature flags and the kill switch
+
+`GET /api/flags?channel=stable|beta&id=<install id>` is public and needs no sign-in. It answers `{ "flags": { "key": true } }` for that
+install. A flag is on when it is not killed, the channel matches (no channels means all), and the install falls inside `percent`
+(a stable hash of the key and the install id, so raising the percentage only adds installs). Unknown flags are off, so code
+must treat "absent" as off. The install id is random, made by the app or browser, and not stored by the server.
+
+Change them with `pnpm flags list`, `pnpm flags set new-editor --percent 25 --channels beta`, `pnpm flags kill new-editor`,
+`pnpm flags revive new-editor` and `pnpm flags delete new-editor` (local database; add `--remote` for the real one).
+The kill switch beats everything and reaches running apps within about five minutes (the API caches for 60 seconds,
+clients refresh every five). Use `useFlag('key')` in the desktop renderer or the web app.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics
