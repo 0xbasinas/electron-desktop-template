@@ -42,6 +42,8 @@ const accountApi = vi.hoisted(() => ({
   signIns: vi.fn(),
   privacy: vi.fn(),
   requests: vi.fn(),
+  consents: vi.fn(),
+  setConsent: vi.fn(),
   confirmEmailChange: vi.fn()
 }))
 const appConfigApi = vi.hoisted(() => vi.fn())
@@ -130,6 +132,8 @@ beforeEach(() => {
     feedback: 1,
     hasSyncedSettings: true
   })
+  accountApi.consents.mockReset().mockResolvedValue({ current: {}, history: [] })
+  accountApi.setConsent.mockReset()
   accountApi.requests.mockReset().mockResolvedValue([
     {
       kind: 'deletion',
@@ -382,6 +386,26 @@ describe('privacy page', () => {
     expect(within(requests).getByText('In progress')).toBeInTheDocument()
     expect(within(requests).getByText('Data export')).toBeInTheDocument()
     expect(within(requests).getByText('Done')).toBeInTheDocument()
+  })
+
+  it('lets a person agree to something and shows it was saved', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    accountApi.setConsent.mockResolvedValue({
+      current: { 'crash-reports': true },
+      history: [
+        {
+          purpose: 'crash-reports',
+          granted: true,
+          policyVersion: 'v',
+          at: new Date().toISOString()
+        }
+      ]
+    })
+    at('/account/privacy')
+    const section = await screen.findByRole('region', { name: 'Your agreements' })
+    await userEvent.click(within(section).getAllByRole('button', { name: 'Agree' })[1]!)
+    expect(await within(section).findByRole('button', { name: 'Withdraw' })).toBeInTheDocument()
+    expect(accountApi.setConsent).toHaveBeenCalledWith('crash-reports', true)
   })
 
   it('sends signed-out visitors to the sign-in page', () => {

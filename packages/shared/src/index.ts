@@ -70,3 +70,13 @@ export {
 export type { DataRequest } from './dataRequests'
 export { FLAG_CHANNELS, flagKeySchema, flagsQuerySchema, flagsSchema, isFlagOn } from './flags'
 export type { FlagChannel, FlagRule, Flags } from './flags'
+export {
+  CONSENT_LABELS,
+  CONSENT_PURPOSES,
+  POLICY_VERSION,
+  consentEventSchema,
+  consentsSchema,
+  currentConsents,
+  setConsentInputSchema
+} from './consents'
+export type { ConsentEvent, ConsentPurpose, Consents } from './consents'

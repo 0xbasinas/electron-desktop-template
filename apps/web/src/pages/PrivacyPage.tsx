@@ -1,6 +1,13 @@
 import { useEffect, useState, type JSX } from 'react'
 import { Button } from '@repo/ui'
-import { DATA_REQUEST_DEADLINE_DAYS, type DataRequest, type PrivacySummary } from '@repo/shared'
+import {
+  CONSENT_LABELS,
+  CONSENT_PURPOSES,
+  DATA_REQUEST_DEADLINE_DAYS,
+  type Consents,
+  type DataRequest,
+  type PrivacySummary
+} from '@repo/shared'
 import { Link, Navigate } from 'react-router'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
@@ -25,6 +32,7 @@ export function PrivacyPage(): JSX.Element {
 function PrivacyDetails({ email }: { email: string }): JSX.Element {
   const [summary, setSummary] = useState<PrivacySummary | null>(null)
   const [requests, setRequests] = useState<DataRequest[]>([])
+  const [consents, setConsents] = useState<Consents | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -55,6 +63,31 @@ function PrivacyDetails({ email }: { email: string }): JSX.Element {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    api.account
+      .consents()
+      .then((c) => {
+        if (!cancelled) setConsents(c)
+      })
+      .catch((e: unknown) => console.error(e))
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  async function choose(
+    purpose: (typeof CONSENT_PURPOSES)[number],
+    granted: boolean
+  ): Promise<void> {
+    try {
+      setConsents(await api.account.setConsent(purpose, granted))
+    } catch (e) {
+      console.error(e)
+      setError('Could not save your choice.')
+    }
+  }
 
   async function download(): Promise<void> {
     try {
@@ -134,6 +167,41 @@ function PrivacyDetails({ email }: { email: string }): JSX.Element {
           Manage or delete my account
         </Link>
       </div>
+      {consents && (
+        <section className="space-y-2" aria-label="Your agreements">
+          <h2 className="text-lg font-semibold">Your agreements</h2>
+          <p className="text-sm text-muted-foreground">
+            Each choice is saved with the date. You can change your mind at any time.
+          </p>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {CONSENT_PURPOSES.map((purpose) => {
+              const on = consents.current[purpose] === true
+              const last = consents.history.find((e) => e.purpose === purpose)
+              return (
+                <li key={purpose} className="flex items-center justify-between gap-4 px-4 py-3">
+                  <div className="text-sm">
+                    <p className="font-medium">{CONSENT_LABELS[purpose].title}</p>
+                    <p className="text-muted-foreground">{CONSENT_LABELS[purpose].description}</p>
+                    {last && (
+                      <p className="text-xs text-muted-foreground">
+                        {last.granted ? 'Agreed' : 'Withdrawn'}{' '}
+                        {new Date(last.at).toLocaleDateString()}
+                      </p>
+                    )}
+                  </div>
+                  <Button
+                    variant={on ? 'outline' : 'default'}
+                    size="sm"
+                    onClick={() => void choose(purpose, !on)}
+                  >
+                    {on ? 'Withdraw' : 'Agree'}
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      )}
       {requests.length > 0 && (
         <section className="space-y-2" aria-label="Your requests">
           <h2 className="text-lg font-semibold">Your requests</h2>

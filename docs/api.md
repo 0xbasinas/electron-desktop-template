@@ -112,6 +112,15 @@ Change them with `pnpm flags list`, `pnpm flags set new-editor --percent 25 --ch
 The kill switch beats everything and reaches running apps within about five minutes (the API caches for 60 seconds,
 clients refresh every five). Use `useFlag('key')` in the desktop renderer or the web app.
 
+## Consent ledger
+
+`consent` is an append-only list of what a person agreed to or withdrew: purpose, granted, the policy version (`POLICY_VERSION` in
+`packages/shared/src/consents.ts`) and the time. `GET /api/account/consents` returns the latest answer per purpose and the
+history; `POST` with `{ purpose, granted }` adds an entry (repeating the current answer adds nothing; withdrawing something never
+agreed to is ignored). Entries are never edited, go when the account is deleted, and are in the account export. To ask for a new
+thing, add it to `CONSENT_PURPOSES` and `CONSENT_LABELS`; bump `POLICY_VERSION` when the policy text changes. The privacy page
+shows "Your agreements". Nothing here is needed to sign in.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics
