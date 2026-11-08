@@ -969,6 +969,18 @@ describe('company sign-in', () => {
       error: null
     })
     auth.sso.verifyDomain.mockResolvedValue({ data: {}, error: null })
+    const real = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) =>
+      String(input).startsWith('/api/sso-discover')
+        ? Response.json({
+            issuer: 'https://idp.acme.example',
+            authorizationEndpoint: 'https://idp.acme.example/authorize',
+            tokenEndpoint: 'https://idp.acme.example/token',
+            jwksEndpoint: 'https://idp.acme.example/keys',
+            tokenEndpointAuthMethods: ['client_secret_basic']
+          })
+        : real(input, init)
+    )
     at('/admin')
     await userEvent.type(await screen.findByLabelText('Provider name'), 'acme')
     await userEvent.type(screen.getByLabelText('Issuer URL'), 'https://idp.acme.example')
@@ -977,7 +989,14 @@ describe('company sign-in', () => {
     await userEvent.type(screen.getByLabelText('Client secret'), 'shh')
     await userEvent.click(screen.getByRole('button', { name: 'Add provider' }))
     expect(auth.sso.register).toHaveBeenCalledWith(
-      expect.objectContaining({ providerId: 'acme', domain: 'acme.example' })
+      expect.objectContaining({
+        providerId: 'acme',
+        domain: 'acme.example',
+        oidcConfig: expect.objectContaining({
+          skipDiscovery: true,
+          tokenEndpoint: 'https://idp.acme.example/token'
+        })
+      })
     )
     expect(await screen.findByText(/tok123/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Check the record' }))

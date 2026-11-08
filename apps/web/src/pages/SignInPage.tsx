@@ -71,16 +71,18 @@ export function SignInPage(): JSX.Element {
   }
 
   async function signInWithCompany(): Promise<void> {
+    // A team's own sign-in link (/sign-in?team=acme) needs no email: the team picks the provider.
+    const team = params.get('team')
     const parsed = emailSchema.safeParse(email)
-    if (!parsed.success) {
+    if (!team && !parsed.success) {
       setError('Enter your work email address first.')
       return
     }
     setError(null)
-    const { error: failure } = await authClient.signIn.sso({
-      email: parsed.data,
-      callbackURL: desktop ? '/auth/desktop' : next
-    })
+    const callbackURL = desktop ? '/auth/desktop' : next
+    const { error: failure } = await authClient.signIn.sso(
+      team ? { organizationSlug: team, callbackURL } : { email: parsed.data!, callbackURL }
+    )
     if (failure) setError('Your company has not set up single sign-on here. Use the email link.')
   }
 

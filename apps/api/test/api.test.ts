@@ -1702,6 +1702,30 @@ describe('single sign-on (OpenID Connect)', () => {
     expect(left).toBeNull()
   })
 
+  it('looks up sign-in settings only for staff and team owners or admins', async () => {
+    const s = setup()
+    const plain = await signIn(s, 'plain-disc@example.com')
+    expect(
+      (
+        await s.call('/api/sso-discover?issuer=https://acme.okta.example', {
+          headers: { cookie: plain }
+        })
+      ).status
+    ).toBe(403)
+    const owner = await signIn(s, 'owner-disc@example.com')
+    await s.call('/api/auth/organization/create', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ name: 'Disc', slug: 'disc-sso-1' })
+    })
+    // Allowed, but a private address is refused before anything is fetched.
+    const refused = await s.call('/api/sso-discover?issuer=https://127.0.0.1', {
+      headers: { cookie: owner }
+    })
+    expect(refused.status).toBe(400)
+    expect((await s.call('/api/sso-discover?issuer=https://acme.okta.example')).status).toBe(401)
+  })
+
   it('refuses SAML providers, even from an admin', async () => {
     const s = setup()
     await signIn(s, 'boss-saml@example.com')

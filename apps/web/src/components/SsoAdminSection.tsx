@@ -49,15 +49,44 @@ export function SsoAdminSection({ organizationId }: { organizationId?: string })
   async function register(event: FormEvent): Promise<void> {
     event.preventDefault()
     setMessage(null)
+    // The server reads the company's public settings from its issuer address, so nothing has to be typed or trusted
+    // globally. The endpoints are then handed to the sign-in plugin directly.
+    const lookup = await fetch(`/api/sso-discover?issuer=${encodeURIComponent(issuer.trim())}`, {
+      credentials: 'same-origin'
+    })
+    if (!lookup.ok) {
+      const failure = (await lookup.json().catch(() => null)) as { error?: string } | null
+      setMessage(failure?.error ?? 'Could not read that issuer.')
+      return
+    }
+    const found = (await lookup.json()) as {
+      issuer: string
+      authorizationEndpoint: string
+      tokenEndpoint: string
+      jwksEndpoint: string
+      userInfoEndpoint?: string
+      tokenEndpointAuthMethods: string[]
+    }
+    const method = found.tokenEndpointAuthMethods.includes('client_secret_basic')
+      ? 'client_secret_basic'
+      : found.tokenEndpointAuthMethods.includes('client_secret_post')
+        ? 'client_secret_post'
+        : undefined
     const { data, error } = await authClient.sso.register({
       providerId: providerId.trim(),
-      issuer: issuer.trim(),
+      issuer: found.issuer,
       domain: domain.trim().toLowerCase(),
       ...(organizationId ? { organizationId } : {}),
       oidcConfig: {
         clientId: clientId.trim(),
         clientSecret,
-        scopes: ['openid', 'email', 'profile']
+        scopes: ['openid', 'email', 'profile'],
+        skipDiscovery: true,
+        authorizationEndpoint: found.authorizationEndpoint,
+        tokenEndpoint: found.tokenEndpoint,
+        jwksEndpoint: found.jwksEndpoint,
+        ...(found.userInfoEndpoint ? { userInfoEndpoint: found.userInfoEndpoint } : {}),
+        ...(method ? { tokenEndpointAuthentication: method } : {})
       }
     })
     if (error || !data) {

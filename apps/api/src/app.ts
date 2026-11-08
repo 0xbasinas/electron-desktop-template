@@ -22,7 +22,7 @@ import {
   type Account,
   type AccountExport
 } from '@repo/shared'
-import { and, count, eq, gt, ne } from 'drizzle-orm'
+import { and, count, eq, gt, inArray, ne } from 'drizzle-orm'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
@@ -53,6 +53,7 @@ import { recentSignIns } from './signIns'
 import { recentAudit, recordAudit } from './audit'
 import { teamsOf } from './teams'
 import { createScimAdmin, createScimApi } from './scimRoutes'
+import { DiscoveryError, discoverIssuer } from './ssoDiscovery'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
@@ -661,6 +662,31 @@ export function createApp(options: AppOptions = {}) {
         const rules = await loadRules(c.var.db, Date.now(), options.flagCacheMs ?? 30_000)
         c.header('cache-control', 'private, max-age=60')
         return c.json({ flags: evaluateFlags(rules, channel, id) })
+      })
+      // Fill in a company's sign-in settings from its issuer address. For staff and for owners and admins of a team.
+      .get('/sso-discover', requireSession(true), async (c) => {
+        const [staff] = await c.var.db
+          .select({ role: schema.user.role })
+          .from(schema.user)
+          .where(eq(schema.user.id, c.var.userId))
+        const [seat] = await c.var.db
+          .select({ id: schema.member.id })
+          .from(schema.member)
+          .where(
+            and(
+              eq(schema.member.userId, c.var.userId),
+              inArray(schema.member.role, ['owner', 'admin'])
+            )
+          )
+        if (staff?.role !== 'admin' && !seat)
+          throw new HTTPException(403, { message: 'Not allowed' })
+        try {
+          return c.json(await discoverIssuer(c.req.query('issuer') ?? ''))
+        } catch (error) {
+          if (error instanceof DiscoveryError)
+            throw new HTTPException(400, { message: error.message })
+          throw error
+        }
       })
       // Directory sync: the company's identity provider calls /scim/v2 with a bearer token; owners manage tokens.
       .route('/scim/v2', createScimApi())
