@@ -87,7 +87,7 @@ const BY_PATH: Record<string, AuditType> = {
 export function eventForCall(call: AuthCall): Pick<AuditInput, 'type' | 'outcome' | 'code'> | null {
   if (call.path === '/magic-link/verify') {
     return call.failed || /[?&]error=/.test(call.location ?? '')
-      ? { type: 'user_sign_in_failed', outcome: 'failure', code: 'INVALID_TOKEN' }
+      ? { type: 'user_sign_in_failed', outcome: 'failure', code: call.errorCode ?? 'INVALID_TOKEN' }
       : null
   }
   if (call.path === '/passkey/verify-authentication') {

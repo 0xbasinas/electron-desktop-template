@@ -4,6 +4,7 @@ import { ACCENTS, DELETION_COOLING_OFF_DAYS, type Account, type Preferences } fr
 import { Link, Navigate, useNavigate } from 'react-router'
 import { DevicesSection } from '../components/DevicesSection'
 import { ApiKeysSection } from '../components/ApiKeysSection'
+import { SecurityActivitySection } from '../components/SecurityActivitySection'
 import { SignInsSection } from '../components/SignInsSection'
 import { EmailSection } from '../components/EmailSection'
 import { api } from '../lib/api'
@@ -277,6 +278,7 @@ function AccountDetails(): JSX.Element {
       <DevicesSection />
 
       <SignInsSection />
+      <SecurityActivitySection />
       <ApiKeysSection />
 
       <section className="space-y-2">

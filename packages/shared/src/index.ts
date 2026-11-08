@@ -4,7 +4,7 @@ export {
   deleteAccountInputSchema,
   emailSchema
 } from './schemas'
-export type { Account, AccountExport } from './schemas'
+export type { Account, AccountExport, SecurityEvent } from './schemas'
 export {
   FEEDBACK_DIAGNOSTICS_MAX,
   FEEDBACK_KINDS,

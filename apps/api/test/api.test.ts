@@ -1427,6 +1427,8 @@ describe('staff roles (admin plugin)', () => {
     const link = /https?:\/\/\S+magic-link\/verify\S+/.exec(s.sent[before]!.text)![0]
     const verify = await s.call(new URL(link).pathname + new URL(link).search)
     expect(verify.headers.getSetCookie().join(';')).not.toContain('session_token')
+    expect(verify.status).toBe(302)
+    expect(verify.headers.get('location')).toContain('/sign-in?error=suspended')
     void victim
   })
 })

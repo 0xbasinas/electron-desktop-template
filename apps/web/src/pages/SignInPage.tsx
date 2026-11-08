@@ -29,9 +29,11 @@ export function SignInPage(): JSX.Element {
       .catch(() => undefined)
   }, [])
   const [error, setError] = useState<string | null>(
-    params.get('error')
-      ? 'That sign-in link did not work. It may have expired or been used already.'
-      : null
+    params.get('error') === 'suspended'
+      ? 'This account has been suspended. Contact support if you think that is a mistake.'
+      : params.get('error')
+        ? 'That sign-in link did not work. It may have expired or been used already.'
+        : null
   )
 
   // Already signed in on the web and the desktop app asked for a sign-in: hand the session over.

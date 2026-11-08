@@ -44,6 +44,7 @@ const accountApi = vi.hoisted(() => ({
   cancelDeletionWithToken: vi.fn(),
   changeEmail: vi.fn(),
   signIns: vi.fn(),
+  securityActivity: vi.fn(),
   privacy: vi.fn(),
   requests: vi.fn(),
   consents: vi.fn(),
@@ -127,6 +128,15 @@ beforeEach(() => {
   accountApi.remove.mockReset().mockResolvedValue({ scheduledFor: '2026-12-01T00:00:00.000Z' })
   accountApi.cancelDeletion.mockReset().mockResolvedValue(undefined)
   accountApi.cancelDeletionWithToken.mockReset().mockResolvedValue(undefined)
+  accountApi.securityActivity.mockReset().mockResolvedValue([
+    {
+      at: '2026-11-01T10:00:00Z',
+      type: 'user_sign_in_failed',
+      outcome: 'failure',
+      label: 'Chrome on Windows',
+      ipAddress: null
+    }
+  ])
   accountApi.signIns.mockReset().mockResolvedValue([
     {
       at: '2026-01-02T00:00:00.000Z',
@@ -295,6 +305,11 @@ describe('sign-in page', () => {
   it('explains a link that did not work', () => {
     at('/sign-in?error=link')
     expect(screen.getByRole('alert')).toHaveTextContent('did not work')
+  })
+
+  it('says when the account is suspended', () => {
+    at('/sign-in?error=suspended')
+    expect(screen.getByRole('alert')).toHaveTextContent('suspended')
   })
 
   it('skips the form when already signed in', () => {
@@ -773,5 +788,15 @@ describe('API keys on the account page', () => {
     const list = screen.getByRole('region', { name: 'API keys' })
     await userEvent.click(within(list).getByRole('button', { name: 'Delete' }))
     expect(auth.apiKey.delete).toHaveBeenCalledWith({ keyId: 'k1' })
+  })
+})
+
+describe('security activity on the account page', () => {
+  it('lists events with plain names and marks failures', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    const section = await screen.findByRole('region', { name: 'Security activity' })
+    expect(await within(section).findByText('Sign-in failed')).toBeInTheDocument()
+    expect(within(section).getByText('Failed')).toBeInTheDocument()
   })
 })

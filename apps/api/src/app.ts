@@ -550,7 +550,21 @@ export function createApp(options: AppOptions = {}) {
         return c.json({ id: owner.id, email: owner.email })
       })
       // Sign-in, sessions and sign-out: handled by Better Auth under /api/auth/*.
-      .on(['GET', 'POST'], '/auth/*', (c) => c.var.auth.handler(c.req.raw))
+      .on(['GET', 'POST'], '/auth/*', async (c) => {
+        const response = await c.var.auth.handler(c.req.raw)
+        // A suspended person who opens a sign-in link gets JSON from Better Auth. A browser should see a page instead.
+        if (response.status === 403 && new URL(c.req.url).pathname.endsWith('/magic-link/verify')) {
+          const body = (await response
+            .clone()
+            .json()
+            .catch(() => null)) as { code?: string } | null
+          if (body?.code === 'BANNED_USER') {
+            const target = new URL('/sign-in?error=suspended', c.req.url)
+            return c.redirect(target.toString(), 302)
+          }
+        }
+        return response
+      })
       // Resend tells us about bounces and spam complaints. Signed (Svix), so only Resend can call it; off without the secret.
       .post('/webhooks/resend', async (c) => {
         const secret = c.env.RESEND_WEBHOOK_SECRET
