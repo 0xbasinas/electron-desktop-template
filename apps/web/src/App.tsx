@@ -10,6 +10,7 @@ import { DownloadPage } from './pages/DownloadPage'
 import { FeedbackPage } from './pages/FeedbackPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { PrivacyPage } from './pages/PrivacyPage'
 import { ReleasesPage } from './pages/ReleasesPage'
 import { SubprocessorsPage } from './pages/SubprocessorsPage'
 import { SignInPage } from './pages/SignInPage'
@@ -26,6 +27,7 @@ export function App(): JSX.Element {
         <Route path="sign-in" element={<SignInPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="account/cancel-deletion" element={<CancelDeletionPage />} />
+        <Route path="account/privacy" element={<PrivacyPage />} />
         <Route path="account/confirm-email" element={<ConfirmEmailPage />} />
         <Route path="auth/desktop" element={<DesktopCallbackPage />} />
         {/* The web version of the product. Everything under /app is handled client-side. */}

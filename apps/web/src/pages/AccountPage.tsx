@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Button } from '@repo/ui'
 import { ACCENTS, DELETION_COOLING_OFF_DAYS, type Account, type Preferences } from '@repo/shared'
-import { Navigate, useNavigate } from 'react-router'
+import { Link, Navigate, useNavigate } from 'react-router'
 import { DevicesSection } from '../components/DevicesSection'
 import { SignInsSection } from '../components/SignInsSection'
 import { EmailSection } from '../components/EmailSection'
@@ -285,7 +285,10 @@ function AccountDetails(): JSX.Element {
         </p>
         <Button variant="outline" disabled={busy} onClick={() => void download()}>
           Download my data
-        </Button>
+        </Button>{' '}
+        <Link to="/account/privacy" className="text-sm underline">
+          See what we store
+        </Link>
       </section>
 
       {account?.deletionScheduledFor ? (
