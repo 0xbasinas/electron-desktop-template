@@ -1064,3 +1064,26 @@ describe('sign-in activity', () => {
     expect(left?.n).toBe(0)
   })
 })
+
+describe('privacy summary', () => {
+  it('counts what is held about the person, and needs a session', async () => {
+    const s = setup()
+    expect((await s.call('/api/account/privacy')).status).toBe(401)
+    const cookie = await signIn(s, 'priv@example.com', 'Mozilla/5.0 (Windows NT 10.0) Chrome/120.0')
+    await s.call('/api/feedback', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'idea', message: 'hello there', source: 'web' })
+    })
+    const summary = (await (
+      await s.call('/api/account/privacy', { headers: { cookie } })
+    ).json()) as Record<string, unknown>
+    expect(summary).toEqual({
+      devices: 1,
+      signIns: 1,
+      passkeys: 0,
+      feedback: 1,
+      hasSyncedSettings: false
+    })
+  })
+})

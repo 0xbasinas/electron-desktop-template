@@ -40,6 +40,7 @@ const accountApi = vi.hoisted(() => ({
   cancelDeletionWithToken: vi.fn(),
   changeEmail: vi.fn(),
   signIns: vi.fn(),
+  privacy: vi.fn(),
   confirmEmailChange: vi.fn()
 }))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
@@ -113,6 +114,15 @@ beforeEach(() => {
       newDevice: false
     }
   ])
+  accountApi.privacy
+    .mockReset()
+    .mockResolvedValue({
+      devices: 2,
+      signIns: 5,
+      passkeys: 1,
+      feedback: 1,
+      hasSyncedSettings: true
+    })
   accountApi.changeEmail.mockReset().mockResolvedValue(undefined)
   accountApi.confirmEmailChange.mockReset().mockResolvedValue({ email: 'new@example.com' })
 })
@@ -289,6 +299,22 @@ describe('signing in from the desktop app', () => {
     at('/auth/desktop')
     expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
     expect(auth.ensureRedirect).toHaveBeenCalled()
+  })
+})
+
+describe('privacy page', () => {
+  it('shows what is stored, with counts', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account/privacy')
+    expect(await screen.findByText(/2 places you are signed in/)).toBeInTheDocument()
+    expect(screen.getByText(/5 sign-ins from the last 90 days/)).toBeInTheDocument()
+    expect(screen.getByText(/1 message you sent us/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Download my data' })).toBeInTheDocument()
+  })
+
+  it('sends signed-out visitors to the sign-in page', () => {
+    at('/account/privacy')
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 })
 
