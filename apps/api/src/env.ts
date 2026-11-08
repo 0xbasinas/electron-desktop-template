@@ -17,6 +17,8 @@ export interface Bindings {
   SENTRY_DSN?: string
   /** Optional, comma separated: extra origins allowed to call the API (for example a custom desktop scheme). */
   TRUSTED_ORIGINS?: string
+  /** Optional: the oldest desktop app version still allowed, like "0.1.42". Older apps show an "update required" screen. Empty: no limit. */
+  MIN_APP_VERSION?: string
   /** "true" only in preview deploys: the site address is then taken from each request (see preview.ts). */
   PREVIEW?: string
 }

@@ -114,15 +114,13 @@ beforeEach(() => {
       newDevice: false
     }
   ])
-  accountApi.privacy
-    .mockReset()
-    .mockResolvedValue({
-      devices: 2,
-      signIns: 5,
-      passkeys: 1,
-      feedback: 1,
-      hasSyncedSettings: true
-    })
+  accountApi.privacy.mockReset().mockResolvedValue({
+    devices: 2,
+    signIns: 5,
+    passkeys: 1,
+    feedback: 1,
+    hasSyncedSettings: true
+  })
   accountApi.changeEmail.mockReset().mockResolvedValue(undefined)
   accountApi.confirmEmailChange.mockReset().mockResolvedValue({ email: 'new@example.com' })
 })

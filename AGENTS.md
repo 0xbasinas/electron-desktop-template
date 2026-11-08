@@ -97,7 +97,7 @@ only third-party runtime modules go in `dependencies` (electron-builder packages
 
 ## Website, API and sign-in
 
-- Never put secrets in `apps/api/wrangler.jsonc` (it only holds `database_id`, `BETTER_AUTH_URL`, `EMAIL_FROM`, `TRUSTED_ORIGINS`, `routes` and the daily cron `triggers`).
+- Never put secrets in `apps/api/wrangler.jsonc` (it only holds `database_id`, `BETTER_AUTH_URL`, `EMAIL_FROM`, `TRUSTED_ORIGINS`, `routes`, `MIN_APP_VERSION` and the daily cron `triggers`).
   Secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) are set in Cloudflare by `pnpm setup:cloud` or `wrangler secret put`.
   Do not run `pnpm setup:cloud` for the user: it needs their accounts and keys, so tell them to run it.
   `pnpm cloud:doctor` only reads, so run it when something about sign-in or deploys looks wrong. Pull request previews
