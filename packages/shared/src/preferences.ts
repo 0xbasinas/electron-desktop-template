@@ -5,12 +5,17 @@ import { z } from 'zod'
 
 export const themeSchema = z.enum(['system', 'light', 'dark'])
 
+/** The accent colour presets. `neutral` is the original black/white look; the others are defined in @repo/ui's theme.css. */
+export const ACCENTS = ['neutral', 'blue', 'violet', 'green', 'orange', 'rose'] as const
+export const accentSchema = z.enum(ACCENTS)
+
 export const preferencesSchema = z.object({
-  theme: themeSchema.default('system')
+  theme: themeSchema.default('system'),
+  accent: accentSchema.default('neutral')
 })
 
 export type Preferences = z.infer<typeof preferencesSchema>
-export const defaultPreferences: Preferences = { theme: 'system' }
+export const defaultPreferences: Preferences = { theme: 'system', accent: 'neutral' }
 
 /** What is stored and exchanged: the preferences and when they were last changed (milliseconds since 1970). */
 export const preferencesRecordSchema = z.object({

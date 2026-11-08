@@ -5,6 +5,7 @@ import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useAccount } from '@renderer/hooks/useAccount'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useUpdater } from '@renderer/hooks/useUpdater'
+import { ACCENTS } from '@repo/shared'
 import { Button, cn } from '@repo/ui'
 
 const CHANNELS: { value: UpdateChannel; label: string; hint: string }[] = [
@@ -191,6 +192,37 @@ export function SettingsWindow(): React.JSX.Element {
               <option value="dark">Dark</option>
             </select>
           </label>
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span id="accent-label">
+              Accent colour
+              <span className="block text-xs text-muted-foreground">
+                {account?.user
+                  ? 'Synced with your other devices.'
+                  : 'Sign in to use it on every device.'}
+              </span>
+            </span>
+            <div role="radiogroup" aria-labelledby="accent-label" className="flex gap-2">
+              {ACCENTS.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={settings?.accent === value}
+                  aria-label={value}
+                  title={value}
+                  disabled={!settings}
+                  data-accent={value}
+                  onClick={() => void update({ accent: value })}
+                  className={cn(
+                    'size-6 rounded-full bg-primary ring-offset-2 ring-offset-background transition',
+                    settings?.accent === value
+                      ? 'ring-2 ring-ring'
+                      : 'hover:ring-2 hover:ring-ring/50'
+                  )}
+                />
+              ))}
+            </div>
+          </div>
           {platform !== 'darwin' && (
             <Toggle
               label="Keep running in the tray when closed"

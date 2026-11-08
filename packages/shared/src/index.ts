@@ -6,6 +6,8 @@ export {
 } from './schemas'
 export type { Account, AccountExport } from './schemas'
 export {
+  ACCENTS,
+  accentSchema,
   clampUpdatedAt,
   defaultPreferences,
   emptyPreferences,

@@ -56,7 +56,10 @@ beforeEach(() => {
     createdAt: '2026-01-01T00:00:00.000Z'
   })
   localStorage.clear()
-  prefsApi.get.mockReset().mockResolvedValue({ preferences: { theme: 'system' }, updatedAt: 0 })
+  prefsApi.get.mockReset().mockResolvedValue({
+    preferences: { theme: 'system', accent: 'neutral' },
+    updatedAt: 0
+  })
   prefsApi.put.mockReset().mockImplementation((r: unknown) => Promise.resolve(r))
   accountApi.export.mockReset()
   accountApi.remove.mockReset().mockResolvedValue(undefined)
@@ -276,7 +279,7 @@ describe('theme sync', () => {
     await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
     await waitFor(() =>
       expect(prefsApi.put).toHaveBeenCalledWith(
-        expect.objectContaining({ preferences: { theme: 'dark' } })
+        expect.objectContaining({ preferences: { theme: 'dark', accent: 'neutral' } })
       )
     )
     expect(document.documentElement.classList.contains('dark')).toBe(true)
@@ -286,12 +289,26 @@ describe('theme sync', () => {
   it('takes a newer theme from another device', async () => {
     auth.session = { user: { email: 'ada@example.com' } }
     prefsApi.get.mockResolvedValue({
-      preferences: { theme: 'light' },
+      preferences: { theme: 'light', accent: 'neutral' },
       updatedAt: Date.now() + 1000
     })
     at('/account')
     await waitFor(() => expect(screen.getByLabelText('Theme')).toHaveValue('light'))
     expect(prefsApi.put).not.toHaveBeenCalled()
+  })
+
+  it('saves a chosen accent colour without resetting the theme', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    await userEvent.selectOptions(await screen.findByLabelText('Theme'), 'dark')
+    await userEvent.click(await screen.findByRole('radio', { name: 'Accent blue' }))
+    await waitFor(() =>
+      expect(prefsApi.put).toHaveBeenLastCalledWith(
+        expect.objectContaining({ preferences: { theme: 'dark', accent: 'blue' } })
+      )
+    )
+    expect(document.documentElement.dataset.accent).toBe('blue')
+    expect(screen.getByRole('radio', { name: 'Accent blue' })).toBeChecked()
   })
 
   it('keeps working when the server is down', async () => {

@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Button } from '@repo/ui'
-import type { Account } from '@repo/shared'
+import { ACCENTS, type Account, type Preferences } from '@repo/shared'
 import { Navigate, useNavigate } from 'react-router'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
-import { currentTheme, setTheme, syncTheme } from '../lib/theme'
+import { cn } from '@repo/ui'
+import { currentAccent, currentTheme, setAccent, setTheme, syncTheme } from '../lib/theme'
 
 type ThemeChoice = 'system' | 'light' | 'dark'
 
@@ -29,6 +30,7 @@ function AccountDetails(): JSX.Element {
   const [confirmEmail, setConfirmEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [theme, setThemeState] = useState(currentTheme())
+  const [accent, setAccentState] = useState(currentAccent())
   const [passkeys, setPasskeys] = useState<PasskeyRow[]>([])
 
   useEffect(() => {
@@ -50,8 +52,10 @@ function AccountDetails(): JSX.Element {
   useEffect(() => {
     let cancelled = false
     syncTheme()
-      .then((t) => {
-        if (!cancelled) setThemeState(t)
+      .then((p) => {
+        if (cancelled) return
+        setThemeState(p.theme)
+        setAccentState(p.accent)
       })
       .catch((e: unknown) => console.error(e))
     return () => {
@@ -62,6 +66,12 @@ function AccountDetails(): JSX.Element {
   async function chooseTheme(next: ThemeChoice): Promise<void> {
     setThemeState(next)
     const saved = await setTheme(next, true)
+    setMessage(saved ? 'Saved. The desktop app will use it too.' : 'Saved on this device.')
+  }
+
+  async function chooseAccent(next: Preferences['accent']): Promise<void> {
+    setAccentState(next)
+    const saved = await setAccent(next, true)
     setMessage(saved ? 'Saved. The desktop app will use it too.' : 'Saved on this device.')
   }
 
@@ -191,7 +201,8 @@ function AccountDetails(): JSX.Element {
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Appearance</h2>
         <p className="text-sm text-muted-foreground">
-          The theme follows you: change it here or in the desktop app and the other one catches up.
+          The theme and accent colour follow you: change them here or in the desktop app and the
+          other one catches up.
         </p>
         <select
           aria-label="Theme"
@@ -203,6 +214,24 @@ function AccountDetails(): JSX.Element {
           <option value="light">Light</option>
           <option value="dark">Dark</option>
         </select>
+        <div role="radiogroup" aria-label="Accent colour" className="flex gap-2 pt-1">
+          {ACCENTS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={accent === value}
+              aria-label={`Accent ${value}`}
+              title={value}
+              data-accent={value}
+              onClick={() => void chooseAccent(value)}
+              className={cn(
+                'size-7 rounded-full bg-primary ring-offset-2 ring-offset-background transition',
+                accent === value ? 'ring-2 ring-ring' : 'hover:ring-2 hover:ring-ring/50'
+              )}
+            />
+          ))}
+        </div>
       </section>
 
       <section className="space-y-2">

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { ApiError, createApiClient } from './client'
 
-const record = { preferences: { theme: 'dark' }, updatedAt: 5 }
+const record = { preferences: { theme: 'dark', accent: 'neutral' }, updatedAt: 5 }
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 

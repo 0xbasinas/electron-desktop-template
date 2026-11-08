@@ -324,7 +324,10 @@ describe('account', () => {
     ).json()) as {
       preferences: unknown
     }
-    expect(data.preferences).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+    expect(data.preferences).toEqual({
+      preferences: { theme: 'system', accent: 'neutral' },
+      updatedAt: 0
+    })
   })
 
   it('blocks cross-site writes (CSRF)', async () => {
@@ -439,18 +442,33 @@ describe('preferences', () => {
   it('starts with the defaults and keeps the newest edit', async () => {
     const s = setup()
     const cookie = await signIn(s, 'pref1@example.com')
-    expect(await get(s, cookie)).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+    expect(await get(s, cookie)).toEqual({
+      preferences: { theme: 'system', accent: 'neutral' },
+      updatedAt: 0
+    })
 
     const first = await s.call('/api/preferences', put(cookie, 'dark', 100))
-    expect(await first.json()).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+    expect(await first.json()).toEqual({
+      preferences: { theme: 'dark', accent: 'neutral' },
+      updatedAt: 100
+    })
 
     // An older edit from a device that was offline loses, and gets the newer copy back.
     const stale = await s.call('/api/preferences', put(cookie, 'light', 50))
-    expect(await stale.json()).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
-    expect(await get(s, cookie)).toEqual({ preferences: { theme: 'dark' }, updatedAt: 100 })
+    expect(await stale.json()).toEqual({
+      preferences: { theme: 'dark', accent: 'neutral' },
+      updatedAt: 100
+    })
+    expect(await get(s, cookie)).toEqual({
+      preferences: { theme: 'dark', accent: 'neutral' },
+      updatedAt: 100
+    })
 
     const newer = await s.call('/api/preferences', put(cookie, 'light', 200))
-    expect(await newer.json()).toEqual({ preferences: { theme: 'light' }, updatedAt: 200 })
+    expect(await newer.json()).toEqual({
+      preferences: { theme: 'light', accent: 'neutral' },
+      updatedAt: 200
+    })
   })
 
   it('rejects values it does not know', async () => {
@@ -469,7 +487,10 @@ describe('preferences', () => {
       updatedAt: number
     }
     expect(saved.updatedAt).toBeLessThan(Date.now() + 10 * 60_000)
-    expect(await get(s, b)).toEqual({ preferences: { theme: 'system' }, updatedAt: 0 })
+    expect(await get(s, b)).toEqual({
+      preferences: { theme: 'system', accent: 'neutral' },
+      updatedAt: 0
+    })
   })
 })
 

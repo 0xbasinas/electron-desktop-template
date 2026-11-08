@@ -114,16 +114,16 @@ and use them from `/sign-in`. It uses Better Auth's passkey plugin (`@better-aut
 - The tests cover the endpoints and the rules around them (sessions needed, rpId, deletion cascades); the browser prompt itself
   needs a real authenticator, so try adding a passkey by hand after deploying.
 
-## Synced preferences (the theme follows you)
+## Synced preferences (the theme and accent colour follow you)
 
 A small, useful example of data that follows a person between the web app and the desktop app: their **theme** (system, light
-or dark). Change it on `/account` or in the desktop **Settings > General** and the other catches up.
+or dark) and **accent colour** (a fixed set of presets). Change them on `/account` or in the desktop **Settings > General** and the other catches up.
 
 - API: `GET /api/preferences` and `PUT /api/preferences` (one row per person in the `preference` table). **Last write wins**:
   each save carries the time of the edit; the newest edit replaces the older one, and a stale device just gets the newer copy
   back. A stale write costs a read, not a D1 write. Times too far in the future are clamped, so a wrong clock cannot pin a value.
 - Both apps keep the setting locally first (the website in `localStorage`, the desktop app in `settings.json` with a
-  `themeUpdatedAt`), so it applies instantly and works offline. Syncing is best effort: it runs at start, after signing in,
+  `preferencesUpdatedAt`, one time for both), so it applies instantly and works offline. Syncing is best effort: it runs at start, after signing in,
   when the theme changes, and every ten minutes in the desktop app (`apps/desktop/src/main/preferencesSync.ts`), and a failed
   attempt is retried by the next one because the local copy stays the newer one until it is sent.
 - The logic that decides (`newerWins`, `reconcile`, `clampUpdatedAt`) is plain code in `packages/shared/src/preferences.ts`

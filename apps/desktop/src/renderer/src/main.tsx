@@ -13,6 +13,13 @@ const applyTheme = (): void => {
 applyTheme()
 darkQuery.addEventListener('change', applyTheme)
 
+// The accent colour is a setting: put it on <html> now and whenever it changes (from any window, or another device).
+const applyAccent = (accent: string): void => {
+  document.documentElement.dataset.accent = accent
+}
+void window.api.getSettings().then((s) => applyAccent(s.accent))
+window.api.onSettingsChanged((s) => applyAccent(s.accent))
+
 // One bundle, two windows: the settings window loads index.html#settings.
 const isSettingsWindow = window.location.hash === '#settings'
 if (isSettingsWindow) document.title = 'Settings'

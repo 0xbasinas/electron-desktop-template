@@ -45,6 +45,76 @@
   color-scheme: dark;
 }
 
+/* Accent colour presets. The app sets data-accent on <html> (any element works, which the colour swatches in Settings rely on); "neutral" (no override) is the original black/white look.
+   Each preset recolours the primary buttons, the focus ring and checked checkboxes, in light and dark. */
+/* Neutral is spelled out so a neutral swatch looks neutral even when the page itself uses another accent. */
+[data-accent='neutral'] {
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.708 0 0);
+}
+[data-accent='blue'] {
+  --primary: oklch(0.546 0.215 262);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.546 0.215 262);
+}
+[data-accent='violet'] {
+  --primary: oklch(0.541 0.23 293);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.541 0.23 293);
+}
+[data-accent='green'] {
+  --primary: oklch(0.527 0.154 150);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.527 0.154 150);
+}
+[data-accent='orange'] {
+  --primary: oklch(0.646 0.222 41);
+  --primary-foreground: oklch(0.145 0 0);
+  --ring: oklch(0.646 0.222 41);
+}
+[data-accent='rose'] {
+  --primary: oklch(0.586 0.253 17);
+  --primary-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.586 0.253 17);
+}
+.dark[data-accent='neutral'],
+.dark [data-accent='neutral'] {
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --ring: oklch(0.556 0 0);
+}
+.dark[data-accent='blue'],
+.dark [data-accent='blue'] {
+  --primary: oklch(0.707 0.165 254);
+  --primary-foreground: oklch(0.145 0 0);
+  --ring: oklch(0.707 0.165 254);
+}
+.dark[data-accent='violet'],
+.dark [data-accent='violet'] {
+  --primary: oklch(0.702 0.183 293);
+  --primary-foreground: oklch(0.145 0 0);
+  --ring: oklch(0.702 0.183 293);
+}
+.dark[data-accent='green'],
+.dark [data-accent='green'] {
+  --primary: oklch(0.723 0.219 150);
+  --primary-foreground: oklch(0.145 0 0);
+  --ring: oklch(0.723 0.219 150);
+}
+.dark[data-accent='orange'],
+.dark [data-accent='orange'] {
+  --primary: oklch(0.75 0.183 55);
+  --primary-foreground: oklch(0.145 0 0);
+  --ring: oklch(0.75 0.183 55);
+}
+.dark[data-accent='rose'],
+.dark [data-accent='rose'] {
+  --primary: oklch(0.712 0.194 13);
+  --primary-foreground: oklch(0.145 0 0);
+  --ring: oklch(0.712 0.194 13);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -23,6 +23,7 @@ test('packaged app opens and the renderer talks to main', async () => {
     expect(result.platform).toBe(process.platform)
     expect(result.settings).toEqual({
       theme: 'system',
+      accent: 'neutral',
       updateChannel: 'latest',
       closeToTray: false,
       launchAtLogin: false,
@@ -108,6 +109,31 @@ test('the theme setting changes the colours the page sees', async () => {
     await page.evaluate(() => (window as unknown as WithApi).api.updateSettings({ theme: 'light' }))
     await expect.poll(dark).toBe(false)
     await expect(page.locator('html')).not.toHaveClass(/dark/)
+  } finally {
+    await app.close()
+  }
+})
+
+test('the accent setting recolours the page', async () => {
+  const app = await launchApp()
+  try {
+    const page = await app.firstWindow()
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    const html = page.locator('html')
+    await expect(html).toHaveAttribute('data-accent', 'neutral')
+    await page.evaluate(() => (window as unknown as WithApi).api.updateSettings({ accent: 'blue' }))
+    await expect(html).toHaveAttribute('data-accent', 'blue')
+    // The renderer is untrusted: a made-up accent is refused by main.
+    const refused = await page.evaluate(async () => {
+      try {
+        await (window as unknown as WithApi).api.updateSettings({ accent: 'url(x)' } as never)
+        return false
+      } catch {
+        return true
+      }
+    })
+    expect(refused).toBe(true)
+    await expect(html).toHaveAttribute('data-accent', 'blue')
   } finally {
     await app.close()
   }
