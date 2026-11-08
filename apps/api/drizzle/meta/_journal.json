@@ -64,6 +64,13 @@
       "when": 1794151436363,
       "tag": "0008_cynical_madelyne_pryor",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794151659108,
+      "tag": "0009_dizzy_vengeance",
+      "breakpoints": true
     }
   ]
 }
