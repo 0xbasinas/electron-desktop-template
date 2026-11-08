@@ -5,7 +5,7 @@ import {
   type Preferences,
   type PreferencesRecord
 } from '@repo/shared'
-import { fadeThemeChange } from '@repo/ui'
+import { switchThemeInstantly } from '@repo/ui'
 import { api } from './api'
 
 // The theme and accent colour follow the person: it is kept in this browser (so it applies at once, even signed out or offline) and,
@@ -38,12 +38,12 @@ export function applyAccent(accent: Preferences['accent']): void {
   document.documentElement.dataset.accent = accent
 }
 
-export function applyTheme(theme: Preferences['theme'], fade = false): void {
+export function applyTheme(theme: Preferences['theme'], animated = false): void {
   const dark = theme === 'dark' || (theme === 'system' && darkQuery()?.matches === true)
   const root = document.documentElement
   if (root.classList.contains('dark') === dark) return
-  // A change the person makes fades; the first paint on page load must not.
-  if (fade) fadeThemeChange(() => root.classList.toggle('dark', dark))
+  // Every colour changes in the same frame (the very first paint has nothing to animate, so it skips this).
+  if (animated) switchThemeInstantly(() => root.classList.toggle('dark', dark))
   else root.classList.toggle('dark', dark)
 }
 

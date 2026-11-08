@@ -47,14 +47,16 @@ export function loadRenderer(win: BrowserWindow, hash = ''): void {
   }
 }
 
-/** Keep the native window-controls overlay in step with the system light/dark setting. */
+/** Colour the window itself and its controls for the current light/dark state, so nothing light shows through while the page repaints. */
+export function syncWindowColors(win: BrowserWindow): void {
+  if (win.isDestroyed()) return
+  win.setBackgroundColor(backgroundColor())
+  if (!isMac) win.setTitleBarOverlay(overlay())
+}
+
+/** Keep the window's colours in step when the system light/dark setting changes. */
 export function watchTheme(win: BrowserWindow): void {
-  const update = (): void => {
-    if (win.isDestroyed()) return
-    // The native background changes too, so no light strip shows through while the page repaints.
-    win.setBackgroundColor(backgroundColor())
-    if (!isMac) win.setTitleBarOverlay(overlay())
-  }
+  const update = (): void => syncWindowColors(win)
   nativeTheme.on('updated', update)
   win.on('closed', () => nativeTheme.off('updated', update))
 }
