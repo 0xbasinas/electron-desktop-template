@@ -89,34 +89,14 @@ which is stored encrypted with the operating system's keychain (Electron `safeSt
 
 ## Feedback
 
-stores a message (kind , or , up to 4000 characters, plus an optional diagnostics report up to 24000) in the table.
-It needs a session, so there is no anonymous spam, and each person can send 5 per hour (one indexed count, in ).
-The web app has ; the desktop app has a Settings section whose main process sends it as the signed-in person
-() and can attach the diagnostics report. Feedback is deleted with the account ()
-and listed in the data export (without the diagnostics text). Reading feedback is for the owner: query the table with
-wrangler d1
+`POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics
+report up to 24000) in the `feedback` table. It needs a session, so there is no anonymous spam, and each person can send
+5 per hour (one indexed count; `FEEDBACK_PER_HOUR` in `packages/shared/src/feedback.ts`).
 
-🗄️ Manage Workers D1 databases
-
-COMMANDS
-wrangler d1 create <name> Creates a new D1 database, and provides the binding and UUID that you will put in your config file
-wrangler d1 info <name> Get information about a D1 database, including the current database size and state
-wrangler d1 list List all D1 databases in your account
-wrangler d1 delete <name> Delete a D1 database
-wrangler d1 execute <database> Execute a command or SQL file
-wrangler d1 export <name> Export the contents or schema of your database as a .sql file
-wrangler d1 time-travel Use Time Travel to restore, fork or copy a database at a specific point-in-time
-wrangler d1 migrations Interact with D1 migrations
-wrangler d1 insights <name> Get information about the queries run on a D1 database [experimental]
-
-GLOBAL FLAGS
--c, --config Path to Wrangler configuration file [string]
---cwd Run as if Wrangler was started in the specified directory instead of the current working directory [string]
--e, --env Environment to use for operations, and for selecting .env and .dev.vars files [string]
---env-file Path to an .env file to load - can be specified multiple times - values from earlier files are overridden by values in later files [array]
--h, --help Show help [boolean]
---install-skills Install Cloudflare skills for detected AI coding agents before running the command [boolean] [default: false]
--v, --version Show version number [boolean] until the admin dashboard exists.
+The web app has `/feedback`. The desktop app has a Settings section; its main process sends the message as the signed-in
+person (`apps/desktop/src/main/feedback.ts`) and can attach the diagnostics report. Feedback is deleted with the account
+(`ON DELETE CASCADE`) and listed in the data export, without the diagnostics text. Reading it is for the owner: query the
+table with `wrangler d1 execute` until the admin dashboard exists.
 
 ## Account page, data export and deletion
 
