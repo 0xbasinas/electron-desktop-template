@@ -23,24 +23,26 @@ Start with the desktop app (`pnpm dev`). The website, API and account sign-in ar
 
 ## Scripts
 
-| Command                                        | What it does                                                                                   |
-| ---------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `pnpm dev`                                     | Run the app with HMR                                                                           |
-| `pnpm build`                                   | Typecheck and build                                                                            |
-| `pnpm build:win` / `build:mac` / `build:linux` | Package installers                                                                             |
-| `pnpm lint` / `pnpm format` / `pnpm typecheck` | Code quality                                                                                   |
-| `pnpm test:e2e`                                | Playwright smoke test against the packaged app (run `pnpm build:unpack` first)                 |
-| `pnpm test`                                    | Vitest (jsdom)                                                                                 |
-| `pnpm check:release`                           | After `pnpm build:<os> --publish never`: check the installers against the update manifest      |
-| `pnpm check:fuses`                             | Check the Electron fuses of the packaged app (`--test-build` for the Playwright build)         |
-| `pnpm test:update`                             | Build 0.0.1 and 0.0.2, check the old one updates to the new one                                |
-| `pnpm icons`                                   | Regenerate app icons from `apps/desktop/build/icon-source.svg`                                 |
-| `pnpm check:bundle`                            | Fail if the renderer bundle exceeds `apps/desktop/bundle-budget.json` (run after `pnpm build`) |
-| `pnpm rename`                                  | Rename the template for a new app                                                              |
-| `pnpm dev:all`                                 | Run every app that has a dev server (desktop, web, API) through Turborepo                      |
-| `pnpm setup:cloud`                             | Set up Cloudflare, Resend and GitHub for the website and API in one go (docs/setup-cloud.md)   |
-| `pnpm cloud:doctor`                            | Check the whole cloud setup and say what is wrong and how to fix it                            |
-| `pnpm test:scripts`                            | Unit tests for the setup script (`node --test`)                                                |
+| Command                                        | What it does                                                                                              |
+| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                     | Run the app with HMR                                                                                      |
+| `pnpm build`                                   | Typecheck and build                                                                                       |
+| `pnpm build:win` / `build:mac` / `build:linux` | Package installers                                                                                        |
+| `pnpm lint` / `pnpm format` / `pnpm typecheck` | Code quality                                                                                              |
+| `pnpm test:e2e`                                | Playwright smoke test against the packaged app (run `pnpm build:unpack` first)                            |
+| `pnpm test`                                    | Vitest (jsdom)                                                                                            |
+| `pnpm check:release`                           | After `pnpm build:<os> --publish never`: check the installers against the update manifest                 |
+| `pnpm check:fuses`                             | Check the Electron fuses of the packaged app (`--test-build` for the Playwright build)                    |
+| `pnpm test:update`                             | Build 0.0.1 and 0.0.2, check the old one updates to the new one                                           |
+| `pnpm icons`                                   | Regenerate app icons from `apps/desktop/build/icon-source.svg`                                            |
+| `pnpm check:bundle`                            | Fail if the renderer bundle exceeds `apps/desktop/bundle-budget.json` (run after `pnpm build`)            |
+| `pnpm rename`                                  | Rename the template for a new app                                                                         |
+| `pnpm dev:all`                                 | Run every app that has a dev server (desktop, web, API) through Turborepo                                 |
+| `pnpm setup:cloud`                             | Set up Cloudflare, Resend and GitHub for the website and API in one go (docs/setup-cloud.md)              |
+| `pnpm template:update`                         | Bring the template's newer changes into an app made from it, as a pull request (docs/template-updates.md) |
+| `pnpm template:status`                         | How far behind the template this app is                                                                   |
+| `pnpm cloud:doctor`                            | Check the whole cloud setup and say what is wrong and how to fix it                                       |
+| `pnpm test:scripts`                            | Unit tests for the setup script (`node --test`)                                                           |
 
 ## Website and API
 

@@ -80,5 +80,8 @@ for (const [file, fn] of Object.entries(edits)) {
 
 console.log(`\nRenamed to "${title}" (${name}, ${newId}, owner ${owner}).`)
 console.log(
+  'Tip: run `pnpm template:update --adopt` once to track the template, so later template improvements can be pulled in (docs/template-updates.md).'
+)
+console.log(
   'Next: review `git diff`, then commit. Remember to point the git remote at the new repo.'
 )
