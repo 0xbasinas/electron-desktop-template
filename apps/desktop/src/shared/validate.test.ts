@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseBoolean, parseSettingsPatch } from './validate'
+import { parseBoolean, parseFeedbackRequest, parseSettingsPatch } from './validate'
 
 describe('parseSettingsPatch', () => {
   it('accepts valid partial settings', () => {
@@ -45,5 +45,27 @@ describe('parseBoolean', () => {
     expect(parseBoolean(undefined, true)).toBe(true)
     expect(parseBoolean(true)).toBe(true)
     expect(() => parseBoolean('true')).toThrow()
+  })
+})
+
+describe('parseFeedbackRequest', () => {
+  const ok = { kind: 'bug', message: '  It crashes  ', includeDiagnostics: true }
+  it('accepts a normal request and trims the message', () => {
+    expect(parseFeedbackRequest(ok)).toEqual({ ...ok, message: 'It crashes' })
+  })
+  it('rejects anything else', () => {
+    for (const bad of [
+      null,
+      'x',
+      [],
+      { ...ok, kind: 'rant' },
+      { ...ok, message: 'hi' },
+      { ...ok, message: 'x'.repeat(5000) },
+      { ...ok, message: 5 },
+      { ...ok, includeDiagnostics: 'yes' },
+      { ...ok, extra: 1 }
+    ]) {
+      expect(() => parseFeedbackRequest(bad)).toThrow()
+    }
   })
 })

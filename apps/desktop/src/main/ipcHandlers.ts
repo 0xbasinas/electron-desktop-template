@@ -1,8 +1,9 @@
 import { app, BrowserWindow } from 'electron'
 import { IPC, type AppInfo } from '../shared/ipc'
-import { parseBoolean, parseSettingsPatch } from '../shared/validate'
+import { parseBoolean, parseFeedbackRequest, parseSettingsPatch } from '../shared/validate'
 import { getAccount, signIn, signOut } from './auth'
 import { crashReportingAvailable } from './crashReporting'
+import { sendFeedback } from './feedback'
 import { collectDiagnostics } from './diagnostics'
 import { logFilePath, revealLogs } from './logger'
 import { getSyncStatus, syncPreferences } from './preferencesSync'
@@ -34,6 +35,7 @@ export function registerIpcHandlers(): void {
   handle(IPC.appOpenLogs, () => revealLogs())
   handle(IPC.appDiagnostics, () => collectDiagnostics())
 
+  handle(IPC.feedbackSend, (_event, request) => sendFeedback(parseFeedbackRequest(request)))
   handle(IPC.syncStatus, () => getSyncStatus())
   handle(IPC.syncRetry, () => syncPreferences())
 

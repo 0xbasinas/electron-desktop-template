@@ -51,8 +51,8 @@ function FeedbackForm(): JSX.Element {
     <div className="max-w-xl space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Send feedback</h1>
       <p className="text-muted-foreground">
-        Tell us what is broken or what you wish it did. We store your message with your account, and you
-        can see or delete it in your data export.
+        Tell us what is broken or what you wish it did. We store your message with your account, and
+        you can see or delete it in your data export.
       </p>
       {sent && (
         <p role="status" className="rounded-md border border-border p-3 text-sm">
@@ -84,6 +84,7 @@ function FeedbackForm(): JSX.Element {
           <label className="block space-y-1 text-sm">
             <span className="font-medium">Your message</span>
             <textarea
+              aria-label="Your message"
               required
               minLength={3}
               maxLength={FEEDBACK_MESSAGE_MAX}

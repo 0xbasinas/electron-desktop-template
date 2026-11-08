@@ -1,5 +1,14 @@
-import { ACCENTS, isAccent } from '@repo/shared'
-import type { Settings } from './ipc'
+import {
+  ACCENTS,
+  FEEDBACK_KINDS,
+  FEEDBACK_MESSAGE_MAX,
+  isAccent,
+  type FeedbackKind
+} from '@repo/shared'
+import type { FeedbackRequest, Settings } from './ipc'
+
+const isFeedbackKind = (value: unknown): value is FeedbackKind =>
+  typeof value === 'string' && (FEEDBACK_KINDS as readonly string[]).includes(value)
 
 // The renderer is untrusted: anything it sends over IPC is checked here before main acts on it.
 
@@ -61,4 +70,25 @@ export function parseBoolean(input: unknown, fallback = false): boolean {
   if (input === undefined) return fallback
   if (typeof input !== 'boolean') throw new Error('Invalid argument: expected a boolean')
   return input
+}
+
+/** Validate the feedback form's payload. Throws on anything unexpected. */
+export function parseFeedbackRequest(input: unknown): FeedbackRequest {
+  if (typeof input !== 'object' || input === null || Array.isArray(input)) {
+    throw new Error('Invalid feedback: expected an object')
+  }
+  const { kind, message, includeDiagnostics, ...rest } = input as Record<string, unknown>
+  if (Object.keys(rest).length > 0) throw new Error('Invalid feedback: unknown key')
+  if (!isFeedbackKind(kind)) throw new Error('Invalid feedback: unknown kind')
+  if (typeof message !== 'string') throw new Error('Invalid feedback: message must be text')
+  const text = message.trim()
+  if (text.length < 3 || text.length > FEEDBACK_MESSAGE_MAX) {
+    throw new Error(
+      'Invalid feedback: message must be 3 to ' + FEEDBACK_MESSAGE_MAX + ' characters'
+    )
+  }
+  if (typeof includeDiagnostics !== 'boolean') {
+    throw new Error('Invalid feedback: includeDiagnostics must be a boolean')
+  }
+  return { kind, message: text, includeDiagnostics }
 }
