@@ -4,10 +4,8 @@ import { ACCENTS, type Account, type Preferences } from '@repo/shared'
 import { Navigate, useNavigate } from 'react-router'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
-import { AccentPicker } from '@repo/ui'
+import { AccentPicker, ThemePicker, type ThemeChoice } from '@repo/ui'
 import { currentAccent, currentTheme, setAccent, setTheme, syncTheme } from '../lib/theme'
-
-type ThemeChoice = 'system' | 'light' | 'dark'
 
 interface PasskeyRow {
   id: string
@@ -204,16 +202,7 @@ function AccountDetails(): JSX.Element {
           The theme and accent colour follow you: change them here or in the desktop app and the
           other one catches up.
         </p>
-        <select
-          aria-label="Theme"
-          value={theme}
-          onChange={(e) => void chooseTheme(e.target.value as ThemeChoice)}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-        >
-          <option value="system">Match my system</option>
-          <option value="light">Light</option>
-          <option value="dark">Dark</option>
-        </select>
+        <ThemePicker value={theme} onChange={(next) => void chooseTheme(next)} />
         <AccentPicker
           accents={ACCENTS}
           value={accent}

@@ -5,6 +5,7 @@ import { getAccount, signIn, signOut } from './auth'
 import { crashReportingAvailable } from './crashReporting'
 import { collectDiagnostics } from './diagnostics'
 import { logFilePath, revealLogs } from './logger'
+import { getSyncStatus, syncPreferences } from './preferencesSync'
 import { handle } from './secureIpc'
 import { getSettings, updateSettings } from './settings'
 import { openSettingsWindow } from './settingsWindow'
@@ -32,6 +33,9 @@ export function registerIpcHandlers(): void {
 
   handle(IPC.appOpenLogs, () => revealLogs())
   handle(IPC.appDiagnostics, () => collectDiagnostics())
+
+  handle(IPC.syncStatus, () => getSyncStatus())
+  handle(IPC.syncRetry, () => syncPreferences())
 
   handle(IPC.accountGet, () => getAccount())
   handle(IPC.accountSignIn, () => signIn())
