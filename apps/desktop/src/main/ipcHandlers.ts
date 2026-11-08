@@ -3,6 +3,7 @@ import { IPC, type AppInfo } from '../shared/ipc'
 import { parseBoolean, parseSettingsPatch } from '../shared/validate'
 import { getAccount, signIn, signOut } from './auth'
 import { crashReportingAvailable } from './crashReporting'
+import { collectDiagnostics } from './diagnostics'
 import { logFilePath, revealLogs } from './logger'
 import { handle } from './secureIpc'
 import { getSettings, updateSettings } from './settings'
@@ -30,6 +31,7 @@ export function registerIpcHandlers(): void {
   }))
 
   handle(IPC.appOpenLogs, () => revealLogs())
+  handle(IPC.appDiagnostics, () => collectDiagnostics())
 
   handle(IPC.accountGet, () => getAccount())
   handle(IPC.accountSignIn, () => signIn())

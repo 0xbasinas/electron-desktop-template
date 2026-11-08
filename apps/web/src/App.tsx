@@ -7,6 +7,7 @@ import { DesktopCallbackPage } from './pages/DesktopCallbackPage'
 import { DownloadPage } from './pages/DownloadPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { ReleasesPage } from './pages/ReleasesPage'
 import { SignInPage } from './pages/SignInPage'
 
 export function App(): JSX.Element {
@@ -15,6 +16,7 @@ export function App(): JSX.Element {
       <Route element={<Layout />}>
         <Route index element={<HomePage />} />
         <Route path="download" element={<DownloadPage />} />
+        <Route path="releases" element={<ReleasesPage />} />
         <Route path="sign-in" element={<SignInPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="auth/desktop" element={<DesktopCallbackPage />} />

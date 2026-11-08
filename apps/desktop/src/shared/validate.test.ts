@@ -16,6 +16,8 @@ describe('parseSettingsPatch', () => {
     expect(() => parseSettingsPatch({ accent: 'url(x)' })).toThrow(/accent/)
     expect(() => parseSettingsPatch({ accent: 5 })).toThrow(/accent/)
     expect(() => parseSettingsPatch({ crashReports: 'yes' })).toThrow()
+    expect(parseSettingsPatch({ notifications: false })).toEqual({ notifications: false })
+    expect(() => parseSettingsPatch({ notifications: 'no' })).toThrow()
     expect(parseSettingsPatch({})).toEqual({})
   })
 

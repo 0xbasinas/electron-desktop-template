@@ -12,21 +12,22 @@ Package manager is **pnpm** (never npm or yarn). Node 24. Run commands from the 
 
 ## Commands
 
-| Task                                | Command                                                                                |
-| ----------------------------------- | -------------------------------------------------------------------------------------- |
-| Install                             | `pnpm install`                                                                         |
-| Run in development                  | `pnpm dev`                                                                             |
-| Format / lint / typecheck           | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                         |
-| Unit tests (src, scripts)           | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)                   |
-| Set up website + API accounts       | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)      |
-| Update an app from the template     | `pnpm template:update` (apps made from the template only; opens a PR; `--adopt` first) |
-| Check the cloud setup               | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)               |
-| Build the app                       | `pnpm build` (typechecks first)                                                        |
-| Bundle size budget                  | `pnpm check:bundle` (after `pnpm build`)                                               |
-| Package unpacked app                | `pnpm build:unpack`                                                                    |
-| End-to-end tests (packaged app)     | `pnpm build:unpack && pnpm test:e2e`                                                   |
-| Update test (old build updates new) | `pnpm test:update` (builds installers; needs a working NSIS/AppImage toolchain)        |
-| Check installers vs update manifest | `pnpm build:win` (or `:mac`, `:linux`) `--publish never` then `pnpm check:release`     |
+| Task                                     | Command                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------- |
+| Install                                  | `pnpm install`                                                                         |
+| Run in development                       | `pnpm dev`                                                                             |
+| Format / lint / typecheck                | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                         |
+| Unit tests (src, scripts)                | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)                   |
+| Fill the local database with fake people | `pnpm seed:dev [--users N]` (local D1 only; never touches the real database)           |
+| Set up website + API accounts            | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)      |
+| Update an app from the template          | `pnpm template:update` (apps made from the template only; opens a PR; `--adopt` first) |
+| Check the cloud setup                    | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)               |
+| Build the app                            | `pnpm build` (typechecks first)                                                        |
+| Bundle size budget                       | `pnpm check:bundle` (after `pnpm build`)                                               |
+| Package unpacked app                     | `pnpm build:unpack`                                                                    |
+| End-to-end tests (packaged app)          | `pnpm build:unpack && pnpm test:e2e`                                                   |
+| Update test (old build updates new)      | `pnpm test:update` (builds installers; needs a working NSIS/AppImage toolchain)        |
+| Check installers vs update manifest      | `pnpm build:win` (or `:mac`, `:linux`) `--publish never` then `pnpm check:release`     |
 
 Before saying a change is done, run at least: `pnpm format && pnpm lint && pnpm typecheck && pnpm test`. For
 anything touching main, preload, the window or IPC, also `pnpm build:unpack && pnpm test:e2e`.

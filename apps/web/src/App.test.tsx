@@ -123,6 +123,27 @@ describe('routes', () => {
     expect(installers).toHaveLength(1)
   })
 
+  it('lists releases and filters them by channel', async () => {
+    const rel = (tag: string, prerelease: boolean): unknown => ({
+      tag_name: tag,
+      html_url: 'https://github.com/o/r/releases/tag/' + tag,
+      assets: [],
+      prerelease,
+      published_at: '2026-01-01T00:00:00Z'
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue({ ok: true, json: async () => [rel('v2', false), rel('v2-beta', true)] })
+    )
+    at('/releases')
+    expect(await screen.findByRole('heading', { name: 'v2' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: /v2-beta/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Beta' }))
+    expect(screen.getByRole('heading', { name: /v2-beta/ })).toBeInTheDocument()
+  })
+
   it('falls back to GitHub when the lookup fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     vi.spyOn(console, 'error').mockImplementation(() => {})

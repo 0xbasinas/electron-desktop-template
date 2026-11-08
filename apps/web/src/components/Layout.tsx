@@ -23,6 +23,9 @@ export function Layout(): JSX.Element {
             <NavLink to="/download" className={link}>
               Download
             </NavLink>
+            <NavLink to="/releases" className={link}>
+              Releases
+            </NavLink>
             <NavLink to="/app" className={link}>
               Open web app
             </NavLink>

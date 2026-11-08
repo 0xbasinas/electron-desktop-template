@@ -13,6 +13,7 @@ export const IPC = {
   settingsOpenWindow: 'settings:open-window',
   appInfo: 'app:info',
   appOpenLogs: 'app:open-logs',
+  appDiagnostics: 'app:diagnostics',
   whatsNewGet: 'whats-new:get',
   whatsNewSeen: 'whats-new:seen',
   accountGet: 'account:get',
@@ -46,6 +47,8 @@ export interface Settings {
   closeToTray: boolean
   /** Start the app when you sign in (Windows and macOS, packaged builds only). */
   launchAtLogin: boolean
+  /** Show native notifications (for example when an update is ready to install). */
+  notifications: boolean
   /** Send anonymous crash reports (only offered when this build has a crash-report endpoint). */
   crashReports: boolean
 }

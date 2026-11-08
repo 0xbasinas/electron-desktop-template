@@ -86,6 +86,8 @@ export function SettingsWindow(): React.JSX.Element {
   const [signingIn, setSigningIn] = useState(false)
   const [info, setInfo] = useState<AppInfo>()
   const [whatsNew, setWhatsNew] = useState<WhatsNew>()
+  const [report, setReport] = useState<string>()
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => {
     void window.api.getAppInfo().then(setInfo)
@@ -231,6 +233,13 @@ export function SettingsWindow(): React.JSX.Element {
               onChange={(launchAtLogin) => update({ launchAtLogin })}
             />
           )}
+          <Toggle
+            label="Show notifications"
+            hint="For example when an update is ready to install."
+            checked={settings?.notifications ?? true}
+            disabled={!settings}
+            onChange={(notifications) => update({ notifications })}
+          />
           {info?.crashReportingAvailable && (
             <Toggle
               label="Send anonymous crash reports"
@@ -257,7 +266,40 @@ export function SettingsWindow(): React.JSX.Element {
             >
               What&apos;s new
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCopied(false)
+                void window.api.getDiagnostics().then(setReport)
+              }}
+            >
+              Show diagnostics
+            </Button>
           </div>
+          {report !== undefined && (
+            <div className="space-y-2">
+              <pre
+                aria-label="Diagnostics report"
+                className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted p-3 text-xs"
+              >
+                {report}
+              </pre>
+              <div className="flex items-center gap-3">
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    void navigator.clipboard.writeText(report).then(() => setCopied(true))
+                  }
+                >
+                  Copy report
+                </Button>
+                <span role="status" className="text-sm text-muted-foreground">
+                  {copied ? 'Copied.' : 'Contains no account details.'}
+                </span>
+              </div>
+            </div>
+          )}
         </Section>
       </main>
       {whatsNew && <WhatsNewDialog data={whatsNew} onClose={closeWhatsNew} />}
