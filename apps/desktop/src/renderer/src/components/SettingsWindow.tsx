@@ -269,12 +269,14 @@ export function SettingsWindow(): React.JSX.Element {
             <Button
               variant="outline"
               size="sm"
+              aria-expanded={report !== undefined}
               onClick={() => {
                 setCopied(false)
-                void window.api.getDiagnostics().then(setReport)
+                if (report !== undefined) setReport(undefined)
+                else void window.api.getDiagnostics().then(setReport)
               }}
             >
-              Show diagnostics
+              {report !== undefined ? 'Hide diagnostics' : 'Show diagnostics'}
             </Button>
           </div>
           {report !== undefined && (
