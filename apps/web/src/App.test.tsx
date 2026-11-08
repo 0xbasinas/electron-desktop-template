@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -47,6 +47,15 @@ const accountApi = vi.hoisted(() => ({
   confirmEmailChange: vi.fn()
 }))
 const appConfigApi = vi.hoisted(() => vi.fn())
+const turnstileProps = vi.hoisted(() => ({
+  onToken: vi.fn() as (token: string | null) => void
+}))
+vi.mock('./components/Turnstile', () => ({
+  Turnstile: (props: { onToken: (token: string | null) => void }) => {
+    turnstileProps.onToken = props.onToken
+    return <div data-testid="turnstile" />
+  }
+}))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 const feedbackApi = vi.hoisted(() => ({ send: vi.fn() }))
 const devicesApi = vi.hoisted(() => ({ list: vi.fn(), rename: vi.fn(), signOut: vi.fn() }))
@@ -285,6 +294,25 @@ describe('sign-in page', () => {
     auth.session = { user: { email: 'ada@example.com' } }
     at('/sign-in')
     expect(screen.getByRole('heading', { name: 'Web app' })).toBeInTheDocument()
+  })
+})
+
+describe('sign-in challenge', () => {
+  it('asks for the check first and sends its token with the request', async () => {
+    appConfigApi.mockResolvedValue({ minimumVersion: null, turnstileSiteKey: 'site-key' })
+    at('/sign-in')
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com')
+    await screen.findByTestId('turnstile')
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }))
+    expect(auth.magicLink).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Complete the check')
+    act(() => turnstileProps.onToken('tok-1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }))
+    expect(auth.magicLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fetchOptions: { headers: { 'x-captcha-response': 'tok-1' } }
+      })
+    )
   })
 })
 

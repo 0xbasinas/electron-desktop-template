@@ -4,7 +4,7 @@ import { passkey } from '@better-auth/passkey'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { eq } from 'drizzle-orm'
-import { magicLink } from 'better-auth/plugins'
+import { captcha, magicLink } from 'better-auth/plugins'
 import type { Db } from './db'
 import { schema } from './db'
 import { BRAND } from './brand'
@@ -101,6 +101,17 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       backgroundTasks: { handler: waitUntil }
     },
     plugins: [
+      // Bot check on the one endpoint that sends email. Only when both keys are set, so the site never asks for a
+      // challenge it cannot show. The client sends the token in the `x-captcha-response` header.
+      ...(env.TURNSTILE_SECRET_KEY && env.TURNSTILE_SITE_KEY
+        ? [
+            captcha({
+              provider: 'cloudflare-turnstile',
+              secretKey: env.TURNSTILE_SECRET_KEY,
+              endpoints: ['/sign-in/magic-link']
+            })
+          ]
+        : []),
       // Lets the desktop app sign in through the system browser (PKCE, then a one-time code over the deep link).
       electron(),
       // Sign in with a fingerprint, face or security key instead of waiting for an email. A passkey is tied to the

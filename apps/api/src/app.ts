@@ -548,7 +548,12 @@ export function createApp(options: AppOptions = {}) {
       .get('/app-config', (c) => {
         const minimum = (c.env.MIN_APP_VERSION ?? '').trim()
         c.header('cache-control', 'public, max-age=300')
-        return c.json({ minimumVersion: parseVersion(minimum) ? minimum : null })
+        // The site key is only offered when the secret is set too, matching when the server asks for a challenge.
+        const siteKey = (c.env.TURNSTILE_SITE_KEY ?? '').trim()
+        return c.json({
+          minimumVersion: parseVersion(minimum) ? minimum : null,
+          turnstileSiteKey: siteKey && c.env.TURNSTILE_SECRET_KEY ? siteKey : null
+        })
       })
       // Feature flags for one install. Public (no sign-in) and cheap: the table is read at most once per cache period.
       .get('/flags', zValidator('query', flagsQuerySchema), async (c) => {

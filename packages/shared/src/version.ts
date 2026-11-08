@@ -1,7 +1,11 @@
 import { z } from 'zod'
 
 /** What the app asks the API at start-up: the oldest version that may still be used (null: no limit). */
-export const appConfigSchema = z.object({ minimumVersion: z.string().nullable() })
+export const appConfigSchema = z.object({
+  minimumVersion: z.string().nullable(),
+  /** Cloudflare Turnstile site key; null when sign-in needs no challenge. */
+  turnstileSiteKey: z.string().nullable().default(null)
+})
 
 export type AppConfig = z.infer<typeof appConfigSchema>
 

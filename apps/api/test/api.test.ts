@@ -139,6 +139,33 @@ describe('sign-in with a magic link', () => {
     expect(second.headers.getSetCookie().join(';')).not.toContain('session_token')
   })
 
+  it('sends no link without a solved challenge when Turnstile is set up, and says so to the page', async () => {
+    const s = setup({ TURNSTILE_SECRET_KEY: 'secret', TURNSTILE_SITE_KEY: 'site' })
+    const response = await s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'bot@example.com', callbackURL: '/app' })
+    })
+    expect(response.status).toBe(400)
+    expect(s.sent).toHaveLength(0)
+    const config = await s.call('/api/app-config')
+    expect(await config.json()).toEqual({ minimumVersion: null, turnstileSiteKey: 'site' })
+  })
+
+  it('asks for no challenge unless both Turnstile keys are set', async () => {
+    const s = setup({ TURNSTILE_SITE_KEY: 'site' })
+    expect(await (await s.call('/api/app-config')).json()).toEqual({
+      minimumVersion: null,
+      turnstileSiteKey: null
+    })
+    await s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'human@example.com', callbackURL: '/app' })
+    })
+    expect(s.sent).toHaveLength(1)
+  })
+
   it('rejects a malformed email', async () => {
     const s = setup()
     const response = await s.call('/api/auth/sign-in/magic-link', {
@@ -1095,17 +1122,17 @@ describe('app config', () => {
   it('says which app version is the oldest allowed, and is public', async () => {
     const none = await setup().call('/api/app-config')
     expect(none.status).toBe(200)
-    expect(await none.json()).toEqual({ minimumVersion: null })
+    expect(await none.json()).toEqual({ minimumVersion: null, turnstileSiteKey: null })
 
     const set = setup({ MIN_APP_VERSION: ' 0.1.42 ' })
     const response = await set.call('/api/app-config')
-    expect(await response.json()).toEqual({ minimumVersion: '0.1.42' })
+    expect(await response.json()).toEqual({ minimumVersion: '0.1.42', turnstileSiteKey: null })
     expect(response.headers.get('cache-control')).toContain('max-age')
   })
 
   it('ignores a value that is not a version, so a typo cannot lock anyone out', async () => {
     const response = await setup({ MIN_APP_VERSION: 'soon' }).call('/api/app-config')
-    expect(await response.json()).toEqual({ minimumVersion: null })
+    expect(await response.json()).toEqual({ minimumVersion: null, turnstileSiteKey: null })
   })
 })
 

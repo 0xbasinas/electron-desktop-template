@@ -121,6 +121,16 @@ agreed to is ignored). Entries are never edited, go when the account is deleted,
 thing, add it to `CONSENT_PURPOSES` and `CONSENT_LABELS`; bump `POLICY_VERSION` when the policy text changes. The privacy page
 shows "Your agreements". Nothing here is needed to sign in.
 
+## Bot check on sign-in (Cloudflare Turnstile, optional)
+
+The email-link request (`POST /sign-in/magic-link`) is the one endpoint that sends email, so it can be protected with Cloudflare Turnstile, which is free and runs on your own Cloudflare account.
+
+- Create a Turnstile widget in the Cloudflare dashboard (hostname: your site). Put the **site key** in `TURNSTILE_SITE_KEY` (a public variable in `apps/api/wrangler.jsonc`) and the **secret key** with `wrangler secret put TURNSTILE_SECRET_KEY`.
+- The check turns on only when **both** are set. `/api/app-config` then returns `turnstileSiteKey`; the sign-in page shows the widget and sends the token in the `x-captcha-response` header. Without a token the API answers 400 and sends no email; a failed check is 403. A token works once, so the page asks for a new one after every try.
+- Only `/sign-in/magic-link` is checked (not the link itself, and not passkeys). A request without a valid token still counts against the sign-in rate limit.
+- To try it locally use Cloudflare's test keys: site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`.
+- The page's security headers (`apps/web/public/_headers`) allow `https://challenges.cloudflare.com` for scripts, frames and connections.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics
