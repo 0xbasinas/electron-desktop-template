@@ -144,6 +144,14 @@ describe('routes', () => {
     expect(screen.getByRole('heading', { name: /v2-beta/ })).toBeInTheDocument()
   })
 
+  it('lists the sub-processors', () => {
+    at('/sub-processors')
+    expect(screen.getByRole('heading', { name: 'Sub-processors' })).toBeInTheDocument()
+    for (const name of ['Cloudflare', 'Resend', 'GitHub']) {
+      expect(screen.getByRole('heading', { name })).toBeInTheDocument()
+    }
+  })
+
   it('falls back to GitHub when the lookup fails', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
     vi.spyOn(console, 'error').mockImplementation(() => {})

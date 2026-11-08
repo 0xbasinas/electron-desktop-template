@@ -8,6 +8,7 @@ import { DownloadPage } from './pages/DownloadPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ReleasesPage } from './pages/ReleasesPage'
+import { SubprocessorsPage } from './pages/SubprocessorsPage'
 import { SignInPage } from './pages/SignInPage'
 
 export function App(): JSX.Element {
@@ -17,6 +18,7 @@ export function App(): JSX.Element {
         <Route index element={<HomePage />} />
         <Route path="download" element={<DownloadPage />} />
         <Route path="releases" element={<ReleasesPage />} />
+        <Route path="sub-processors" element={<SubprocessorsPage />} />
         <Route path="sign-in" element={<SignInPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="auth/desktop" element={<DesktopCallbackPage />} />

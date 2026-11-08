@@ -7,6 +7,7 @@ import {
   type UpdaterEvent,
   type WhatsNew
 } from '../shared/ipc'
+import type { SyncStatus } from '../shared/syncStatus'
 
 /** Subscribe to a main -> renderer channel. Returns an unsubscribe function. */
 const subscribe = <T>(channel: string, callback: (payload: T) => void): (() => void) => {
@@ -47,6 +48,10 @@ export const api = {
   signIn: (): Promise<void> => ipcRenderer.invoke(IPC.accountSignIn),
   signOut: (): Promise<void> => ipcRenderer.invoke(IPC.accountSignOut),
 
+  // Account sync
+  getSyncStatus: (): Promise<SyncStatus> => ipcRenderer.invoke(IPC.syncStatus),
+  retrySync: (): Promise<void> => ipcRenderer.invoke(IPC.syncRetry),
+
   // First run and "what's new"
   getWhatsNew: (force = false): Promise<WhatsNew | undefined> =>
     ipcRenderer.invoke(IPC.whatsNewGet, force),
@@ -55,6 +60,8 @@ export const api = {
   // Events from main
   onUpdaterEvent: (cb: (event: UpdaterEvent) => void): (() => void) =>
     subscribe(IPC.updaterEvent, cb),
+  onSyncStatusChanged: (cb: (status: SyncStatus) => void): (() => void) =>
+    subscribe(IPC.syncChanged, cb),
   onAccountChanged: (cb: (account: Account) => void): (() => void) =>
     subscribe(IPC.accountChanged, cb),
   onSettingsChanged: (cb: (settings: Settings) => void): (() => void) =>

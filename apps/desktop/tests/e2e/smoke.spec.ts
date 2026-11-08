@@ -204,15 +204,19 @@ test('closing the window hides it to the tray when that setting is on', async ()
   try {
     const page = await app.firstWindow()
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    const windowState = (): Promise<{ count: number; visible: boolean | undefined }> =>
+      app.evaluate(({ BrowserWindow }) => {
+        const windows = BrowserWindow.getAllWindows()
+        return { count: windows.length, visible: windows[0]?.isVisible() }
+      })
+    // The window is shown a moment after the page renders (ready-to-show). Closing it before that would be
+    // undone by the late show(), which is what made this test fail now and then.
+    await expect.poll(windowState).toEqual({ count: 1, visible: true })
 
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].close())
 
     // The window is hidden, not destroyed, and the app is still running.
-    const state = await app.evaluate(({ BrowserWindow }) => {
-      const windows = BrowserWindow.getAllWindows()
-      return { count: windows.length, visible: windows[0]?.isVisible() }
-    })
-    expect(state).toEqual({ count: 1, visible: false })
+    await expect.poll(windowState).toEqual({ count: 1, visible: false })
   } finally {
     await app.close()
   }
