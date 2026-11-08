@@ -2,6 +2,8 @@ import { createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { env } from 'cloudflare:workers'
 import { describe, expect, it } from 'vitest'
 import { createApp } from '../src/app'
+import { createDb } from '../src/db'
+import { deleteDueAccounts } from '../src/deletion'
 import worker from '../src/index'
 import type { Bindings } from '../src/env'
 import type { EmailMessage } from '../src/email'
@@ -352,7 +354,7 @@ describe('account', () => {
     expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
   })
 
-  it('deletes the account and everything held about it, and blocks cross-site requests', async () => {
+  it('removes the account and everything held about it once the cooling-off period is over', async () => {
     const s = setup()
     const cookie = await signIn(s, 'gone@example.com')
     await bindings.DB.prepare(
@@ -374,11 +376,18 @@ describe('account', () => {
     })
     expect(cross.status).toBe(403)
 
-    const deleted = await s.call(
+    const asked = await s.call(
       '/api/account',
       json(cookie, 'DELETE', { confirmEmail: 'gone@example.com' })
     )
-    expect(deleted.status).toBe(204)
+    expect(asked.status).toBe(202)
+    // Nothing is removed yet: the person can still sign in and see the date.
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
+
+    const db = createDb(bindings.DB)
+    expect(await deleteDueAccounts(db, Date.now() + 13 * 86_400_000)).toBe(0)
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
+    expect(await deleteDueAccounts(db, Date.now() + 15 * 86_400_000)).toBe(1)
 
     // The old cookie is dead at once (not after the 5-minute cache), and nothing is left in the database.
     expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(401)
@@ -392,6 +401,83 @@ describe('account', () => {
     expect(await left('session', 'user_id')).toBe(0)
     expect(await left('passkey', 'user_id')).toBe(0)
     expect(await left('preference', 'user_id')).toBe(0)
+    expect(await left('account_deletion', 'user_id')).toBe(0)
+  })
+
+  it('schedules the deletion, tells the person by email, and asking twice changes nothing', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'plan@example.com')
+    const before = s.sent.length
+    const first = (await (
+      await s.call('/api/account', json(cookie, 'DELETE', { confirmEmail: 'plan@example.com' }))
+    ).json()) as { scheduledFor: string }
+    const days = (Date.parse(first.scheduledFor) - Date.now()) / 86_400_000
+    expect(days).toBeGreaterThan(13.9)
+    expect(days).toBeLessThan(14.1)
+
+    expect(s.sent.length).toBe(before + 1)
+    const mail = s.sent[before]!
+    expect(mail.to).toBe('plan@example.com')
+    expect(mail.text).toMatch(/\/account\/cancel-deletion\?token=\S{20,}/)
+
+    const second = (await (
+      await s.call('/api/account', json(cookie, 'DELETE', { confirmEmail: 'plan@example.com' }))
+    ).json()) as { scheduledFor: string }
+    expect(second.scheduledFor).toBe(first.scheduledFor)
+    expect(s.sent.length).toBe(before + 1)
+
+    const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      deletionScheduledFor: string | null
+    }
+    expect(me.deletionScheduledFor).toBe(first.scheduledFor)
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as { account: { deletionScheduledFor: string | null } }
+    expect(exported.account.deletionScheduledFor).toBe(first.scheduledFor)
+  })
+
+  it('can be cancelled while signed in', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'stay1@example.com')
+    await s.call('/api/account', json(cookie, 'DELETE', { confirmEmail: 'stay1@example.com' }))
+    expect((await s.call('/api/account/deletion/cancel', json(cookie, 'POST'))).status).toBe(204)
+    const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      deletionScheduledFor: string | null
+    }
+    expect(me.deletionScheduledFor).toBeNull()
+    await deleteDueAccounts(createDb(bindings.DB), Date.now() + 30 * 86_400_000)
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
+  })
+
+  it('can be cancelled from the email link without signing in, once', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'stay2@example.com')
+    const before = s.sent.length
+    await s.call('/api/account', json(cookie, 'DELETE', { confirmEmail: 'stay2@example.com' }))
+    const token = /token=(\S+)/.exec(s.sent[before]!.text)![1]!
+
+    const post = (t: string): Promise<Response> =>
+      s.call('/api/account/deletion/cancel-with-token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token: t })
+      })
+    expect((await post('x'.repeat(43))).status).toBe(404)
+    expect((await post('short')).status).toBe(400)
+    expect((await post(token)).status).toBe(204)
+    expect((await post(token)).status).toBe(404)
+    await deleteDueAccounts(createDb(bindings.DB), Date.now() + 30 * 86_400_000)
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
+  })
+
+  it('does not let a cross-site page cancel with a token', async () => {
+    const s = setup()
+    const response = await s.call('/api/account/deletion/cancel-with-token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+      body: JSON.stringify({ token: 'x'.repeat(43) })
+    })
+    expect(response.status).toBe(403)
   })
 })
 
@@ -710,12 +796,12 @@ describe('feedback', () => {
     const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
       id: string
     }
-    const del = await s.call('/api/account', {
+    await s.call('/api/account', {
       method: 'DELETE',
       headers: { cookie, 'content-type': 'application/json' },
       body: JSON.stringify({ confirmEmail: 'fb6@example.com' })
     })
-    expect(del.status).toBe(204)
+    await deleteDueAccounts(createDb(bindings.DB), Date.now() + 15 * 86_400_000)
     const rows = await bindings.DB.prepare('select count(*) as n from feedback where user_id = ?')
       .bind(me.id)
       .first<{ n: number }>()

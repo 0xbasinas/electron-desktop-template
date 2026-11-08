@@ -1,5 +1,10 @@
 import { accountExportSchema, accountSchema, type Account, type AccountExport } from './schemas'
 import { preferencesRecordSchema, type PreferencesRecord } from './preferences'
+import {
+  cancelDeletionInputSchema,
+  deletionScheduledSchema,
+  type DeletionScheduled
+} from './deletion'
 import { devicesSchema, type Device } from './devices'
 import { feedbackReceiptSchema, type FeedbackInput } from './feedback'
 import { z } from 'zod'
@@ -47,8 +52,12 @@ export interface ApiClient {
     get(): Promise<Account>
     /** Everything we hold about the signed-in person. */
     export(): Promise<AccountExport>
-    /** Permanently deletes the account and its data. `confirmEmail` must be the account email. */
-    remove(confirmEmail: string): Promise<void>
+    /** Asks to delete the account. It is removed after the cooling-off period unless cancelled. `confirmEmail` must be the account email. */
+    remove(confirmEmail: string): Promise<DeletionScheduled>
+    /** Keeps the account after all (signed in). */
+    cancelDeletion(): Promise<void>
+    /** Keeps the account using the token from the email (no sign-in needed). */
+    cancelDeletionWithToken(token: string): Promise<void>
   }
 }
 
@@ -108,8 +117,18 @@ export function createApiClient({
     account: {
       get: (): Promise<Account> => request('/account', accountSchema),
       export: (): Promise<AccountExport> => request('/account/export', accountExportSchema),
-      remove: (confirmEmail: string): Promise<void> =>
-        request('/account', null, { method: 'DELETE', body: JSON.stringify({ confirmEmail }) })
+      remove: (confirmEmail: string): Promise<DeletionScheduled> =>
+        request('/account', deletionScheduledSchema, {
+          method: 'DELETE',
+          body: JSON.stringify({ confirmEmail })
+        }),
+      cancelDeletion: (): Promise<void> =>
+        request('/account/deletion/cancel', null, { method: 'POST' }),
+      cancelDeletionWithToken: (token: string): Promise<void> =>
+        request('/account/deletion/cancel-with-token', null, {
+          method: 'POST',
+          body: JSON.stringify(cancelDeletionInputSchema.parse({ token }))
+        })
     }
   }
 }

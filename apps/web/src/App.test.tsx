@@ -32,7 +32,13 @@ vi.mock('./lib/auth', () => ({
     revokeSessions: auth.revoke
   }
 }))
-const accountApi = vi.hoisted(() => ({ get: vi.fn(), export: vi.fn(), remove: vi.fn() }))
+const accountApi = vi.hoisted(() => ({
+  get: vi.fn(),
+  export: vi.fn(),
+  remove: vi.fn(),
+  cancelDeletion: vi.fn(),
+  cancelDeletionWithToken: vi.fn()
+}))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 const feedbackApi = vi.hoisted(() => ({ send: vi.fn() }))
 const devicesApi = vi.hoisted(() => ({ list: vi.fn(), rename: vi.fn(), signOut: vi.fn() }))
@@ -55,7 +61,8 @@ beforeEach(() => {
     id: 'u1',
     email: 'ada@example.com',
     name: 'ada',
-    createdAt: '2026-01-01T00:00:00.000Z'
+    createdAt: '2026-01-01T00:00:00.000Z',
+    deletionScheduledFor: null
   })
   localStorage.clear()
   prefsApi.get.mockReset().mockResolvedValue({
@@ -85,7 +92,9 @@ beforeEach(() => {
   devicesApi.signOut.mockReset().mockResolvedValue(undefined)
   feedbackApi.send.mockReset().mockResolvedValue({ id: 'f1' })
   accountApi.export.mockReset()
-  accountApi.remove.mockReset().mockResolvedValue(undefined)
+  accountApi.remove.mockReset().mockResolvedValue({ scheduledFor: '2026-12-01T00:00:00.000Z' })
+  accountApi.cancelDeletion.mockReset().mockResolvedValue(undefined)
+  accountApi.cancelDeletionWithToken.mockReset().mockResolvedValue(undefined)
 })
 
 const at = (path: string): void => {
@@ -263,6 +272,31 @@ describe('signing in from the desktop app', () => {
   })
 })
 
+describe('cancel deletion page', () => {
+  it('cancels only when the button is pressed', async () => {
+    at('/account/cancel-deletion?token=abc')
+    expect(accountApi.cancelDeletionWithToken).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Keep my account' }))
+    await waitFor(() => expect(accountApi.cancelDeletionWithToken).toHaveBeenCalledWith('abc'))
+    expect(await screen.findByRole('heading', { name: 'Your account is safe' })).toBeInTheDocument()
+  })
+
+  it('says so when the link no longer works', async () => {
+    accountApi.cancelDeletionWithToken.mockRejectedValue(new Error('404'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/account/cancel-deletion?token=abc')
+    await userEvent.click(screen.getByRole('button', { name: 'Keep my account' }))
+    expect(
+      await screen.findByRole('heading', { name: 'This link does not work' })
+    ).toBeInTheDocument()
+  })
+
+  it('has nothing to do without a token', () => {
+    at('/account/cancel-deletion')
+    expect(screen.getByRole('heading', { name: 'This link does not work' })).toBeInTheDocument()
+  })
+})
+
 describe('account page', () => {
   it('sends signed-out visitors to the sign-in page', () => {
     at('/account')
@@ -282,6 +316,23 @@ describe('account page', () => {
     expect(button).toBeEnabled()
     await userEvent.click(button)
     await waitFor(() => expect(accountApi.remove).toHaveBeenCalledWith('Ada@Example.com'))
+    expect(await screen.findByText(/Your account will be deleted on/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete my account' })).not.toBeInTheDocument()
+  })
+
+  it('shows a scheduled deletion and lets you keep the account', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    accountApi.get.mockResolvedValue({
+      id: 'u1',
+      email: 'ada@example.com',
+      name: 'ada',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      deletionScheduledFor: '2026-12-01T00:00:00.000Z'
+    })
+    at('/account')
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep my account' }))
+    await waitFor(() => expect(accountApi.cancelDeletion).toHaveBeenCalled())
+    expect(await screen.findByRole('button', { name: 'Delete my account' })).toBeInTheDocument()
   })
 
   it('signs out everywhere', async () => {

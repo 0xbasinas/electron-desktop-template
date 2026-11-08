@@ -21,6 +21,21 @@ export const preference = sqliteTable('preference', {
   updatedAt: integer('updated_at').notNull()
 })
 
+/** A request to delete an account: it is removed on the scheduled date unless cancelled (then the row is deleted). */
+export const accountDeletion = sqliteTable(
+  'account_deletion',
+  {
+    userId: text('user_id')
+      .primaryKey()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    requestedAt: integer('requested_at').notNull(),
+    scheduledFor: integer('scheduled_for').notNull(),
+    /** SHA-256 of the token in the cancel link, so a leaked database cannot be used to cancel. */
+    cancelTokenHash: text('cancel_token_hash').notNull()
+  },
+  (table) => [index('account_deletion_due_idx').on(table.scheduledFor)]
+)
+
 /** A name the person gave one of their sessions ("Work laptop"). Goes with the session or the account. */
 export const sessionNickname = sqliteTable('session_nickname', {
   sessionId: text('session_id')

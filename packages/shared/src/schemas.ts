@@ -10,7 +10,9 @@ export const accountSchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string(),
-  createdAt: z.string()
+  createdAt: z.string(),
+  /** When the account will be removed if the person asked for that and has not cancelled; otherwise null. */
+  deletionScheduledFor: z.string().nullable().default(null)
 })
 
 /** Everything we hold about a person (the "download my data" file). No tokens or secrets are included. */

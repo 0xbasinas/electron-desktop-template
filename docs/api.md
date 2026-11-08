@@ -119,8 +119,15 @@ The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /
 - These routes ask the database for the session instead of trusting the 5-minute cookie cache, so a deleted account or a
   revoked session stops working at once.
 - The export lists the account, the settings and the sign-ins (time, IP, browser) and never any token.
-- Deleting needs the email typed again. It removes the user; sessions, linked accounts, passkeys and settings go with it (`ON DELETE CASCADE`),
-  unused sign-in links are removed, and the response clears the session cookies.
+- Deleting needs the email typed again, and it is a request first: `DELETE /api/account` answers `202 { scheduledFor }` and the account stays for
+  14 days (`DELETION_COOLING_OFF_DAYS` in `packages/shared/src/deletion.ts`). The person gets an email (sent with `waitUntil`) with a link to
+  `/account/cancel-deletion?token=...`. Asking again keeps the first date and sends no second email. `GET /api/account` shows
+  `deletionScheduledFor`, and `POST /api/account/deletion/cancel` (signed in) or `POST /api/account/deletion/cancel-with-token` (no sign-in) keeps the account.
+- The emailed link opens a page with a button; the cancel is a POST, so an email scanner that only opens links cannot cancel by accident.
+  Only a SHA-256 hash of the token is stored (`account_deletion`), and a token works once.
+- A daily cron (`triggers.crons` in `apps/api/wrangler.jsonc`, handled by `scheduled` in `apps/api/src/index.ts`) calls `deleteDueAccounts`,
+  which removes up to 50 due users per run. Sessions, linked accounts, passkeys, settings, feedback and device names go with the user
+  (`ON DELETE CASCADE`) and unused sign-in links are removed. The cron needs no extra setup on Cloudflare's free plan.
 - **When you add your own tables**, give them `userId ... references user.id ON DELETE CASCADE`, and add their rows to the export
   in `app.ts`, so deletion and export stay complete. The tests in `apps/api/test/api.test.ts` ("account") show how to check it.
 
