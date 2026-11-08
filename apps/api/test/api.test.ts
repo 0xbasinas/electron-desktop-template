@@ -1436,6 +1436,36 @@ describe('staff roles (admin plugin)', () => {
     expect(verify.headers.get('location')).toContain('/sign-in?error=suspended')
     void victim
   })
+
+  it('lets staff look as a person but not act as them, and still lets them stop', async () => {
+    const s = setup()
+    const admin = await staff(s, 'boss3@example.com', 'admin')
+    await signIn(s, 'viewed@example.com')
+    const row = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('viewed@example.com')
+      .first<{ id: string }>()
+    const imp = await s.call('/api/auth/admin/impersonate-user', {
+      method: 'POST',
+      headers: { cookie: admin, ...json },
+      body: JSON.stringify({ userId: row!.id })
+    })
+    expect(imp.status).toBe(200)
+    // Later cookies with the same name win, as in a browser.
+    const jar = new Map<string, string>()
+    for (const part of [admin, ...imp.headers.getSetCookie().map((c) => c.split(';')[0]!)])
+      for (const pair of part.split('; ')) jar.set(pair.split('=')[0]!, pair)
+    const cookie = [...jar.values()].join('; ')
+    const post = (path: string, body: unknown): Promise<Response> =>
+      s.call(path, { method: 'POST', headers: { cookie, ...json }, body: JSON.stringify(body) })
+
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
+    expect((await post('/api/auth/api-key/create', { name: 'backdoor' })).status).toBe(403)
+    expect(
+      (await post('/api/account/email-change', { newEmail: 'staff@example.com' })).status
+    ).toBe(403)
+    expect((await s.call('/api/account/export', { headers: { cookie } })).status).toBe(403)
+    expect((await post('/api/auth/admin/stop-impersonating', {})).status).toBe(200)
+  })
 })
 
 describe('API keys', () => {

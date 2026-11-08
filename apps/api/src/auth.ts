@@ -123,6 +123,19 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     hooks: {
       // At most MAX_API_KEYS keys per person, so one account cannot fill the table.
       before: createAuthMiddleware(async (ctx) => {
+        // While staff view the site as a person they may look, not act as them. Only ending the view or signing out
+        // is allowed. (Our own routes check the same in requireSession.)
+        if (
+          ctx.request?.method === 'POST' &&
+          ctx.path !== '/admin/stop-impersonating' &&
+          ctx.path !== '/sign-out'
+        ) {
+          const viewer = ctx.context.session ?? (await getSessionFromCtx(ctx))
+          if ((viewer?.session as { impersonatedBy?: string | null } | undefined)?.impersonatedBy)
+            throw new APIError('FORBIDDEN', {
+              message: 'Not allowed while viewing as this person.'
+            })
+        }
         // SAML needs more CPU per sign-in than the free Workers plan allows, so only OpenID Connect is offered.
         if (
           ctx.path === '/sso/register' &&

@@ -95,6 +95,13 @@ const requireSession =
       .where(eq(schema.session.id, session.session.id))
     const suspended = live?.banned && (!live.banExpires || live.banExpires.getTime() > Date.now())
     if (!live || suspended) throw new HTTPException(401, { message: 'Sign in first' })
+    // Staff who impersonate a person may look, not act as them: no changes, and no export of their data.
+    const impersonating = (session.session as { impersonatedBy?: string | null }).impersonatedBy
+    if (
+      impersonating &&
+      (!['GET', 'HEAD'].includes(c.req.method) || c.req.path.endsWith('/export'))
+    )
+      throw new HTTPException(403, { message: 'Not allowed while viewing as this person' })
     c.set('userId', session.user.id)
     c.set('sessionId', session.session.id)
     await next()
