@@ -1,9 +1,16 @@
 import { useEffect, useState, type JSX } from 'react'
 import { Button } from '@repo/ui'
-import type { PrivacySummary } from '@repo/shared'
+import { DATA_REQUEST_DEADLINE_DAYS, type DataRequest, type PrivacySummary } from '@repo/shared'
 import { Link, Navigate } from 'react-router'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
+
+const STATUS_LABEL: Record<DataRequest['status'], string> = {
+  received: 'Received',
+  processing: 'In progress',
+  done: 'Done',
+  cancelled: 'Cancelled'
+}
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
 
@@ -17,6 +24,7 @@ export function PrivacyPage(): JSX.Element {
 
 function PrivacyDetails({ email }: { email: string }): JSX.Element {
   const [summary, setSummary] = useState<PrivacySummary | null>(null)
+  const [requests, setRequests] = useState<DataRequest[]>([])
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -30,6 +38,19 @@ function PrivacyDetails({ email }: { email: string }): JSX.Element {
         console.error(e)
         if (!cancelled) setError('Could not load your privacy summary.')
       })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    api.account
+      .requests()
+      .then((list) => {
+        if (!cancelled) setRequests(list)
+      })
+      .catch((e: unknown) => console.error(e))
     return () => {
       cancelled = true
     }
@@ -113,6 +134,32 @@ function PrivacyDetails({ email }: { email: string }): JSX.Element {
           Manage or delete my account
         </Link>
       </div>
+      {requests.length > 0 && (
+        <section className="space-y-2" aria-label="Your requests">
+          <h2 className="text-lg font-semibold">Your requests</h2>
+          <p className="text-sm text-muted-foreground">
+            We answer requests about your data within {DATA_REQUEST_DEADLINE_DAYS} days.
+          </p>
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {requests.map((r) => (
+              <li key={`${r.kind}-${r.receivedAt}`} className="px-4 py-2 text-sm">
+                <span className="font-medium">
+                  {r.kind === 'export' ? 'Data export' : 'Account deletion'}
+                </span>
+                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-xs">
+                  {STATUS_LABEL[r.status]}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  Asked {new Date(r.receivedAt).toLocaleDateString()}
+                  {r.completedAt
+                    ? ` · finished ${new Date(r.completedAt).toLocaleDateString()}`
+                    : ` · due by ${new Date(r.dueAt).toLocaleDateString()}`}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <p className="text-sm text-muted-foreground">
         Who else handles data for us is on the{' '}
         <Link className="underline" to="/sub-processors">
