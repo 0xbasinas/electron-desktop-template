@@ -1,5 +1,6 @@
 import { accountExportSchema, accountSchema, type Account, type AccountExport } from './schemas'
 import { preferencesRecordSchema, type PreferencesRecord } from './preferences'
+import { devicesSchema, type Device } from './devices'
 import { feedbackReceiptSchema, type FeedbackInput } from './feedback'
 import { z } from 'zod'
 
@@ -29,6 +30,14 @@ export interface ApiClient {
     get(): Promise<PreferencesRecord>
     /** Saves the preferences; the response is whichever copy is newest (the one you sent, or a newer one from another device). */
     put(record: PreferencesRecord): Promise<PreferencesRecord>
+  }
+  devices: {
+    /** Where the person is signed in (one entry per session). */
+    list(): Promise<Device[]>
+    /** Gives a device a name, or removes it with `null`. */
+    rename(id: string, nickname: string | null): Promise<void>
+    /** Signs that device out. The current one cannot be removed this way (sign out instead). */
+    signOut(id: string): Promise<void>
   }
   feedback: {
     /** Sends feedback as the signed-in person. Resolves with the id of the stored message. */
@@ -81,6 +90,16 @@ export function createApiClient({
           method: 'PUT',
           body: JSON.stringify(record)
         })
+    },
+    devices: {
+      list: (): Promise<Device[]> => request('/devices', devicesSchema),
+      rename: (id: string, nickname: string | null): Promise<void> =>
+        request(`/devices/${encodeURIComponent(id)}`, null, {
+          method: 'PATCH',
+          body: JSON.stringify({ nickname })
+        }),
+      signOut: (id: string): Promise<void> =>
+        request(`/devices/${encodeURIComponent(id)}`, null, { method: 'DELETE' })
     },
     feedback: {
       send: (input: FeedbackInput): Promise<{ id: string }> =>

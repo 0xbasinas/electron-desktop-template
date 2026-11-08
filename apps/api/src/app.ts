@@ -2,6 +2,9 @@ import { zValidator } from '@hono/zod-validator'
 import * as Sentry from '@sentry/cloudflare'
 import {
   clampUpdatedAt,
+  describeDevice,
+  renameDeviceInputSchema,
+  type Device,
   deleteAccountInputSchema,
   emptyPreferences,
   FEEDBACK_PER_HOUR,
@@ -13,7 +16,7 @@ import {
   type Account,
   type AccountExport
 } from '@repo/shared'
-import { and, count, eq, gt } from 'drizzle-orm'
+import { and, count, eq, gt, ne } from 'drizzle-orm'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
@@ -25,7 +28,7 @@ import { sameOriginOnly } from './origin'
 import { Resend } from 'resend'
 import { suppress, suppressionsFrom } from './suppression'
 
-type Variables = { auth: Auth; db: Db; userId: string }
+type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
 type AppEnv = { Bindings: Bindings; Variables: Variables }
 
 export interface AppOptions {
@@ -51,6 +54,7 @@ const requireSession =
     })
     if (!session) throw new HTTPException(401, { message: 'Sign in first' })
     c.set('userId', session.user.id)
+    c.set('sessionId', session.session.id)
     await next()
   }
 
@@ -112,6 +116,85 @@ export function createApp(options: AppOptions = {}) {
         return c.json(record)
       }
       return c.json(current)
+    })
+
+  // Where the person is signed in: one entry per session, with an optional name. Every query is limited to their own sessions.
+  const devices = new Hono<AppEnv>()
+    .use(sameOriginOnly)
+    // Fresh: a session signed out from another device must stop counting at once, not after the 5-minute cookie cache.
+    .use(requireSession(true))
+    .get('/', async (c) => {
+      const rows = await c.var.db
+        .select({
+          id: schema.session.id,
+          userAgent: schema.session.userAgent,
+          createdAt: schema.session.createdAt,
+          updatedAt: schema.session.updatedAt,
+          nickname: schema.sessionNickname.nickname
+        })
+        .from(schema.session)
+        .leftJoin(schema.sessionNickname, eq(schema.sessionNickname.sessionId, schema.session.id))
+        .where(eq(schema.session.userId, c.var.userId))
+      const list: Device[] = rows
+        .map((r) => ({
+          id: r.id,
+          label: describeDevice(r.userAgent),
+          nickname: r.nickname,
+          createdAt: r.createdAt.toISOString(),
+          lastSeenAt: r.updatedAt.toISOString(),
+          current: r.id === c.var.sessionId
+        }))
+        // This device first, then the most recently used.
+        .sort(
+          (a, b) =>
+            Number(b.current) - Number(a.current) || b.lastSeenAt.localeCompare(a.lastSeenAt)
+        )
+      c.header('cache-control', 'no-store')
+      return c.json(list)
+    })
+    .patch('/:id', zValidator('json', renameDeviceInputSchema), async (c) => {
+      const { nickname } = c.req.valid('json')
+      const [own] = await c.var.db
+        .select({ id: schema.session.id })
+        .from(schema.session)
+        .where(
+          and(eq(schema.session.id, c.req.param('id')), eq(schema.session.userId, c.var.userId))
+        )
+      if (!own) throw new HTTPException(404, { message: 'Not found' })
+      if (!nickname) {
+        await c.var.db
+          .delete(schema.sessionNickname)
+          .where(eq(schema.sessionNickname.sessionId, own.id))
+      } else {
+        await c.var.db
+          .insert(schema.sessionNickname)
+          .values({ sessionId: own.id, userId: c.var.userId, nickname, updatedAt: Date.now() })
+          .onConflictDoUpdate({
+            target: schema.sessionNickname.sessionId,
+            set: { nickname, updatedAt: Date.now() }
+          })
+      }
+      return c.body(null, 204)
+    })
+    .delete('/:id', async (c) => {
+      const id = c.req.param('id')
+      if (id === c.var.sessionId) {
+        throw new HTTPException(400, {
+          message: 'This is the device you are using. Use Sign out instead.'
+        })
+      }
+      const removed = await c.var.db
+        .delete(schema.session)
+        .where(
+          and(
+            eq(schema.session.id, id),
+            eq(schema.session.userId, c.var.userId),
+            ne(schema.session.id, c.var.sessionId)
+          )
+        )
+        .returning({ id: schema.session.id })
+      if (removed.length === 0) throw new HTTPException(404, { message: 'Not found' })
+      return c.body(null, 204)
     })
 
   // Feedback from the web app and the desktop app. Needs a session (so there is no anonymous spam) and is limited per person.
@@ -194,9 +277,11 @@ export function createApp(options: AppOptions = {}) {
           createdAt: schema.session.createdAt,
           expiresAt: schema.session.expiresAt,
           ipAddress: schema.session.ipAddress,
-          userAgent: schema.session.userAgent
+          userAgent: schema.session.userAgent,
+          nickname: schema.sessionNickname.nickname
         })
         .from(schema.session)
+        .leftJoin(schema.sessionNickname, eq(schema.sessionNickname.sessionId, schema.session.id))
         .where(eq(schema.session.userId, c.var.userId))
       const body: AccountExport = {
         exportedAt: new Date().toISOString(),
@@ -218,7 +303,8 @@ export function createApp(options: AppOptions = {}) {
           createdAt: s.createdAt.toISOString(),
           expiresAt: s.expiresAt.toISOString(),
           ipAddress: s.ipAddress,
-          userAgent: s.userAgent
+          userAgent: s.userAgent,
+          nickname: s.nickname
         }))
       }
       c.header('content-disposition', 'attachment; filename="my-data.json"')
@@ -301,6 +387,7 @@ export function createApp(options: AppOptions = {}) {
         return c.json({ ok: true })
       })
       .route('/preferences', preferences)
+      .route('/devices', devices)
       .route('/feedback', feedback)
       .route('/account', account)
       .onError((error, c) => {

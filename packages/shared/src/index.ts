@@ -16,6 +16,14 @@ export {
   feedbackReceiptSchema
 } from './feedback'
 export type { FeedbackInput, FeedbackKind } from './feedback'
+export {
+  DEVICE_NICKNAME_MAX,
+  describeDevice,
+  deviceSchema,
+  devicesSchema,
+  renameDeviceInputSchema
+} from './devices'
+export type { Device } from './devices'
 export { ACCENTS, isAccent } from './accents'
 export type { Accent } from './accents'
 export {

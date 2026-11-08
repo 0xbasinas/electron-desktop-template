@@ -1,5 +1,6 @@
 import {
   ACCENTS,
+  DEVICE_NICKNAME_MAX,
   FEEDBACK_KINDS,
   FEEDBACK_MESSAGE_MAX,
   isAccent,
@@ -91,4 +92,21 @@ export function parseFeedbackRequest(input: unknown): FeedbackRequest {
     throw new Error('Invalid feedback: includeDiagnostics must be a boolean')
   }
   return { kind, message: text, includeDiagnostics }
+}
+
+/** A device (session) id from the page: a short plain string. It is only ever sent to the API as a path part. */
+export function parseDeviceId(input: unknown): string {
+  if (typeof input !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(input)) {
+    throw new Error('Invalid device id')
+  }
+  return input
+}
+
+/** A device nickname: text up to the limit (blank means none), or null to remove it. */
+export function parseNickname(input: unknown): string | null {
+  if (input === null) return null
+  if (typeof input !== 'string') throw new Error('Invalid nickname: expected text or null')
+  const name = input.trim()
+  if (name.length > DEVICE_NICKNAME_MAX) throw new Error('Invalid nickname: too long')
+  return name === '' ? null : name
 }

@@ -87,6 +87,19 @@ which is stored encrypted with the operating system's keychain (Electron `safeSt
   secret) to your deployed address for release builds; in development it defaults to `http://localhost:8787`.
 - The Worker already trusts `<scheme>:/` as an origin (`TRUSTED_ORIGINS` in `wrangler.jsonc`); `pnpm rename` updates it.
 
+## Devices
+
+`GET /api/devices` lists the signed-in person's sessions, one per place they are signed in: a readable label worked out from the
+user agent (`describeDevice` in `packages/shared/src/devices.ts`), an optional nickname, when it was created and last seen, and
+which one is the caller's. `PATCH /api/devices/:id` sets or clears the nickname (up to 40 characters, stored in `session_nickname`,
+which goes with the session or the account), and `DELETE /api/devices/:id` signs that device out. The id is the session's row id,
+never its token, every query is limited to the caller's own sessions, and the caller's own session cannot be deleted this way
+(sign out instead). These routes check the database on every call, so a device you signed out stops working at once; routes that
+use the 5-minute session cookie cache (preferences, feedback) can take up to 5 minutes to notice.
+
+The web app shows this on `/account` ("Your devices") and the desktop app in Settings. A nickname belongs to a session, so signing
+in again on the same device starts without one. Nicknames are listed in the data export.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics

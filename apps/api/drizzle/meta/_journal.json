@@ -43,6 +43,13 @@
       "when": 1794144140083,
       "tag": "0005_violet_songbird",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794144519412,
+      "tag": "0006_slippery_toad_men",
+      "breakpoints": true
     }
   ]
 }
