@@ -26,8 +26,13 @@ on:
 permissions:
   contents: read
 
+# GitHub's release downloads time out (504) often enough to fail whole runs, so CI fetches Electron and electron-builder's
+# tools from the npmmirror copies. Electron downloads are checked against the checksums.json bundled in the electron
+# package, so a bad file is still rejected. Releases (_publish.yml) still download from GitHub.
 env:
   HUSKY: 0
+  ELECTRON_MIRROR: https://npmmirror.com/mirrors/electron/
+  ELECTRON_BUILDER_BINARIES_MIRROR: https://npmmirror.com/mirrors/electron-builder-binaries/
 
 jobs:
   check:
