@@ -1,6 +1,7 @@
 import { zValidator } from '@hono/zod-validator'
 import * as Sentry from '@sentry/cloudflare'
 import {
+  cancelDeletionInputSchema,
   clampUpdatedAt,
   describeDevice,
   renameDeviceInputSchema,
@@ -20,7 +21,14 @@ import { and, count, eq, gt, ne } from 'drizzle-orm'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
-import { createAuth, type Auth } from './auth'
+import { createAuth, DEFAULT_APP_NAME, type Auth } from './auth'
+import {
+  cancelDeletion,
+  cancelDeletionWithToken,
+  deletionEmail,
+  requestDeletion,
+  scheduledDeletion
+} from './deletion'
 import { createDb, schema, type Db } from './db'
 import { createConsoleSender, createResendSender, type EmailSender } from './email'
 import type { Bindings } from './env'
@@ -58,11 +66,16 @@ const requireSession =
     await next()
   }
 
-const toAccount = (row: typeof schema.user.$inferSelect): Account => ({
+const toAccount = (
+  row: typeof schema.user.$inferSelect,
+  deletionScheduledFor: number | null
+): Account => ({
   id: row.id,
   email: row.email,
   name: row.name,
-  createdAt: row.createdAt.toISOString()
+  createdAt: row.createdAt.toISOString(),
+  deletionScheduledFor:
+    deletionScheduledFor === null ? null : new Date(deletionScheduledFor).toISOString()
 })
 
 async function readPreferences(db: Db, userId: string): Promise<PreferencesRecord> {
@@ -244,7 +257,7 @@ export function createApp(options: AppOptions = {}) {
         .from(schema.user)
         .where(eq(schema.user.id, c.var.userId))
       if (!row) throw new HTTPException(404, { message: 'Not found' })
-      return c.json(toAccount(row))
+      return c.json(toAccount(row, await scheduledDeletion(c.var.db, c.var.userId)))
     })
     .get('/export', async (c) => {
       const [row] = await c.var.db
@@ -285,7 +298,7 @@ export function createApp(options: AppOptions = {}) {
         .where(eq(schema.session.userId, c.var.userId))
       const body: AccountExport = {
         exportedAt: new Date().toISOString(),
-        account: toAccount(row),
+        account: toAccount(row, await scheduledDeletion(c.var.db, c.var.userId)),
         preferences: await readPreferences(c.var.db, c.var.userId),
         passkeys: passkeyRows.map((p) => ({
           name: p.name,
@@ -311,6 +324,8 @@ export function createApp(options: AppOptions = {}) {
       c.header('cache-control', 'no-store')
       return c.json(body)
     })
+    // Asking to delete does not delete: the account stays for the cooling-off period, and the person gets an email
+    // with a link to change their mind (the daily job in index.ts removes accounts whose time has come).
     .delete('/', zValidator('json', deleteAccountInputSchema), async (c) => {
       const { confirmEmail } = c.req.valid('json')
       const [row] = await c.var.db
@@ -321,20 +336,41 @@ export function createApp(options: AppOptions = {}) {
       if (row.email.toLowerCase() !== confirmEmail) {
         throw new HTTPException(400, { message: 'The email does not match this account' })
       }
-      // Sign out first so the response carries the headers that clear the session cookies.
-      const signedOut = await c.var.auth.api.signOut({
-        headers: c.req.raw.headers,
-        asResponse: true
-      })
-      // Sessions, linked accounts, passkeys and preferences go with the user (ON DELETE CASCADE). Unused sign-in links are removed too.
-      await c.var.db.batch([
-        c.var.db.delete(schema.verification).where(eq(schema.verification.identifier, row.email)),
-        c.var.db.delete(schema.user).where(eq(schema.user.id, c.var.userId))
-      ])
-      const response = c.body(null, 204)
-      for (const cookie of signedOut.headers.getSetCookie())
-        response.headers.append('set-cookie', cookie)
-      return response
+      const request = await requestDeletion(c.var.db, c.var.userId, Date.now())
+      if (request.token) {
+        const cancelUrl = new URL('/account/cancel-deletion', c.env.BETTER_AUTH_URL)
+        cancelUrl.searchParams.set('token', request.token)
+        const message = deletionEmail(
+          c.env.APP_NAME || DEFAULT_APP_NAME,
+          request.scheduledFor,
+          cancelUrl.href
+        )
+        // Not awaited, and a failure is only logged: the request itself is saved, and the account page shows the date.
+        c.executionCtx.waitUntil(
+          sender(c.env)
+            .send({ to: row.email, ...message })
+            .catch((error: unknown) => {
+              console.error('Could not send the deletion email', error)
+              Sentry.captureException(error)
+            })
+        )
+      }
+      return c.json({ scheduledFor: new Date(request.scheduledFor).toISOString() }, 202)
+    })
+    .post('/deletion/cancel', async (c) => {
+      await cancelDeletion(c.var.db, c.var.userId)
+      return c.body(null, 204)
+    })
+
+  // Cancelling from the email link needs no sign-in (the person may be signed out). The link opens a page that
+  // sends the token here with a POST, so an email scanner that only opens links cannot cancel by accident.
+  const cancelByToken = new Hono<AppEnv>()
+    .use(sameOriginOnly)
+    .post('/', zValidator('json', cancelDeletionInputSchema), async (c) => {
+      const cancelled = await cancelDeletionWithToken(c.var.db, c.req.valid('json').token)
+      if (!cancelled)
+        throw new HTTPException(404, { message: 'This link has expired or was already used' })
+      return c.body(null, 204)
     })
 
   return (
@@ -389,6 +425,7 @@ export function createApp(options: AppOptions = {}) {
       .route('/preferences', preferences)
       .route('/devices', devices)
       .route('/feedback', feedback)
+      .route('/account/deletion/cancel-with-token', cancelByToken)
       .route('/account', account)
       .onError((error, c) => {
         if (error instanceof HTTPException) return c.json({ error: error.message }, error.status)

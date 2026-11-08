@@ -24,6 +24,13 @@ export {
   renameDeviceInputSchema
 } from './devices'
 export type { Device } from './devices'
+export {
+  DELETION_COOLING_OFF_DAYS,
+  cancelDeletionInputSchema,
+  deletionDate,
+  deletionScheduledSchema
+} from './deletion'
+export type { DeletionScheduled } from './deletion'
 export { ACCENTS, isAccent } from './accents'
 export type { Accent } from './accents'
 export {
