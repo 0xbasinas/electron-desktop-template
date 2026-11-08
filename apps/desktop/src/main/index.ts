@@ -7,6 +7,7 @@ import { registerIpcHandlers } from './ipcHandlers'
 import { logger, setupLogging } from './logger'
 import { setupMenu } from './menu'
 import { getSettings } from './settings'
+import { startMinimumVersionCheck } from './minimumVersion'
 import { startPreferencesSync } from './preferencesSync'
 import { setupSettingsEffects } from './settingsEffects'
 import { setupShortcuts } from './shortcuts'
@@ -95,6 +96,7 @@ if (!app.requestSingleInstanceLock()) {
     setupShortcuts(() => mainWindow)
     setupSettingsEffects()
     startPreferencesSync()
+    startMinimumVersionCheck()
     setupAutoUpdater()
 
     app.on('activate', function () {
