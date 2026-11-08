@@ -27,7 +27,26 @@ jobs:
         language: [javascript-typescript, actions]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+      # The CodeQL bundle is downloaded from github.com releases, which sometimes time out (504). The action looks for the
+      # version it wants in the runner's tool cache before downloading, so keep that folder in the Actions cache: only the
+      # first run after the action or this file changes has to download it. The key includes this file, so a Dependabot
+      # bump of the action (which may want a new bundle) starts a fresh entry.
+      - name: Restore the CodeQL bundle from the cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.tool_cache }}/CodeQL
+          key: codeql-bundle-${{ runner.os }}-${{ matrix.language }}-${{ hashFiles('.github/workflows/codeql.yml') }}
+      - id: init
+        continue-on-error: true
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          queries: security-extended
+      # If the download still failed, try once more before failing the job.
+      - name: Set up CodeQL again after a failed download
+        if: steps.init.outcome == 'failure'
+        uses: github/codeql-action/init@33d7b85da1a04171e211befe2c739303b9a4c066 # v4.39.3
         with:
           languages: ${{ matrix.language }}
           build-mode: none
