@@ -145,17 +145,6 @@
     @apply bg-background text-foreground antialiased;
   }
 
-  /* The list a <select> opens is drawn by the system: without this, the chosen row uses the operating system's
-     bright blue, which clashes with the theme (and with a dark page in particular). */
-  select option {
-    background-color: var(--card);
-    color: var(--card-foreground);
-  }
-  select option:checked {
-    background-color: var(--accent);
-    color: var(--accent-foreground);
-  }
-
   /* Thin, quiet scrollbars that follow the theme: the thumb is a faint tint of the text colour, the track is invisible. */
   * {
     scrollbar-width: thin;
