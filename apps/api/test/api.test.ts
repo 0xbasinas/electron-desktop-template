@@ -18,7 +18,10 @@ let nextIp = 1
 function setup(overrides: Partial<Bindings> = {}) {
   const ip = `10.0.${Math.floor(nextIp / 250)}.${nextIp++ % 250}`
   const sent: EmailMessage[] = []
-  const app = createApp({ emailSender: () => ({ send: async (m) => void sent.push(m) }) })
+  const app = createApp({
+    flagCacheMs: 0,
+    emailSender: () => ({ send: async (m) => void sent.push(m) })
+  })
   async function call(path: string, init: RequestInit = {}): Promise<Response> {
     const headers = new Headers(init.headers)
     headers.set('cf-connecting-ip', ip)
@@ -1167,5 +1170,64 @@ describe('data requests', () => {
       "SELECT name FROM pragma_table_info('data_request')"
     ).all<{ name: string }>()
     expect(columns.results.map((c) => c.name)).not.toContain('email')
+  })
+})
+
+describe('feature flags', () => {
+  const put = (key: string, killed: number, channels: string, percent: number): Promise<unknown> =>
+    bindings.DB.prepare(
+      'INSERT OR REPLACE INTO feature_flag (key, description, killed, channels, percent, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+      .bind(key, '', killed, channels, percent, Date.now())
+      .run()
+  const get = async (path: string): Promise<Record<string, boolean>> =>
+    ((await (await setup().call(path)).json()) as { flags: Record<string, boolean> }).flags
+
+  it('is public, answers for the channel, and has nothing when there are no flags', async () => {
+    await bindings.DB.prepare('DELETE FROM feature_flag').run()
+    expect(await get('/api/flags')).toEqual({})
+    await put('everyone', 0, '', 100)
+    await put('beta-only', 0, 'beta', 100)
+    await put('off', 0, '', 0)
+    expect(await get('/api/flags?channel=stable')).toEqual({
+      everyone: true,
+      'beta-only': false,
+      off: false
+    })
+    expect(await get('/api/flags?channel=beta')).toEqual({
+      everyone: true,
+      'beta-only': true,
+      off: false
+    })
+  })
+
+  it('the kill switch turns a flag off for everyone at once', async () => {
+    await put('risky', 0, '', 100)
+    expect((await get('/api/flags'))['risky']).toBe(true)
+    await put('risky', 1, '', 100)
+    expect((await get('/api/flags'))['risky']).toBe(false)
+  })
+
+  it('gives an install the same answer, and only adds installs as the percentage rises', async () => {
+    const ids = Array.from({ length: 60 }, (_, i) => `install-${i}-abcdefgh`)
+    const on = async (percent: number): Promise<string[]> => {
+      await put('gradual', 0, '', percent)
+      const answers = await Promise.all(ids.map((id) => get(`/api/flags?id=${id}`)))
+      return ids.filter((_, i) => answers[i]!['gradual'])
+    }
+    const ten = await on(10)
+    const fifty = await on(50)
+    expect(await on(50)).toEqual(fifty)
+    for (const id of ten) expect(fifty).toContain(id)
+    expect(fifty.length).toBeGreaterThan(ten.length)
+    // Without an install id only 0% and 100% can be decided.
+    await put('gradual', 0, '', 50)
+    expect((await get('/api/flags'))['gradual']).toBe(false)
+  })
+
+  it('rejects an unknown channel and a strange id', async () => {
+    const s = setup()
+    expect((await s.call('/api/flags?channel=nightly')).status).toBe(400)
+    expect((await s.call('/api/flags?id=x')).status).toBe(400)
   })
 })

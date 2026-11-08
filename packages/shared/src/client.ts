@@ -11,6 +11,7 @@ import {
   emailChangedSchema,
   type EmailChanged
 } from './emailChange'
+import { flagsSchema, type FlagChannel, type Flags } from './flags'
 import { appConfigSchema, type AppConfig } from './version'
 import { dataRequestsSchema, type DataRequest } from './dataRequests'
 import { privacySummarySchema, type PrivacySummary } from './privacy'
@@ -58,6 +59,8 @@ export interface ApiClient {
     /** Sends feedback as the signed-in person. Resolves with the id of the stored message. */
     send(input: FeedbackInput): Promise<{ id: string }>
   }
+  /** Which feature flags are on for this install (its channel and a random install id; no sign-in needed). */
+  flags(channel: FlagChannel, installId?: string): Promise<Flags>
   /** What the app needs to know before anything else (the oldest version still allowed). No sign-in needed. */
   appConfig(): Promise<AppConfig>
   account: {
@@ -136,6 +139,11 @@ export function createApiClient({
       send: (input: FeedbackInput): Promise<{ id: string }> =>
         request('/feedback', feedbackReceiptSchema, { method: 'POST', body: JSON.stringify(input) })
     },
+    flags: (channel: FlagChannel, installId?: string): Promise<Flags> =>
+      request(
+        `/flags?channel=${channel}${installId ? `&id=${encodeURIComponent(installId)}` : ''}`,
+        flagsSchema
+      ),
     appConfig: (): Promise<AppConfig> => request('/app-config', appConfigSchema),
     account: {
       get: (): Promise<Account> => request('/account', accountSchema),
