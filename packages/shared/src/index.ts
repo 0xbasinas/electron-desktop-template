@@ -46,3 +46,10 @@ export {
   themeSchema
 } from './preferences'
 export type { Preferences, PreferencesRecord } from './preferences'
+export {
+  EMAIL_CHANGE_MINUTES,
+  changeEmailInputSchema,
+  confirmEmailChangeInputSchema,
+  emailChangedSchema
+} from './emailChange'
+export type { EmailChanged } from './emailChange'

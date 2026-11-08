@@ -37,7 +37,9 @@ const accountApi = vi.hoisted(() => ({
   export: vi.fn(),
   remove: vi.fn(),
   cancelDeletion: vi.fn(),
-  cancelDeletionWithToken: vi.fn()
+  cancelDeletionWithToken: vi.fn(),
+  changeEmail: vi.fn(),
+  confirmEmailChange: vi.fn()
 }))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 const feedbackApi = vi.hoisted(() => ({ send: vi.fn() }))
@@ -62,7 +64,8 @@ beforeEach(() => {
     email: 'ada@example.com',
     name: 'ada',
     createdAt: '2026-01-01T00:00:00.000Z',
-    deletionScheduledFor: null
+    deletionScheduledFor: null,
+    pendingEmail: null
   })
   localStorage.clear()
   prefsApi.get.mockReset().mockResolvedValue({
@@ -95,6 +98,8 @@ beforeEach(() => {
   accountApi.remove.mockReset().mockResolvedValue({ scheduledFor: '2026-12-01T00:00:00.000Z' })
   accountApi.cancelDeletion.mockReset().mockResolvedValue(undefined)
   accountApi.cancelDeletionWithToken.mockReset().mockResolvedValue(undefined)
+  accountApi.changeEmail.mockReset().mockResolvedValue(undefined)
+  accountApi.confirmEmailChange.mockReset().mockResolvedValue({ email: 'new@example.com' })
 })
 
 const at = (path: string): void => {
@@ -269,6 +274,39 @@ describe('signing in from the desktop app', () => {
     at('/auth/desktop')
     expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
     expect(auth.ensureRedirect).toHaveBeenCalled()
+  })
+})
+
+describe('email change', () => {
+  it('asks for the change from the account page', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/account')
+    await userEvent.type(await screen.findByLabelText('New email address'), 'New@Example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Change email' }))
+    await waitFor(() => expect(accountApi.changeEmail).toHaveBeenCalledWith('New@Example.com'))
+    expect(
+      await screen.findByText(/Check new@example.com for a confirmation link/)
+    ).toBeInTheDocument()
+  })
+
+  it('confirms only when the button is pressed', async () => {
+    at('/account/confirm-email?token=abc')
+    expect(accountApi.confirmEmailChange).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm this address' }))
+    await waitFor(() => expect(accountApi.confirmEmailChange).toHaveBeenCalledWith('abc'))
+    expect(
+      await screen.findByRole('heading', { name: 'Your email address was changed' })
+    ).toBeInTheDocument()
+  })
+
+  it('says so when the link no longer works', async () => {
+    accountApi.confirmEmailChange.mockRejectedValue(new Error('404'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/account/confirm-email?token=abc')
+    await userEvent.click(screen.getByRole('button', { name: 'Confirm this address' }))
+    expect(
+      await screen.findByRole('heading', { name: 'This link does not work' })
+    ).toBeInTheDocument()
   })
 })
 

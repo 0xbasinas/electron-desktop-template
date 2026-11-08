@@ -36,6 +36,18 @@ export const accountDeletion = sqliteTable(
   (table) => [index('account_deletion_due_idx').on(table.scheduledFor)]
 )
 
+/** A pending move to a new email address: it happens when the link sent to the new address is used. */
+export const emailChange = sqliteTable('email_change', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => user.id, { onDelete: 'cascade' }),
+  newEmail: text('new_email').notNull(),
+  requestedAt: integer('requested_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  /** SHA-256 of the token in the link, so a leaked database cannot be used to take over an address. */
+  tokenHash: text('token_hash').notNull()
+})
+
 /** A name the person gave one of their sessions ("Work laptop"). Goes with the session or the account. */
 export const sessionNickname = sqliteTable('session_nickname', {
   sessionId: text('session_id')
