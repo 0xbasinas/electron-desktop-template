@@ -30,6 +30,7 @@ import { createMcpProtectedRequestHandler } from '@better-auth/mcp'
 import { createDpopReplayStore } from 'better-auth/oauth2'
 import { createAuth, DEFAULT_APP_NAME, MCP_READ_SCOPE, mcpResource, type Auth } from './auth'
 import { handleMcp } from './mcpServer'
+import { cachedJwks } from './jwksCache'
 import {
   cancelDeletion,
   cancelDeletionWithToken,
@@ -636,7 +637,7 @@ export function createApp(options: AppOptions = {}) {
             jwtVerifyOptions: { requiredClaims: ['azp'] },
             requiredScopes: [MCP_READ_SCOPE],
             // Our own signing keys, read in-process: a Worker should not call its own address to fetch them.
-            jwksUrl: (() => c.var.auth.api.getJwks()) as unknown as string,
+            jwksUrl: (() => cachedJwks(() => c.var.auth.api.getJwks())) as unknown as string,
             dpop: { replayStore: createDpopReplayStore(internalAdapter) }
           },
           async (request, claims) => {

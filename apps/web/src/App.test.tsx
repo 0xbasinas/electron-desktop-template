@@ -227,15 +227,15 @@ describe('routes', () => {
     expect(downloads.every((l) => l.getAttribute('href') === '/download')).toBe(true)
   })
 
-  it('sends signed-out visitors from /app (and nested paths) to the sign-in page', () => {
+  it('sends signed-out visitors from /app (and nested paths) to the sign-in page', async () => {
     at('/app/anything/here')
-    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 
   it('shows the web app to a signed-in user', async () => {
     auth.session = { user: { email: 'ada@example.com' } }
     at('/app')
-    expect(screen.getByRole('heading', { name: 'Web app' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Web app' })).toBeInTheDocument()
     expect(screen.getByText('Signed in as ada@example.com')).toBeInTheDocument()
   })
 
@@ -288,9 +288,9 @@ describe('routes', () => {
     expect(screen.getByRole('heading', { name: /v2-beta/ })).toBeInTheDocument()
   })
 
-  it('lists the sub-processors', () => {
+  it('lists the sub-processors', async () => {
     at('/sub-processors')
-    expect(screen.getByRole('heading', { name: 'Sub-processors' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sub-processors' })).toBeInTheDocument()
     for (const name of ['Cloudflare', 'Resend', 'GitHub']) {
       expect(screen.getByRole('heading', { name })).toBeInTheDocument()
     }
@@ -414,9 +414,11 @@ describe('signing in from the desktop app', () => {
     )
   })
 
-  it('the callback page waits for the one-time code, then opens the app', () => {
+  it('the callback page waits for the one-time code, then opens the app', async () => {
     at('/auth/desktop')
-    expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Opening the desktop app' })
+    ).toBeInTheDocument()
     expect(auth.ensureRedirect).toHaveBeenCalled()
   })
 })
@@ -532,7 +534,7 @@ describe('email change', () => {
   it('confirms only when the button is pressed', async () => {
     at('/account/confirm-email?token=abc')
     expect(accountApi.confirmEmailChange).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm this address' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm this address' }))
     await waitFor(() => expect(accountApi.confirmEmailChange).toHaveBeenCalledWith('abc'))
     expect(
       await screen.findByRole('heading', { name: 'Your email address was changed' })
@@ -543,7 +545,7 @@ describe('email change', () => {
     accountApi.confirmEmailChange.mockRejectedValue(new Error('404'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     at('/account/confirm-email?token=abc')
-    await userEvent.click(screen.getByRole('button', { name: 'Confirm this address' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Confirm this address' }))
     expect(
       await screen.findByRole('heading', { name: 'This link does not work' })
     ).toBeInTheDocument()
@@ -554,7 +556,7 @@ describe('cancel deletion page', () => {
   it('cancels only when the button is pressed', async () => {
     at('/account/cancel-deletion?token=abc')
     expect(accountApi.cancelDeletionWithToken).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Keep my account' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep my account' }))
     await waitFor(() => expect(accountApi.cancelDeletionWithToken).toHaveBeenCalledWith('abc'))
     expect(await screen.findByRole('heading', { name: 'Your account is safe' })).toBeInTheDocument()
   })
@@ -563,15 +565,17 @@ describe('cancel deletion page', () => {
     accountApi.cancelDeletionWithToken.mockRejectedValue(new Error('404'))
     vi.spyOn(console, 'error').mockImplementation(() => {})
     at('/account/cancel-deletion?token=abc')
-    await userEvent.click(screen.getByRole('button', { name: 'Keep my account' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep my account' }))
     expect(
       await screen.findByRole('heading', { name: 'This link does not work' })
     ).toBeInTheDocument()
   })
 
-  it('has nothing to do without a token', () => {
+  it('has nothing to do without a token', async () => {
     at('/account/cancel-deletion')
-    expect(screen.getByRole('heading', { name: 'This link does not work' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'This link does not work' })
+    ).toBeInTheDocument()
   })
 })
 
@@ -704,9 +708,9 @@ describe('theme sync', () => {
 })
 
 describe('feedback page', () => {
-  it('sends you to sign in first', () => {
+  it('sends you to sign in first', async () => {
     at('/feedback')
-    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 
   it('sends the message with its kind and thanks you', async () => {
@@ -924,7 +928,7 @@ describe('accepting an invitation', () => {
   it('asks a signed-out visitor to sign in and comes back afterwards', async () => {
     auth.session = null
     at('/accept-invitation/inv1')
-    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign in' }))
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 
@@ -1108,7 +1112,7 @@ describe('device page (AI apps without a browser)', () => {
       return { data: {}, error: null }
     })
     at('/device?user_code=ABCD1234')
-    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue' }))
     expect(
       await screen.findByRole('heading', { name: 'Connect Terminal Agent?' })
     ).toBeInTheDocument()
@@ -1123,8 +1127,8 @@ describe('device page (AI apps without a browser)', () => {
     expect(await screen.findByRole('heading', { name: 'App connected' })).toBeInTheDocument()
   })
 
-  it('sends a signed-out visitor to sign in first', () => {
+  it('sends a signed-out visitor to sign in first', async () => {
     at('/device?user_code=ABCD1234')
-    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 })
