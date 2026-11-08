@@ -629,3 +629,96 @@ describe('bounces and complaints (Resend webhook)', () => {
     expect(s.sent).toHaveLength(1)
   })
 })
+
+describe('feedback', () => {
+  const send = (cookie: string, body: unknown): RequestInit => ({
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  const good = { kind: 'bug', message: 'The settings window is blank', source: 'web' }
+
+  it('needs a session', async () => {
+    const s = setup()
+    expect((await s.call('/api/feedback', send('', good))).status).toBe(401)
+  })
+
+  it('stores feedback and includes it in the export, without the diagnostics text', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'fb1@example.com')
+    const response = await s.call(
+      '/api/feedback',
+      send(cookie, {
+        ...good,
+        source: 'desktop',
+        diagnostics: 'SECRET-REPORT-TEXT',
+        platform: 'win32'
+      })
+    )
+    expect(response.status).toBe(201)
+    expect(((await response.json()) as { id: string }).id).toBeTruthy()
+
+    const text = await (await s.call('/api/account/export', { headers: { cookie } })).text()
+    const data = JSON.parse(text) as { feedback: { message: string; hasDiagnostics: boolean }[] }
+    expect(data.feedback).toHaveLength(1)
+    expect(data.feedback[0]).toMatchObject({ message: good.message, hasDiagnostics: true })
+    expect(text).not.toContain('SECRET-REPORT-TEXT')
+  })
+
+  it('rejects bad input', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'fb2@example.com')
+    for (const body of [
+      { ...good, message: '' },
+      { ...good, kind: 'rant' },
+      { ...good, message: 'x'.repeat(5000) },
+      { ...good, diagnostics: 'x'.repeat(30000) }
+    ]) {
+      expect((await s.call('/api/feedback', send(cookie, body))).status).toBe(400)
+    }
+  })
+
+  it('limits how much one person can send per hour', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'fb3@example.com')
+    for (let i = 0; i < 5; i++) {
+      expect((await s.call('/api/feedback', send(cookie, good))).status).toBe(201)
+    }
+    expect((await s.call('/api/feedback', send(cookie, good))).status).toBe(429)
+  })
+
+  it('blocks cross-site writes and keeps one person from seeing another’s feedback', async () => {
+    const s = setup()
+    const a = await signIn(s, 'fb4@example.com')
+    const b = await signIn(s, 'fb5@example.com')
+    const evil = await s.call('/api/feedback', {
+      ...send(a, good),
+      headers: { cookie: a, 'content-type': 'application/json', origin: 'https://evil.example' }
+    })
+    expect(evil.status).toBe(403)
+    await s.call('/api/feedback', send(a, good))
+    const theirs = (await (
+      await s.call('/api/account/export', { headers: { cookie: b } })
+    ).json()) as { feedback: unknown[] }
+    expect(theirs.feedback).toHaveLength(0)
+  })
+
+  it('is deleted with the account', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'fb6@example.com')
+    await s.call('/api/feedback', send(cookie, good))
+    const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      id: string
+    }
+    const del = await s.call('/api/account', {
+      method: 'DELETE',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ confirmEmail: 'fb6@example.com' })
+    })
+    expect(del.status).toBe(204)
+    const rows = await bindings.DB.prepare('select count(*) as n from feedback where user_id = ?')
+      .bind(me.id)
+      .first<{ n: number }>()
+    expect(rows?.n).toBe(0)
+  })
+})

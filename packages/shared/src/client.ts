@@ -1,5 +1,6 @@
 import { accountExportSchema, accountSchema, type Account, type AccountExport } from './schemas'
 import { preferencesRecordSchema, type PreferencesRecord } from './preferences'
+import { feedbackReceiptSchema, type FeedbackInput } from './feedback'
 import { z } from 'zod'
 
 export class ApiError extends Error {
@@ -28,6 +29,10 @@ export interface ApiClient {
     get(): Promise<PreferencesRecord>
     /** Saves the preferences; the response is whichever copy is newest (the one you sent, or a newer one from another device). */
     put(record: PreferencesRecord): Promise<PreferencesRecord>
+  }
+  feedback: {
+    /** Sends feedback as the signed-in person. Resolves with the id of the stored message. */
+    send(input: FeedbackInput): Promise<{ id: string }>
   }
   account: {
     get(): Promise<Account>
@@ -76,6 +81,10 @@ export function createApiClient({
           method: 'PUT',
           body: JSON.stringify(record)
         })
+    },
+    feedback: {
+      send: (input: FeedbackInput): Promise<{ id: string }> =>
+        request('/feedback', feedbackReceiptSchema, { method: 'POST', body: JSON.stringify(input) })
     },
     account: {
       get: (): Promise<Account> => request('/account', accountSchema),

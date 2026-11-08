@@ -4,6 +4,8 @@ import {
   clampUpdatedAt,
   deleteAccountInputSchema,
   emptyPreferences,
+  FEEDBACK_PER_HOUR,
+  feedbackInputSchema,
   newerWins,
   parsePreferences,
   preferencesRecordSchema,
@@ -11,7 +13,7 @@ import {
   type Account,
   type AccountExport
 } from '@repo/shared'
-import { eq } from 'drizzle-orm'
+import { and, count, eq, gt } from 'drizzle-orm'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
@@ -112,6 +114,43 @@ export function createApp(options: AppOptions = {}) {
       return c.json(current)
     })
 
+  // Feedback from the web app and the desktop app. Needs a session (so there is no anonymous spam) and is limited per person.
+  const feedback = new Hono<AppEnv>()
+    .use(sameOriginOnly)
+    .use(requireSession(false))
+    .post('/', zValidator('json', feedbackInputSchema), async (c) => {
+      const input = c.req.valid('json')
+      const now = Date.now()
+      // One indexed count (user_id, created_at): cheap, and enough to stop a loop or a flood.
+      const [recent] = await c.var.db
+        .select({ n: count() })
+        .from(schema.feedback)
+        .where(
+          and(
+            eq(schema.feedback.userId, c.var.userId),
+            gt(schema.feedback.createdAt, now - 3_600_000)
+          )
+        )
+      if ((recent?.n ?? 0) >= FEEDBACK_PER_HOUR) {
+        throw new HTTPException(429, {
+          message: 'You have sent a lot of feedback. Try again in an hour.'
+        })
+      }
+      const id = crypto.randomUUID()
+      await c.var.db.insert(schema.feedback).values({
+        id,
+        userId: c.var.userId,
+        kind: input.kind,
+        message: input.message,
+        diagnostics: input.diagnostics ?? null,
+        appVersion: input.appVersion ?? null,
+        platform: input.platform ?? null,
+        source: input.source,
+        createdAt: now
+      })
+      return c.json({ id }, 201)
+    })
+
   // The person's own account: see it, download everything we hold, delete it.
   const account = new Hono<AppEnv>()
     .use(sameOriginOnly)
@@ -139,6 +178,16 @@ export function createApp(options: AppOptions = {}) {
         })
         .from(schema.passkey)
         .where(eq(schema.passkey.userId, c.var.userId))
+      const feedbackRows = await c.var.db
+        .select({
+          kind: schema.feedback.kind,
+          message: schema.feedback.message,
+          source: schema.feedback.source,
+          diagnostics: schema.feedback.diagnostics,
+          createdAt: schema.feedback.createdAt
+        })
+        .from(schema.feedback)
+        .where(eq(schema.feedback.userId, c.var.userId))
       // Session rows are listed without their tokens.
       const sessionRows = await c.var.db
         .select({
@@ -157,6 +206,13 @@ export function createApp(options: AppOptions = {}) {
           name: p.name,
           deviceType: p.deviceType,
           createdAt: p.createdAt?.toISOString() ?? null
+        })),
+        feedback: feedbackRows.map((r) => ({
+          kind: r.kind as 'bug' | 'idea' | 'other',
+          message: r.message,
+          source: r.source,
+          hasDiagnostics: r.diagnostics !== null,
+          createdAt: new Date(r.createdAt).toISOString()
         })),
         sessions: sessionRows.map((s) => ({
           createdAt: s.createdAt.toISOString(),
@@ -245,6 +301,7 @@ export function createApp(options: AppOptions = {}) {
         return c.json({ ok: true })
       })
       .route('/preferences', preferences)
+      .route('/feedback', feedback)
       .route('/account', account)
       .onError((error, c) => {
         if (error instanceof HTTPException) return c.json({ error: error.message }, error.status)

@@ -5,6 +5,7 @@ import { AccountPage } from './pages/AccountPage'
 import { AppPage } from './pages/AppPage'
 import { DesktopCallbackPage } from './pages/DesktopCallbackPage'
 import { DownloadPage } from './pages/DownloadPage'
+import { FeedbackPage } from './pages/FeedbackPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { ReleasesPage } from './pages/ReleasesPage'
@@ -17,6 +18,7 @@ export function App(): JSX.Element {
         <Route index element={<HomePage />} />
         <Route path="download" element={<DownloadPage />} />
         <Route path="releases" element={<ReleasesPage />} />
+        <Route path="feedback" element={<FeedbackPage />} />
         <Route path="sign-in" element={<SignInPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="auth/desktop" element={<DesktopCallbackPage />} />
