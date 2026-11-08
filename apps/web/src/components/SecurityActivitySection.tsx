@@ -29,6 +29,8 @@ const NAMES: Record<string, string> = {
   sso_provider_updated: 'A company sign-in was changed',
   sso_provider_deleted: 'A company sign-in was removed',
   sso_user_provisioned: 'Account created through company sign-in',
+  app_connected: 'An AI app was allowed to read your account',
+  app_disconnected: 'An AI app was removed',
   scim_connection_created: 'A directory sync was set up',
   scim_connection_removed: 'A directory sync was removed',
   scim_token_created: 'A directory sync token was made',

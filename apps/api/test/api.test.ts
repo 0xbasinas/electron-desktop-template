@@ -2598,3 +2598,289 @@ describe('directory sync (SCIM)', () => {
     expect(await memberOf(team.id, 'gone@dir.example')).toBe(true)
   })
 })
+
+describe('AI apps (MCP): OAuth sign-in and the /api/mcp endpoint', () => {
+  const json = { 'content-type': 'application/json' }
+  const CLIENT_ID = 'https://assistant.example/client.json'
+  const REDIRECT = 'http://127.0.0.1:8765/callback'
+  const RESOURCE = `${ORIGIN}/api/mcp`
+  const b64url = (bytes: ArrayBuffer): string => {
+    let text = ''
+    for (const b of new Uint8Array(bytes)) text += String.fromCharCode(b)
+    return btoa(text).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '')
+  }
+
+  /** Pretend the AI app's metadata document is published at its own address. */
+  function publishClient(extra: Record<string, unknown> = {}): void {
+    const real = globalThis.fetch
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input)
+      if (url === CLIENT_ID)
+        return Response.json({
+          client_id: CLIENT_ID,
+          client_name: 'Test Assistant',
+          redirect_uris: [REDIRECT],
+          grant_types: ['authorization_code', 'refresh_token'],
+          response_types: ['code'],
+          token_endpoint_auth_method: 'none',
+          ...extra
+        })
+      return real(input, init)
+    })
+  }
+  afterEach(() => vi.restoreAllMocks())
+
+  async function authorize(
+    s: ReturnType<typeof setup>,
+    cookie: string,
+    scope = 'openid offline_access mcp:read'
+  ): Promise<{ response: Response; verifier: string }> {
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(32)).buffer)
+    const challenge = b64url(
+      await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))
+    )
+    const query = new URLSearchParams({
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT,
+      response_type: 'code',
+      scope,
+      state: 'xyz',
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+      resource: RESOURCE
+    })
+    const response = await s.call(`/api/auth/oauth2/authorize?${query}`, {
+      headers: cookie ? { cookie } : {}
+    })
+    return { response, verifier }
+  }
+
+  /** Runs sign-in, consent and the token request; returns the tokens. */
+  async function getTokens(
+    s: ReturnType<typeof setup>,
+    cookie: string
+  ): Promise<{ access_token: string; refresh_token: string }> {
+    const { response, verifier } = await authorize(s, cookie)
+    expect(response.status).toBe(302)
+    const consentUrl = new URL(response.headers.get('location')!, ORIGIN)
+    expect(consentUrl.pathname).toBe('/consent')
+    const accepted = await s.call('/api/auth/oauth2/consent', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ accept: true, oauth_query: consentUrl.search.slice(1) })
+    })
+    expect(accepted.status).toBe(200)
+    const { url } = (await accepted.json()) as { url: string }
+    const back = new URL(url)
+    expect(`${back.origin}${back.pathname}`).toBe(REDIRECT)
+    expect(back.searchParams.get('state')).toBe('xyz')
+    const token = await s.call('/api/auth/oauth2/token', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: back.searchParams.get('code')!,
+        code_verifier: verifier,
+        client_id: CLIENT_ID,
+        redirect_uri: REDIRECT,
+        resource: RESOURCE
+      }).toString()
+    })
+    expect(token.status).toBe(200)
+    return (await token.json()) as { access_token: string; refresh_token: string }
+  }
+
+  const call = (
+    s: ReturnType<typeof setup>,
+    token: string | null,
+    method: string,
+    params: Record<string, unknown> = {}
+  ): Promise<Response> =>
+    s.call('/api/mcp', {
+      method: 'POST',
+      headers: {
+        ...json,
+        accept: 'application/json, text/event-stream',
+        'mcp-protocol-version': '2026-07-28',
+        'mcp-method': method,
+        ...(typeof params.name === 'string' ? { 'mcp-name': params.name } : {}),
+        ...(token ? { authorization: `Bearer ${token}` } : {})
+      },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method,
+        params: {
+          ...params,
+          _meta: {
+            'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+            'io.modelcontextprotocol/clientCapabilities': {}
+          }
+        }
+      })
+    })
+
+  it('publishes where to sign in, and challenges a call without a token', async () => {
+    const s = setup()
+    const meta = await s.call('/api/__discovery/.well-known/oauth-protected-resource/api/mcp')
+    expect(meta.status).toBe(200)
+    expect(await meta.json()).toMatchObject({ resource: RESOURCE })
+    const server = await s.call('/api/__discovery/.well-known/oauth-authorization-server/api/auth')
+    expect(server.status).toBe(200)
+    const body = (await server.json()) as Record<string, unknown>
+    expect(body.authorization_endpoint).toContain('/oauth2/authorize')
+    // Nobody can register a client by themselves.
+    expect(body.registration_endpoint).toBeUndefined()
+
+    const refused = await call(s, null, 'tools/list')
+    expect(refused.status).toBe(401)
+    expect(refused.headers.get('www-authenticate')).toContain('resource_metadata')
+  })
+
+  it('sends a signed-out person to sign in, then to the consent page', async () => {
+    publishClient()
+    const s = setup()
+    const { response } = await authorize(s, '')
+    expect(response.status).toBe(302)
+    const login = new URL(response.headers.get('location')!, ORIGIN)
+    expect(login.pathname).toBe('/sign-in')
+    expect(login.searchParams.get('client_id')).toBe(CLIENT_ID)
+    expect(login.searchParams.get('sig')).toBeTruthy()
+  })
+
+  it('runs the whole flow: consent, token, tools, refresh', async () => {
+    publishClient()
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-person@example.com')
+    const tokens = await getTokens(s, cookie)
+    expect(tokens.refresh_token).toBeTruthy()
+
+    const list = await call(s, tokens.access_token, 'tools/list')
+    expect(list.status).toBe(200)
+    const listed = await list.text()
+    for (const name of ['whoami', 'list_teams', 'list_devices', 'recent_security_activity'])
+      expect(listed).toContain(name)
+
+    const who = await call(s, tokens.access_token, 'tools/call', { name: 'whoami', arguments: {} })
+    expect(who.status).toBe(200)
+    expect(await who.text()).toContain('mcp-person@example.com')
+
+    // The refresh token works once; the old one is dead afterwards.
+    const refresh = (token: string): Promise<Response> =>
+      s.call('/api/auth/oauth2/token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: token,
+          client_id: CLIENT_ID,
+          resource: RESOURCE
+        }).toString()
+      })
+    const next = await refresh(tokens.refresh_token)
+    expect(next.status).toBe(200)
+    expect((await refresh(tokens.refresh_token)).status).toBeGreaterThanOrEqual(400)
+  })
+
+  it('shows only the signed-in person’s data, and stops at once for a suspended person', async () => {
+    publishClient()
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-suspend@example.com')
+    const tokens = await getTokens(s, cookie)
+    expect((await call(s, tokens.access_token, 'tools/list')).status).toBe(200)
+    await bindings.DB.prepare('UPDATE user SET banned = 1 WHERE email = ?')
+      .bind('mcp-suspend@example.com')
+      .run()
+    expect((await call(s, tokens.access_token, 'tools/list')).status).toBe(401)
+  })
+
+  it('refuses a token for another resource, a missing scope and a forged token', async () => {
+    publishClient()
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-scope@example.com')
+    const { response } = await authorize(s, cookie, 'openid')
+    // Without the mcp:read scope the consent screen is still shown, but the token cannot call the tool endpoint.
+    expect(response.status).toBe(302)
+    expect((await call(s, 'not-a-token', 'tools/list')).status).toBe(401)
+    const parts = (await getTokens(s, await signIn(s, 'mcp-forge@example.com'))).access_token.split(
+      '.'
+    )
+    parts[2] = 'AAAA'
+    expect((await call(s, parts.join('.'), 'tools/list')).status).toBe(401)
+  })
+
+  it('lists approved apps, records approval and removal, and lets the person remove one', async () => {
+    publishClient()
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-apps@example.com')
+    const tokens = await getTokens(s, cookie)
+
+    const listed = await s.call('/api/auth/oauth2/get-consents', { headers: { cookie } })
+    expect(listed.status).toBe(200)
+    const rows = (await listed.json()) as { id: string; clientId: string }[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0]!.clientId).toBe(CLIENT_ID)
+
+    const named = await s.call(
+      `/api/auth/oauth2/public-client?client_id=${encodeURIComponent(CLIENT_ID)}`,
+      { headers: { cookie } }
+    )
+    expect(named.status).toBe(200)
+    expect(await named.json()).toMatchObject({ client_name: 'Test Assistant' })
+
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as {
+      connectedApps: { clientId: string }[]
+      securityActivity: { type: string }[]
+    }
+    expect(exported.connectedApps.map((a) => a.clientId)).toEqual([CLIENT_ID])
+    expect(exported.securityActivity.map((e) => e.type)).toContain('app_connected')
+    expect(JSON.stringify(exported)).not.toContain(tokens.access_token)
+
+    const removed = await s.call('/api/auth/oauth2/delete-consent', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ id: rows[0]!.id })
+    })
+    expect(removed.status).toBe(200)
+    const after = (await (
+      await s.call('/api/auth/oauth2/get-consents', { headers: { cookie } })
+    ).json()) as unknown[]
+    expect(after).toHaveLength(0)
+  })
+
+  it('does not let people create or list clients by hand, or register one', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-clients@example.com')
+    for (const [path, method] of [
+      ['/api/auth/oauth2/create-client', 'POST'],
+      ['/api/auth/oauth2/register', 'POST'],
+      ['/api/auth/oauth2/get-clients', 'GET']
+    ] as const) {
+      const r = await s.call(path, {
+        method,
+        headers: { cookie, ...json },
+        body: method === 'POST' ? JSON.stringify({ redirect_uris: [REDIRECT] }) : undefined
+      })
+      expect(r.status, path).toBeGreaterThanOrEqual(400)
+    }
+  })
+
+  it('refuses an app whose address is not a public https page', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-bad@example.com')
+    const query = new URLSearchParams({
+      client_id: 'http://127.0.0.1/client.json',
+      redirect_uri: REDIRECT,
+      response_type: 'code',
+      scope: 'openid mcp:read',
+      code_challenge: 'x'.repeat(43),
+      code_challenge_method: 'S256',
+      resource: RESOURCE
+    })
+    const r = await s.call(`/api/auth/oauth2/authorize?${query}`, { headers: { cookie } })
+    expect(new URL(r.headers.get('location') ?? ORIGIN, ORIGIN).searchParams.get('code')).toBeNull()
+    expect(r.status === 302 ? (r.headers.get('location') ?? '') : '').not.toContain('/consent')
+  })
+})

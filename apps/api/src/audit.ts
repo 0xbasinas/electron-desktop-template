@@ -36,6 +36,8 @@ export type AuditType =
   | 'sso_provider_updated'
   | 'sso_provider_deleted'
   | 'sso_user_provisioned'
+  | 'app_connected'
+  | 'app_disconnected'
   | 'scim_connection_created'
   | 'scim_connection_removed'
   | 'scim_token_created'
@@ -79,6 +81,8 @@ export interface AuthCall {
   failed: boolean
   /** Where a magic-link verify redirected. A failure redirects to a URL with `error=`. */
   location?: string | null
+  /** For the AI-app consent call: whether the person said yes (a no changes nothing, so it is not recorded). */
+  accepted?: boolean
 }
 
 const BY_PATH: Record<string, AuditType> = {
@@ -105,7 +109,9 @@ const BY_PATH: Record<string, AuditType> = {
   '/admin/remove-user': 'user_removed',
   '/sso/register': 'sso_provider_added',
   '/sso/update-provider': 'sso_provider_updated',
-  '/sso/delete-provider': 'sso_provider_deleted'
+  '/sso/delete-provider': 'sso_provider_deleted',
+  '/oauth2/consent': 'app_connected',
+  '/oauth2/delete-consent': 'app_disconnected'
 }
 
 /**
@@ -126,6 +132,7 @@ export function eventForCall(call: AuthCall): Pick<AuditInput, 'type' | 'outcome
   }
   const type = BY_PATH[call.path]
   if (!type) return null
+  if (call.path === '/oauth2/consent' && call.accepted !== true) return null
   // A call that failed changed nothing. The exception is a refused admin action, which is worth seeing.
   if (call.failed) {
     return call.path.startsWith('/admin/')

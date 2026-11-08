@@ -26,7 +26,10 @@ import { and, count, eq, gt, inArray, ne } from 'drizzle-orm'
 import { Hono, type MiddlewareHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { secureHeaders } from 'hono/secure-headers'
-import { createAuth, DEFAULT_APP_NAME, type Auth } from './auth'
+import { createMcpProtectedRequestHandler } from '@better-auth/mcp'
+import { createDpopReplayStore } from 'better-auth/oauth2'
+import { createAuth, DEFAULT_APP_NAME, MCP_READ_SCOPE, mcpResource, type Auth } from './auth'
+import { handleMcp } from './mcpServer'
 import {
   cancelDeletion,
   cancelDeletionWithToken,
@@ -377,6 +380,21 @@ export function createApp(options: AppOptions = {}) {
             eq(schema.organization.id, schema.scimConnection.organizationId)
           )
           .where(eq(schema.scimUser.userId, c.var.userId)),
+        // AI apps this person approved (not the tokens).
+        connectedApps: (
+          await c.var.db
+            .select({
+              clientId: schema.oauthConsent.clientId,
+              scopes: schema.oauthConsent.scopes,
+              createdAt: schema.oauthConsent.createdAt
+            })
+            .from(schema.oauthConsent)
+            .where(eq(schema.oauthConsent.userId, c.var.userId))
+        ).map((r) => ({
+          clientId: r.clientId,
+          scopes: Array.isArray(r.scopes) ? r.scopes.map(String) : [],
+          createdAt: r.createdAt.toISOString()
+        })),
         // Never the key itself or its hash: only enough to recognise which key it was.
         apiKeys: (
           await c.var.db
@@ -600,6 +618,46 @@ export function createApp(options: AppOptions = {}) {
           .where(eq(schema.user.id, checked.key.referenceId))
         if (!owner || owner.banned) throw new HTTPException(401, { message: 'Invalid key' })
         return c.json({ id: owner.id, email: owner.email })
+      })
+      // AI apps (Model Context Protocol) call this with an access token that a person approved. The token is checked
+      // against our signing keys (no database read), then the person is looked up so a suspension takes effect at once.
+      .all('/mcp', async (c) => {
+        const { baseURL, internalAdapter } = await c.var.auth.$context
+        const guarded = createMcpProtectedRequestHandler(
+          {
+            issuer: baseURL,
+            audience: mcpResource(c.env.BETTER_AUTH_URL),
+            jwtVerifyOptions: { requiredClaims: ['azp'] },
+            requiredScopes: [MCP_READ_SCOPE],
+            // Our own signing keys, read in-process: a Worker should not call its own address to fetch them.
+            jwksUrl: (() => c.var.auth.api.getJwks()) as unknown as string,
+            dpop: { replayStore: createDpopReplayStore(internalAdapter) }
+          },
+          async (request, claims) => {
+            const [owner] = await c.var.db
+              .select({ banned: schema.user.banned, banExpires: schema.user.banExpires })
+              .from(schema.user)
+              .where(eq(schema.user.id, String(claims.sub)))
+            const suspended =
+              owner?.banned && (!owner.banExpires || owner.banExpires.getTime() > Date.now())
+            if (!owner || suspended)
+              return Response.json({ error: 'invalid_token' }, { status: 401 })
+            return handleMcp(
+              request,
+              c.var.db,
+              String(claims.sub),
+              c.env.APP_NAME || DEFAULT_APP_NAME
+            )
+          }
+        )
+        return guarded(c.req.raw)
+      })
+      // OAuth discovery documents live at the site root (/.well-known/...), outside /api. index.ts sends them here,
+      // and Better Auth answers from the original path.
+      .on(['GET', 'HEAD'], '/__discovery/*', (c) => {
+        const url = new URL(c.req.url)
+        url.pathname = url.pathname.slice('/api/__discovery'.length)
+        return c.var.auth.handler(new Request(url, c.req.raw))
       })
       // Sign-in, sessions and sign-out: handled by Better Auth under /api/auth/*.
       .on(['GET', 'POST'], '/auth/*', async (c) => {

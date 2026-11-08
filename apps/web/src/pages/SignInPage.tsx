@@ -12,13 +12,28 @@ type State = 'idle' | 'sending' | 'sent'
 const passkeysSupported = (): boolean =>
   typeof window !== 'undefined' && 'PublicKeyCredential' in window
 
+/** The request an AI app started, without the signature (the authorize step signs it again), or null. */
+function oauthContinuation(params: URLSearchParams): string | null {
+  if (!params.get('client_id') || !params.get('sig')) return null
+  const copy = new URLSearchParams(params)
+  for (const key of ['sig', 'exp', 'next', 'error', 'team']) copy.delete(key)
+  return copy.toString()
+}
+
 export function SignInPage(): JSX.Element {
   const { data: session } = authClient.useSession()
   const [params] = useSearchParams()
   const desktop = readDesktopParams(params)
   // Where to go after signing in: a path on this site only (an invitation page, for example).
   const wanted = params.get('next') ?? ''
-  const next = /^\/(?![/\\])/.test(wanted) ? wanted : '/app'
+  // An AI app asked for a sign-in (the address carries the app's signed request): after signing in, go back to the
+  // authorize step, which then shows the consent page.
+  const oauthQuery = oauthContinuation(params)
+  const next = oauthQuery
+    ? `/api/auth/oauth2/authorize?${oauthQuery}`
+    : /^\/(?![/\\])/.test(wanted)
+      ? wanted
+      : '/app'
   const [email, setEmail] = useState('')
   const [state, setState] = useState<State>('idle')
   // Turnstile: the key comes from the API; with none, no challenge is asked for.
@@ -57,6 +72,22 @@ export function SignInPage(): JSX.Element {
     return (
       <p className="text-center text-muted-foreground" role="status">
         Signing you in to the desktop app...
+      </p>
+    )
+  }
+  if (session && oauthQuery) {
+    window.location.replace(next)
+    return (
+      <p className="text-center text-muted-foreground" role="status">
+        Continuing...
+      </p>
+    )
+  }
+  if (session && oauthQuery) {
+    window.location.replace(next)
+    return (
+      <p className="text-center text-muted-foreground" role="status">
+        Continuing...
       </p>
     )
   }

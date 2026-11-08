@@ -341,3 +341,19 @@ A company's directory (Okta, Microsoft Entra, JumpCloud ...) can add, update, sw
 - **Not built (yet):** mapping directory groups to team roles (groups are stored but grant nothing), a per-connection `externalId`-based link to company sign-in accounts, tombstones to stop a deleted account being recreated by the next sync.
 - **Setting up Okta or Entra:** SCIM base URL `<site>/api/scim/v2`, authentication "HTTP header" / bearer with the token, unique identifier `userName` (the work email), push new users, profile updates and deactivation. Send the sign-in subject (OIDC `sub`) as `externalId`.
 - Tested with `src/scim.test.ts` (filters, PATCH, groups) and the "directory sync" block in `test/api.test.ts` (tokens, discovery, expiry and rotation, provisioning, adoption rule, off and on, owner kept, PUT, return of a person, groups, isolation between teams, scopes, rejoin refusal, export, removal). Not yet tried against a real directory: run the Okta or Entra provisioning test against a preview copy first.
+
+## AI apps (MCP): sign in with OAuth, then call `/api/mcp`
+
+An AI assistant (Claude, ChatGPT, an IDE) can be allowed to read a person's account. It signs in the way any OAuth 2.1 app does, and then calls `POST /api/mcp` with a bearer token. Everything runs on our own Worker and database; no hosted service is involved.
+
+How it works:
+
+- **Better Auth's `mcp()` plugin is the OAuth server** (never add `oauthProvider()` next to it). It needs `jwt()` for signing keys and `disabledPaths: ['/token']`. Tokens are signed JWTs (Ed25519); the keys live in the `jwks` table.
+- **Apps identify themselves with a metadata document** (CIMD, `@better-auth/cimd`): the `client_id` is the https address of a JSON file the app publishes. Nobody can register a client by hand or by dynamic registration; `clientPrivileges` and `resourcePrivileges` lock Better Auth's client-admin endpoints to staff. Only staff may read the list, nobody may create.
+- **Fetching that document is the risky part.** `src/cimdFetch.ts` allows https only, a public host name (no IP address, local name, port or login), no redirects, 5 seconds and 64 KB. A Worker cannot pin the resolved address, as Better Auth's docs suggest; its requests leave from Cloudflare's network, so private networks are out of reach anyway.
+- **Sign-in and consent.** `/api/auth/oauth2/authorize` sends a signed-out person to `/sign-in` with a signed copy of the request; after sign-in (including the email link, whose `callbackURL` is the authorize address) the browser returns to authorize, which sends it to `/consent`. The page posts to `/api/auth/oauth2/consent`. People see and remove what they approved under "Connected apps" on the account page (`get-consents`, `delete-consent`).
+- **Discovery documents** live at the site root (`/.well-known/oauth-authorization-server/api/auth`, `/.well-known/oauth-protected-resource/api/mcp`). `wrangler.jsonc` sends those paths to the Worker (`run_worker_first`), and `index.ts` rewrites them to `/api/__discovery/...`.
+- **`/api/mcp`** checks the token against our own signing keys read in the same Worker (not by calling our own address), requires the `mcp:read` scope and the `azp` claim, then looks the person up so a suspension takes effect at once. The tools (`src/mcpServer.ts`) are read-only and limited to the person the token was issued to: `whoami`, `list_teams`, `list_devices`, `recent_security_activity`. It speaks the 2026-07-28 protocol only (`legacy: 'reject'`); requests need the `Mcp-Method` header, and `Mcp-Name` for tool calls.
+- **Housekeeping.** Approval and removal are in the security activity (`app_connected`, `app_disconnected`) and the data export (`connectedApps`, never the tokens). All OAuth rows cascade with the account. The daily job removes expired tokens (`src/oauthPrune.ts`). Refresh tokens rotate and an old one stops working at once.
+
+Not built: DPoP-bound tokens, the device-code grant, write tools.

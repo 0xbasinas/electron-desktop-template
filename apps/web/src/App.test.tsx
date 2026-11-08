@@ -1043,3 +1043,36 @@ describe('admin: one person activity', () => {
     expect(fetch).toHaveBeenCalledWith('/api/admin/audit/u2', expect.anything())
   })
 })
+
+describe('consent page (AI apps)', () => {
+  it('names the app, lists what it can do and posts the answer with the signed request', async () => {
+    auth.transfer.mockImplementation(async (path: string) =>
+      path === '/oauth2/public-client'
+        ? { data: { client_name: 'Test Assistant' }, error: null }
+        : { data: {}, error: null }
+    )
+    at('/consent?client_id=https%3A%2F%2Fa.example%2Fc.json&scope=openid%20mcp%3Aread&sig=abc')
+    expect(
+      await screen.findByRole('heading', { name: 'Connect Test Assistant?' })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Read your account/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Deny' }))
+    await waitFor(() =>
+      expect(auth.transfer).toHaveBeenCalledWith(
+        '/oauth2/consent',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.objectContaining({
+            accept: false,
+            oauth_query: expect.stringContaining('sig=abc')
+          })
+        })
+      )
+    )
+  })
+
+  it('refuses a visit that carries no signed request', () => {
+    at('/consent')
+    expect(screen.getByRole('heading', { name: 'This link does not work' })).toBeInTheDocument()
+  })
+})

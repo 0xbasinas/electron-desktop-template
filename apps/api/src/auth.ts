@@ -2,13 +2,16 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
 import { sso } from '@better-auth/sso'
+import { cimd } from '@better-auth/cimd'
+import { mcp } from '@better-auth/mcp'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { and, count, eq, inArray } from 'drizzle-orm'
 import { apiKey } from '@better-auth/api-key'
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
-import { admin, captcha, magicLink, organization } from 'better-auth/plugins'
+import { admin, captcha, jwt, magicLink, organization } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
+import { fetchClientMetadataResource } from './cimdFetch'
 import { withEncryptedProviderSecrets } from './secretStore'
 import { eventForCall, recordAudit } from './audit'
 import type { Db } from './db'
@@ -28,6 +31,12 @@ import type { Bindings } from './env'
 
 /** The most API keys one person may have. */
 export const MAX_API_KEYS = 10
+
+/** The scope an AI app is asked for to read the account (see /api/mcp). */
+export const MCP_READ_SCOPE = 'mcp:read'
+
+/** The address of the MCP endpoint: tokens made for AI apps are only good there. */
+export const mcpResource = (baseUrl: string): string => new URL('/api/mcp', baseUrl).href
 
 /** Used when the variable APP_NAME is not set. */
 export const DEFAULT_APP_NAME = 'Electron Desktop Template'
@@ -207,7 +216,8 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           path: ctx.path,
           failed,
           errorCode: failed ? (returned.body?.code as string | undefined) : undefined,
-          location: ctx.context.responseHeaders?.get('location')
+          location: ctx.context.responseHeaders?.get('location'),
+          accepted: (ctx.body as { accept?: unknown } | undefined)?.accept === true
         })
         if (!event) return
         const sessionUser = ctx.context.session?.user.id ?? null
@@ -316,6 +326,8 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       // Rate-limit bookkeeping and email sending happen after the response.
       backgroundTasks: { handler: waitUntil }
     },
+    // The session JWT route would share the AI apps' token signing key, so it stays off.
+    disabledPaths: ['/token'],
     plugins: [
       // Bot check on the one endpoint that sends email. Only when both keys are set, so the site never asks for a
       // challenge it cannot show. The client sends the token in the `x-captcha-response` header.
@@ -367,6 +379,27 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           )
         }
       }),
+      // AI apps (Model Context Protocol): this API is an OAuth 2.1 server and /api/mcp is the protected resource. Apps
+      // are identified by a metadata document at their own address (cimd); nothing can register itself, and nobody
+      // can create clients through the CRUD routes. Tokens are signed with an EdDSA key kept in the database.
+      jwt({
+        disableSettingJwtHeader: true,
+        jwks: { keyPairConfig: { alg: 'EdDSA', crv: 'Ed25519' } }
+      }),
+      mcp({
+        loginPage: '/sign-in',
+        consentPage: '/consent',
+        resource: mcpResource(env.BETTER_AUTH_URL),
+        scopes: ['openid', 'profile', 'email', 'offline_access', MCP_READ_SCOPE],
+        grantTypes: ['authorization_code', 'refresh_token'],
+        // The default 30 s window lets a stolen refresh token be replayed once; strict is the safer choice.
+        refreshTokenReuseInterval: 0,
+        // Only staff may look at or remove clients; clients are created by cimd, never by hand.
+        clientPrivileges: ({ action, user }) =>
+          (user as { role?: string | null } | undefined)?.role === 'admin' && action !== 'create',
+        resourcePrivileges: () => false
+      }),
+      cimd({ fetchClientMetadataResource, metadataProfile: 'mcp-2026-07-28' }),
       // Single sign-on for companies, by OpenID Connect. Only admins may register a provider (a company is set up by
       // us, not self-service), and a provider's domain must be proven with a DNS record before it can sign anyone in.
       sso({

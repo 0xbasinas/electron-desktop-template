@@ -59,6 +59,9 @@ export const accountExportSchema = z.object({
       })
     )
     .default([]),
+  connectedApps: z
+    .array(z.object({ clientId: z.string(), scopes: z.array(z.string()), createdAt: z.string() }))
+    .default([]),
   apiKeys: z
     .array(
       z.object({
