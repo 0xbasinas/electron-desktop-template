@@ -36,6 +36,22 @@ export const accountDeletion = sqliteTable(
   (table) => [index('account_deletion_due_idx').on(table.scheduledFor)]
 )
 
+/** One entry in a person's consent ledger (append-only): agreed to or withdrew a purpose, under a policy version. */
+export const consent = sqliteTable(
+  'consent',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => user.id, { onDelete: 'cascade' }),
+    purpose: text('purpose').notNull(),
+    granted: integer('granted', { mode: 'boolean' }).notNull(),
+    policyVersion: text('policy_version').notNull(),
+    at: integer('at').notNull()
+  },
+  (table) => [index('consent_user_idx').on(table.userId, table.at)]
+)
+
 /**
  * A feature flag: who gets a feature without a new release. `killed` is the kill switch (off for everyone, at once).
  * Not per person, so it needs no link to a user. Edited with `pnpm flags`.

@@ -14,6 +14,7 @@ import {
   feedbackInputSchema,
   newerWins,
   flagsQuerySchema,
+  setConsentInputSchema,
   parsePreferences,
   parseVersion,
   preferencesRecordSchema,
@@ -46,6 +47,7 @@ import type { Bindings } from './env'
 import { sameOriginOnly } from './origin'
 import { Resend } from 'resend'
 import { evaluateFlags, loadRules } from './flags'
+import { listConsents, recordConsent } from './consents'
 import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
@@ -344,6 +346,7 @@ export function createApp(options: AppOptions = {}) {
         })),
         signInActivity: await recentSignIns(c.var.db, c.var.userId),
         dataRequests: await listRequests(c.var.db, c.var.userId),
+        consents: (await listConsents(c.var.db, c.var.userId)).history,
         sessions: sessionRows.map((s) => ({
           createdAt: s.createdAt.toISOString(),
           expiresAt: s.expiresAt.toISOString(),
@@ -420,6 +423,12 @@ export function createApp(options: AppOptions = {}) {
         feedback: await countOf(schema.feedback),
         hasSyncedSettings: prefs !== undefined
       })
+    })
+    .get('/consents', async (c) => c.json(await listConsents(c.var.db, c.var.userId)))
+    .post('/consents', zValidator('json', setConsentInputSchema), async (c) => {
+      const { purpose, granted } = c.req.valid('json')
+      await recordConsent(c.var.db, c.var.userId, purpose, granted, Date.now())
+      return c.json(await listConsents(c.var.db, c.var.userId))
     })
     .get('/requests', async (c) => c.json(await listRequests(c.var.db, c.var.userId)))
     .get('/sign-ins', async (c) => c.json(await recentSignIns(c.var.db, c.var.userId)))
