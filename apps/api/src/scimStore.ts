@@ -160,7 +160,10 @@ async function teamHasRoom(db: Db, organizationId: string): Promise<boolean> {
   return (row?.n ?? 0) < MAX_MEMBERS_PER_TEAM
 }
 
-/** An existing sign-in account may be adopted only when its address is at a domain this team has proven by DNS. */
+/**
+ * A directory may create, adopt or re-address a sign-in account only at a domain this team has proven by DNS.
+ * Without this, anyone who can start a team could provision (or rewrite) accounts for strangers' addresses.
+ */
 async function mayLink(db: Db, organizationId: string, email: string): Promise<boolean> {
   const host = email.split('@')[1]?.toLowerCase() ?? ''
   const providers = await db
@@ -303,6 +306,12 @@ export async function createUser(
     if (same) throw new ScimError(409, 'uniqueness', 'That externalId is already used.')
   }
   const email = accountEmail(record)
+  if (!(await mayLink(db, conn.organizationId, email)))
+    throw new ScimError(
+      403,
+      undefined,
+      'That email address is not at a domain this team has proven. Add the company sign-in and verify its domain first.'
+    )
   const [existing] = await db
     .select({ id: schema.user.id })
     .from(schema.user)
@@ -314,7 +323,7 @@ export async function createUser(
       .where(
         and(eq(schema.scimUser.connectionId, conn.id), eq(schema.scimUser.userId, existing.id))
       )
-    if (linked || !(await mayLink(db, conn.organizationId, email)))
+    if (linked)
       throw new ScimError(409, 'uniqueness', 'An account with this email address already exists.')
   }
   if (!existing && (await isTombstoned(db, conn.organizationId, email)))
@@ -420,6 +429,12 @@ export async function saveUser(
   const statements: Statement[] = []
   const email = accountEmail(next)
   if (email !== accountEmail(prev)) {
+    if (!(await mayLink(db, conn.organizationId, email)))
+      throw new ScimError(
+        403,
+        undefined,
+        'That email address is not at a domain this team has proven.'
+      )
     const [taken] = await db
       .select({ id: schema.user.id })
       .from(schema.user)
@@ -436,7 +451,9 @@ export async function saveUser(
           name: next.displayName ?? email,
           updatedAt: new Date(now)
         })
-        .where(eq(schema.user.id, row.userId))
+        .where(eq(schema.user.id, row.userId)),
+      // Whoever was signed in under the old address is signed out.
+      db.delete(schema.session).where(eq(schema.session.userId, row.userId))
     )
   } else if (next.displayName && next.displayName !== prev.displayName) {
     statements.push(

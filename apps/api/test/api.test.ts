@@ -2130,6 +2130,12 @@ describe('directory sync (SCIM)', () => {
       body: JSON.stringify({ name: `Dir ${n}`, slug: slug ?? `dir-${n}-${Date.now()}` })
     })
     const team = (await made.json()) as { id: string }
+    // A directory may only provision addresses at a domain the team has proven.
+    await bindings.DB.prepare(
+      "INSERT INTO sso_provider (id, issuer, user_id, provider_id, organization_id, domain, domain_verified) SELECT ?, 'https://idp.dir', id, ?, ?, 'dir.example', 1 FROM user WHERE email = ?"
+    )
+      .bind(crypto.randomUUID(), `dir-${n}-${crypto.randomUUID()}`, team.id, ownerEmail)
+      .run()
     const conn = await s.call('/api/scim-connections', {
       method: 'POST',
       headers: { cookie: owner, ...json },
@@ -2312,7 +2318,7 @@ describe('directory sync (SCIM)', () => {
     const { team, token } = await connect(s)
     await signIn(s, 'already@proved.example')
     const refused = await scim(s, token, '/Users', 'POST', person('already@proved.example'))
-    expect(refused.status).toBe(409)
+    expect(refused.status).toBe(403)
     expect(await memberOf(team.id, 'already@proved.example')).toBe(false)
 
     await bindings.DB.prepare(
@@ -2637,6 +2643,55 @@ describe('directory sync (SCIM)', () => {
     })
     expect(cleared.status).toBe(204)
     expect((await scim(s, token, '/Users', 'POST', person(email))).status).toBe(201)
+  })
+
+  it('only provisions and re-addresses accounts at a domain the team has proven', async () => {
+    const s = setup()
+    const { team, token } = await connect(s)
+    // A stranger's address at some other domain: no account is made and nobody is added.
+    const stranger = `victim-${Date.now()}@gmail.example`
+    const refused = await scim(s, token, '/Users', 'POST', person(stranger))
+    expect(refused.status).toBe(403)
+    expect(
+      await bindings.DB.prepare('SELECT id FROM user WHERE email = ?').bind(stranger).first()
+    ).toBeNull()
+    expect(await memberOf(team.id, stranger)).toBe(false)
+
+    // At the proven domain it works, and the address cannot be moved to another domain afterwards.
+    const email = `ok-${Date.now()}@dir.example`
+    const created = (await (await scim(s, token, '/Users', 'POST', person(email))).json()) as {
+      id: string
+    }
+    const cookie = await signIn(s, email)
+    const moved = await scim(s, token, `/Users/${created.id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [
+        {
+          op: 'replace',
+          path: 'emails',
+          value: [{ value: 'attacker@evil.example', primary: true, type: 'work' }]
+        }
+      ]
+    })
+    expect(moved.status).toBe(403)
+    const still = await bindings.DB.prepare(
+      'SELECT email FROM user WHERE id = (SELECT user_id FROM scim_user WHERE id = ?)'
+    )
+      .bind(created.id)
+      .first<{ email: string }>()
+    expect(still?.email).toBe(email)
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(200)
+
+    // Inside the domain it is allowed, and the old sign-ins end.
+    const renamed = `renamed-${Date.now()}@dir.example`
+    const ok = await scim(s, token, `/Users/${created.id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [
+        { op: 'replace', path: 'emails', value: [{ value: renamed, primary: true, type: 'work' }] }
+      ]
+    })
+    expect(ok.status).toBe(200)
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(401)
   })
 
   it('makes people in a group team admins only when an owner says so, and takes it back', async () => {

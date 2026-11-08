@@ -365,3 +365,5 @@ How it works:
 - **Write tool.** `sign_out_device` exists only for a token that carries the `mcp:write` scope, which the person sees on the consent page. It can only sign out the token's own person's devices and is recorded in the security activity.
 
 Not built: more write tools, and pinning the resolved address of an app's metadata document (a Worker cannot do it; the limits in `cimdFetch.ts` stand in for it, and a Worker cannot reach private networks anyway).
+
+**SCIM only touches addresses at proven domains.** A directory can create, adopt or re-address a sign-in account only when the address is at a domain the team has proven by DNS (a verified company sign-in). Otherwise it gets 403. Without this, anyone who could start a team could pre-create accounts for strangers' addresses, suspend an address before its owner signed up, or move an account that someone later signed in to onto an address they control. Changing an account's address also signs out its existing sessions.
