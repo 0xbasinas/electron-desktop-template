@@ -5,6 +5,12 @@ import {
   deletionScheduledSchema,
   type DeletionScheduled
 } from './deletion'
+import {
+  changeEmailInputSchema,
+  confirmEmailChangeInputSchema,
+  emailChangedSchema,
+  type EmailChanged
+} from './emailChange'
 import { devicesSchema, type Device } from './devices'
 import { feedbackReceiptSchema, type FeedbackInput } from './feedback'
 import { z } from 'zod'
@@ -58,6 +64,10 @@ export interface ApiClient {
     cancelDeletion(): Promise<void>
     /** Keeps the account using the token from the email (no sign-in needed). */
     cancelDeletionWithToken(token: string): Promise<void>
+    /** Asks to move the account to a new address. A link goes to the new address; nothing changes until it is used. */
+    changeEmail(newEmail: string): Promise<void>
+    /** Finishes the change with the token from the email (no sign-in needed). */
+    confirmEmailChange(token: string): Promise<EmailChanged>
   }
 }
 
@@ -128,6 +138,16 @@ export function createApiClient({
         request('/account/deletion/cancel-with-token', null, {
           method: 'POST',
           body: JSON.stringify(cancelDeletionInputSchema.parse({ token }))
+        }),
+      changeEmail: (newEmail: string): Promise<void> =>
+        request('/account/email-change', null, {
+          method: 'POST',
+          body: JSON.stringify(changeEmailInputSchema.parse({ newEmail }))
+        }),
+      confirmEmailChange: (token: string): Promise<EmailChanged> =>
+        request('/account/email-change/confirm', emailChangedSchema, {
+          method: 'POST',
+          body: JSON.stringify(confirmEmailChangeInputSchema.parse({ token }))
         })
     }
   }

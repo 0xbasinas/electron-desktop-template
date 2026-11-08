@@ -128,6 +128,11 @@ The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /
 - A daily cron (`triggers.crons` in `apps/api/wrangler.jsonc`, handled by `scheduled` in `apps/api/src/index.ts`) calls `deleteDueAccounts`,
   which removes up to 50 due users per run. Sessions, linked accounts, passkeys, settings, feedback and device names go with the user
   (`ON DELETE CASCADE`) and unused sign-in links are removed. The cron needs no extra setup on Cloudflare's free plan.
+- **Email change.** `POST /api/account/email-change` ({ newEmail }) sends a link to the NEW address (it works for an hour, once; only a hash is stored in
+  `email_change`). Nothing changes until the link's page sends the token to `POST /api/account/email-change/confirm` (no sign-in needed; a click is
+  required, so link scanners cannot confirm). Then the account uses the new address and the old address gets a notice. The answer is the same for an
+  address that is already taken (so addresses cannot be probed), asking again within a minute gives 429, and `pendingEmail` shows on the account and export.
+
 - **When you add your own tables**, give them `userId ... references user.id ON DELETE CASCADE`, and add their rows to the export
   in `app.ts`, so deletion and export stay complete. The tests in `apps/api/test/api.test.ts` ("account") show how to check it.
 

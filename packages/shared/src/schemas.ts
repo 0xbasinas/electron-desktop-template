@@ -12,7 +12,9 @@ export const accountSchema = z.object({
   name: z.string(),
   createdAt: z.string(),
   /** When the account will be removed if the person asked for that and has not cancelled; otherwise null. */
-  deletionScheduledFor: z.string().nullable().default(null)
+  deletionScheduledFor: z.string().nullable().default(null),
+  /** An address the person asked to move to and has not confirmed yet; otherwise null. */
+  pendingEmail: z.string().nullable().default(null)
 })
 
 /** Everything we hold about a person (the "download my data" file). No tokens or secrets are included. */

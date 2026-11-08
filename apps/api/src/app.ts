@@ -2,7 +2,9 @@ import { zValidator } from '@hono/zod-validator'
 import * as Sentry from '@sentry/cloudflare'
 import {
   cancelDeletionInputSchema,
+  changeEmailInputSchema,
   clampUpdatedAt,
+  confirmEmailChangeInputSchema,
   describeDevice,
   renameDeviceInputSchema,
   type Device,
@@ -30,11 +32,18 @@ import {
   scheduledDeletion
 } from './deletion'
 import { createDb, schema, type Db } from './db'
+import {
+  confirmEmailChange,
+  confirmEmailMessage,
+  emailChangedNotice,
+  pendingEmail,
+  requestEmailChange
+} from './emailChange'
 import { createConsoleSender, createResendSender, type EmailSender } from './email'
 import type { Bindings } from './env'
 import { sameOriginOnly } from './origin'
 import { Resend } from 'resend'
-import { suppress, suppressionsFrom } from './suppression'
+import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
 type AppEnv = { Bindings: Bindings; Variables: Variables }
@@ -68,14 +77,16 @@ const requireSession =
 
 const toAccount = (
   row: typeof schema.user.$inferSelect,
-  deletionScheduledFor: number | null
+  deletionScheduledFor: number | null,
+  pendingEmail: string | null
 ): Account => ({
   id: row.id,
   email: row.email,
   name: row.name,
   createdAt: row.createdAt.toISOString(),
   deletionScheduledFor:
-    deletionScheduledFor === null ? null : new Date(deletionScheduledFor).toISOString()
+    deletionScheduledFor === null ? null : new Date(deletionScheduledFor).toISOString(),
+  pendingEmail
 })
 
 async function readPreferences(db: Db, userId: string): Promise<PreferencesRecord> {
@@ -257,7 +268,13 @@ export function createApp(options: AppOptions = {}) {
         .from(schema.user)
         .where(eq(schema.user.id, c.var.userId))
       if (!row) throw new HTTPException(404, { message: 'Not found' })
-      return c.json(toAccount(row, await scheduledDeletion(c.var.db, c.var.userId)))
+      return c.json(
+        toAccount(
+          row,
+          await scheduledDeletion(c.var.db, c.var.userId),
+          await pendingEmail(c.var.db, c.var.userId, Date.now())
+        )
+      )
     })
     .get('/export', async (c) => {
       const [row] = await c.var.db
@@ -298,7 +315,11 @@ export function createApp(options: AppOptions = {}) {
         .where(eq(schema.session.userId, c.var.userId))
       const body: AccountExport = {
         exportedAt: new Date().toISOString(),
-        account: toAccount(row, await scheduledDeletion(c.var.db, c.var.userId)),
+        account: toAccount(
+          row,
+          await scheduledDeletion(c.var.db, c.var.userId),
+          await pendingEmail(c.var.db, c.var.userId, Date.now())
+        ),
         preferences: await readPreferences(c.var.db, c.var.userId),
         passkeys: passkeyRows.map((p) => ({
           name: p.name,
@@ -360,6 +381,57 @@ export function createApp(options: AppOptions = {}) {
     .post('/deletion/cancel', async (c) => {
       await cancelDeletion(c.var.db, c.var.userId)
       return c.body(null, 204)
+    })
+    // Moving to a new address: a link goes to the NEW address and nothing changes until it is used. The answer is the
+    // same whether or not the address is already taken, so this cannot be used to find out who has an account.
+    .post('/email-change', zValidator('json', changeEmailInputSchema), async (c) => {
+      const { newEmail } = c.req.valid('json')
+      const [row] = await c.var.db
+        .select({ email: schema.user.email })
+        .from(schema.user)
+        .where(eq(schema.user.id, c.var.userId))
+      if (!row) throw new HTTPException(404, { message: 'Not found' })
+      if (row.email.toLowerCase() === newEmail) {
+        throw new HTTPException(400, { message: 'That is already your email address' })
+      }
+      const request = await requestEmailChange(c.var.db, c.var.userId, newEmail, Date.now())
+      if (request.status === 'too-soon') {
+        throw new HTTPException(429, { message: 'Wait a minute before asking again' })
+      }
+      if (request.status === 'sent' && !(await isSuppressed(c.var.db, newEmail))) {
+        const url = new URL('/account/confirm-email', c.env.BETTER_AUTH_URL)
+        url.searchParams.set('token', request.token)
+        const message = confirmEmailMessage(c.env.APP_NAME || DEFAULT_APP_NAME, url.href)
+        c.executionCtx.waitUntil(
+          sender(c.env)
+            .send({ to: newEmail, ...message })
+            .catch((error: unknown) => {
+              console.error('Could not send the email-change link', error)
+              Sentry.captureException(error)
+            })
+        )
+      }
+      return c.body(null, 202)
+    })
+
+  // The link in the email opens a page that sends the token here with a POST (an email scanner that only opens links
+  // cannot confirm by accident). No sign-in is needed: the person may open it on another device.
+  const confirmEmail = new Hono<AppEnv>()
+    .use(sameOriginOnly)
+    .post('/', zValidator('json', confirmEmailChangeInputSchema), async (c) => {
+      const changed = await confirmEmailChange(c.var.db, c.req.valid('json').token, Date.now())
+      if (!changed)
+        throw new HTTPException(404, { message: 'This link has expired or was already used' })
+      // Tell the old address, so a takeover does not go unnoticed.
+      c.executionCtx.waitUntil(
+        sender(c.env)
+          .send({
+            to: changed.oldEmail,
+            ...emailChangedNotice(c.env.APP_NAME || DEFAULT_APP_NAME, changed.newEmail)
+          })
+          .catch((error: unknown) => console.error('Could not send the notice', error))
+      )
+      return c.json({ email: changed.newEmail })
     })
 
   // Cancelling from the email link needs no sign-in (the person may be signed out). The link opens a page that
@@ -426,6 +498,7 @@ export function createApp(options: AppOptions = {}) {
       .route('/devices', devices)
       .route('/feedback', feedback)
       .route('/account/deletion/cancel-with-token', cancelByToken)
+      .route('/account/email-change/confirm', confirmEmail)
       .route('/account', account)
       .onError((error, c) => {
         if (error instanceof HTTPException) return c.json({ error: error.message }, error.status)

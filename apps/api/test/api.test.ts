@@ -916,3 +916,90 @@ describe('devices', () => {
     expect(response.status).toBe(403)
   })
 })
+
+describe('email change', () => {
+  const json = (cookie: string, method: string, body?: unknown): RequestInit => ({
+    method,
+    headers: { cookie, 'content-type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  })
+  const ask = (cookie: string, newEmail: string): RequestInit => json(cookie, 'POST', { newEmail })
+  const confirm = (token: string): RequestInit => ({
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token })
+  })
+
+  it('sends a link to the new address, and moves the account when it is used, once', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'old@example.com')
+    const before = s.sent.length
+    const asked = await s.call('/api/account/email-change', ask(cookie, 'New@Example.com'))
+    expect(asked.status).toBe(202)
+    expect(s.sent.length).toBe(before + 1)
+    const mail = s.sent[before]!
+    expect(mail.to).toBe('new@example.com')
+    const token = /token=(\S+)/.exec(mail.text)![1]!
+
+    // Nothing changes until the link is used; the account page shows what is pending.
+    const pending = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      email: string
+      pendingEmail: string | null
+    }
+    expect(pending).toMatchObject({ email: 'old@example.com', pendingEmail: 'new@example.com' })
+
+    const done = await s.call('/api/account/email-change/confirm', confirm(token))
+    expect(done.status).toBe(200)
+    expect(await done.json()).toEqual({ email: 'new@example.com' })
+    // The old address is told, and the account now uses the new one.
+    expect(s.sent.at(-1)!.to).toBe('old@example.com')
+    const me = (await (await s.call('/api/account', { headers: { cookie } })).json()) as {
+      email: string
+      pendingEmail: string | null
+    }
+    expect(me).toMatchObject({ email: 'new@example.com', pendingEmail: null })
+    expect((await s.call('/api/account/email-change/confirm', confirm(token))).status).toBe(404)
+  })
+
+  it('refuses the same address, bad input, and asking again within a minute', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'same@example.com')
+    expect(
+      (await s.call('/api/account/email-change', ask(cookie, 'same@example.com'))).status
+    ).toBe(400)
+    expect((await s.call('/api/account/email-change', ask(cookie, 'not-an-email'))).status).toBe(
+      400
+    )
+    expect((await s.call('/api/account/email-change', ask(cookie, 'a@example.com'))).status).toBe(
+      202
+    )
+    expect((await s.call('/api/account/email-change', ask(cookie, 'b@example.com'))).status).toBe(
+      429
+    )
+  })
+
+  it('answers the same for an address that is taken, and sends nothing', async () => {
+    const s = setup()
+    await signIn(s, 'taken@example.com')
+    const cookie = await signIn(s, 'asker@example.com')
+    const before = s.sent.length
+    const asked = await s.call('/api/account/email-change', ask(cookie, 'taken@example.com'))
+    expect(asked.status).toBe(202)
+    expect(s.sent.length).toBe(before)
+  })
+
+  it('needs a session to ask, and rejects wrong tokens and cross-site pages', async () => {
+    const s = setup()
+    expect((await s.call('/api/account/email-change', ask('', 'x@example.com'))).status).toBe(401)
+    expect(
+      (await s.call('/api/account/email-change/confirm', confirm('x'.repeat(43)))).status
+    ).toBe(404)
+    expect((await s.call('/api/account/email-change/confirm', confirm('short'))).status).toBe(400)
+    const cross = await s.call('/api/account/email-change/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: 'https://evil.example' },
+      body: JSON.stringify({ token: 'x'.repeat(43) })
+    })
+    expect(cross.status).toBe(403)
+  })
+})

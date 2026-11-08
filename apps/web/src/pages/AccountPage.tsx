@@ -3,6 +3,7 @@ import { Button } from '@repo/ui'
 import { ACCENTS, DELETION_COOLING_OFF_DAYS, type Account, type Preferences } from '@repo/shared'
 import { Navigate, useNavigate } from 'react-router'
 import { DevicesSection } from '../components/DevicesSection'
+import { EmailSection } from '../components/EmailSection'
 import { api } from '../lib/api'
 import { authClient } from '../lib/auth'
 import { AccentPicker, ThemePicker, type ThemeChoice } from '@repo/ui'
@@ -229,6 +230,8 @@ function AccountDetails(): JSX.Element {
           onChange={(next) => void chooseAccent(next)}
         />
       </section>
+
+      {account && <EmailSection email={account.email} pendingEmail={account.pendingEmail} />}
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Passkeys</h2>
