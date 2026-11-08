@@ -138,6 +138,12 @@ The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /
   account) also sends an alert email. `GET /api/account/sign-ins` lists the last 20, they appear in the export, and the daily cron prunes entries older
   than 90 days. The label is a rough match (`describeDevice`), so a browser update does not trigger alerts but a different browser or system does.
 
+- **Data requests.** Exports and deletions are logged in `data_request` (kind, status `received`/`processing`/`done`/`cancelled`, received and due dates;
+  the due date is 30 days after the request, `DATA_REQUEST_DEADLINE_DAYS`). An export is `done` at once; a deletion is `processing` during the cooling-off period, then
+  `done` (or `cancelled`). `GET /api/account/requests` lists them, they show on the privacy page and in the export, and when the daily job deletes an account the person gets
+  a last "your account was deleted" email. The table has **no link to the user and no email address** on purpose: the entry must outlive the account, so only a random id, the
+  kind, the status and the dates remain. The daily job removes entries after a year.
+
 - **When you add your own tables**, give them `userId ... references user.id ON DELETE CASCADE`, and add their rows to the export
   in `app.ts`, so deletion and export stay complete. The tests in `apps/api/test/api.test.ts` ("account") show how to check it.
 

@@ -59,3 +59,12 @@ export { privacySummarySchema } from './privacy'
 export type { PrivacySummary } from './privacy'
 export { appConfigSchema, isOlderVersion, parseVersion } from './version'
 export type { AppConfig } from './version'
+export {
+  DATA_REQUEST_DEADLINE_DAYS,
+  DATA_REQUEST_KINDS,
+  DATA_REQUEST_STATUSES,
+  dataRequestDeadline,
+  dataRequestSchema,
+  dataRequestsSchema
+} from './dataRequests'
+export type { DataRequest } from './dataRequests'

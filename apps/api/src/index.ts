@@ -1,7 +1,9 @@
 import * as Sentry from '@sentry/cloudflare'
-import { createApp } from './app'
+import { createApp, defaultEmailSender } from './app'
+import { DEFAULT_APP_NAME } from './auth'
 import { createDb } from './db'
-import { deleteDueAccounts } from './deletion'
+import { pruneRequests } from './dataRequests'
+import { accountDeletedEmail, deleteDueAccounts } from './deletion'
 import type { Bindings } from './env'
 import { withPreviewUrl } from './preview'
 import { pruneSignIns } from './signIns'
@@ -28,7 +30,11 @@ export default Sentry.withSentry(
     scheduled: async (_controller, env: Bindings) => {
       const db = createDb(env.DB)
       await pruneSignIns(db, Date.now())
-      const removed = await deleteDueAccounts(db, Date.now())
+      await pruneRequests(db, Date.now())
+      const appName = env.APP_NAME || DEFAULT_APP_NAME
+      const removed = await deleteDueAccounts(db, Date.now(), 50, (to) =>
+        defaultEmailSender(env).send({ to, ...accountDeletedEmail(appName) })
+      )
       if (removed > 0) console.log(`Deleted ${removed} account(s) whose cooling-off period ended`)
     }
   }
