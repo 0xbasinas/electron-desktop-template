@@ -646,7 +646,10 @@ export function createApp(options: AppOptions = {}) {
               request,
               c.var.db,
               String(claims.sub),
-              c.env.APP_NAME || DEFAULT_APP_NAME
+              c.env.APP_NAME || DEFAULT_APP_NAME,
+              String(claims.scope ?? '')
+                .split(' ')
+                .filter(Boolean)
             )
           }
         )

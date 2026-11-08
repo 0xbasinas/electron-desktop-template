@@ -1,17 +1,18 @@
 import { describeDevice } from '@repo/shared'
 import { McpServer, createMcpHandler } from '@modelcontextprotocol/server'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { z } from 'zod'
-import { recentAudit } from './audit'
+import { recentAudit, recordAudit } from './audit'
 import type { Db } from './db'
 import { schema } from './db'
 import { teamsOf } from './teams'
+import { MCP_WRITE_SCOPE } from './auth'
 
 /**
  * What an AI app may do for a person who approved it: read their own account. Nothing here changes data, and every
  * query is limited to the person the token was issued to (never to an id the app supplies).
  */
-function buildServer(db: Db, userId: string, appName: string): McpServer {
+function buildServer(db: Db, userId: string, appName: string, scopes: string[]): McpServer {
   const server = new McpServer({ name: appName, version: '1.0.0' })
   const reply = (value: unknown) => ({
     content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }],
@@ -63,6 +64,7 @@ function buildServer(db: Db, userId: string, appName: string): McpServer {
     async () => {
       const rows = await db
         .select({
+          id: schema.session.id,
           userAgent: schema.session.userAgent,
           createdAt: schema.session.createdAt,
           updatedAt: schema.session.updatedAt
@@ -71,6 +73,7 @@ function buildServer(db: Db, userId: string, appName: string): McpServer {
         .where(eq(schema.session.userId, userId))
       return reply(
         rows.map((r) => ({
+          id: r.id,
           device: describeDevice(r.userAgent),
           signedInAt: r.createdAt.toISOString(),
           lastUsedAt: r.updatedAt.toISOString()
@@ -90,6 +93,40 @@ function buildServer(db: Db, userId: string, appName: string): McpServer {
     async () => reply(await recentAudit(db, userId))
   )
 
+  // The one thing an app may change, and only when the person gave it the write permission: sign a device out.
+  if (scopes.includes(MCP_WRITE_SCOPE)) {
+    server.registerTool(
+      'sign_out_device',
+      {
+        title: 'Sign out a device',
+        description:
+          'Signs one device out of the account. Use an id from list_devices. The person can sign in again there.',
+        inputSchema: z.object({ id: z.string().min(1).max(200) }),
+        annotations: {
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: false
+        }
+      },
+      async ({ id }) => {
+        // Limited to the token's own person: an id that belongs to anyone else matches nothing.
+        const removed = await db
+          .delete(schema.session)
+          .where(and(eq(schema.session.id, id), eq(schema.session.userId, userId)))
+          .returning({ id: schema.session.id })
+        if (removed.length > 0)
+          await recordAudit(db, {
+            type: 'session_revoked',
+            outcome: 'success',
+            userId,
+            now: Date.now()
+          }).catch((error: unknown) => console.error('Could not record the sign-out', error))
+        return reply({ signedOut: removed.length > 0 })
+      }
+    )
+  }
+
   return server
 }
 
@@ -98,8 +135,11 @@ export function handleMcp(
   request: Request,
   db: Db,
   userId: string,
-  appName: string
+  appName: string,
+  scopes: string[] = []
 ): Promise<Response> {
-  const handler = createMcpHandler(() => buildServer(db, userId, appName), { legacy: 'reject' })
+  const handler = createMcpHandler(() => buildServer(db, userId, appName, scopes), {
+    legacy: 'reject'
+  })
   return handler.fetch(request)
 }

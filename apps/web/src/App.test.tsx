@@ -1089,3 +1089,42 @@ describe('consent page (AI apps)', () => {
     expect(screen.getByRole('heading', { name: 'This link does not work' })).toBeInTheDocument()
   })
 })
+
+describe('device page (AI apps without a browser)', () => {
+  it('names the app and what it asks for before approving, then approves', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    auth.transfer.mockImplementation(async (path: string) => {
+      if (path === '/device')
+        return {
+          data: {
+            status: 'pending',
+            client_id: 'https://a.example/c.json',
+            scope: 'openid mcp:read'
+          },
+          error: null
+        }
+      if (path === '/oauth2/public-client')
+        return { data: { client_name: 'Terminal Agent' }, error: null }
+      return { data: {}, error: null }
+    })
+    at('/device?user_code=ABCD1234')
+    await userEvent.click(screen.getByRole('button', { name: 'Continue' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Connect Terminal Agent?' })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/Read your account/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Allow' }))
+    await waitFor(() =>
+      expect(auth.transfer).toHaveBeenCalledWith(
+        '/device/approve',
+        expect.objectContaining({ body: { userCode: 'ABCD1234' } })
+      )
+    )
+    expect(await screen.findByRole('heading', { name: 'App connected' })).toBeInTheDocument()
+  })
+
+  it('sends a signed-out visitor to sign in first', () => {
+    at('/device?user_code=ABCD1234')
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+})

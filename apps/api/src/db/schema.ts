@@ -224,6 +224,8 @@ export const scimUser = sqliteTable(
       .references(() => user.id, { onDelete: 'cascade' }),
     /** True when the directory created the sign-in account (so removing the person can suspend it). */
     createdAccount: integer('created_account', { mode: 'boolean' }).notNull(),
+    /** True when a group made this person a team admin, so leaving the group takes it back (and only then). */
+    grantedAdmin: integer('granted_admin', { mode: 'boolean' }).notNull().default(false),
     userName: text('user_name').notNull(),
     userNameLower: text('user_name_lower').notNull(),
     externalId: text('external_id'),
@@ -242,6 +244,23 @@ export const scimUser = sqliteTable(
   ]
 )
 
+/**
+ * A person who deleted their account while a directory still lists them. Only a salted hash of the address is kept
+ * (not the address), so the next sync does not quietly create the account again; the team owner can clear the block.
+ */
+export const scimTombstone = sqliteTable(
+  'scim_tombstone',
+  {
+    id: text('id').primaryKey(),
+    organizationId: text('organization_id')
+      .notNull()
+      .references(() => organization.id, { onDelete: 'cascade' }),
+    emailHash: text('email_hash').notNull(),
+    createdAt: integer('created_at').notNull()
+  },
+  (table) => [uniqueIndex('scim_tombstone_idx').on(table.organizationId, table.emailHash)]
+)
+
 export const scimGroup = sqliteTable(
   'scim_group',
   {
@@ -252,6 +271,8 @@ export const scimGroup = sqliteTable(
     displayName: text('display_name').notNull(),
     displayNameLower: text('display_name_lower').notNull(),
     externalId: text('external_id'),
+    /** Set by a team owner: people in this group are team admins (never owners). Off unless an owner turns it on. */
+    grantsAdmin: integer('grants_admin', { mode: 'boolean' }).notNull().default(false),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull()
   },

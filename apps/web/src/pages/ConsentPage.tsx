@@ -11,8 +11,8 @@ const SCOPE_TEXT: Record<string, string> = {
   profile: 'See your name',
   email: 'See your email address',
   offline_access: 'Stay connected until you remove it',
-  'mcp:read':
-    'Read your account: teams, devices and recent security activity (it cannot change anything)'
+  'mcp:read': 'Read your account: teams, devices and recent security activity',
+  'mcp:write': 'Sign your devices out of your account'
 }
 
 /**

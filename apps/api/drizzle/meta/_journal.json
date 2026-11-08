@@ -148,6 +148,27 @@
       "when": 1794165939645,
       "tag": "0020_greedy_johnny_blaze",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1794167571933,
+      "tag": "0021_careless_vector",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1794167700294,
+      "tag": "0022_military_shotgun",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1794167790697,
+      "tag": "0023_worthless_lily_hollister",
+      "breakpoints": true
     }
   ]
 }

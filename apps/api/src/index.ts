@@ -9,6 +9,7 @@ import { withPreviewUrl } from './preview'
 import { pruneSignIns } from './signIns'
 import { pruneAudit } from './audit'
 import { pruneOauth } from './oauthPrune'
+import { pruneTombstones } from './tombstones'
 import { isDiscoveryPath } from './wellKnown'
 
 export type { AppType } from './app'
@@ -44,6 +45,7 @@ export default Sentry.withSentry(
       await pruneSignIns(db, Date.now())
       await pruneAudit(db, Date.now())
       await pruneOauth(db, Date.now())
+      await pruneTombstones(db, Date.now())
       await pruneRequests(db, Date.now())
       const appName = env.APP_NAME || DEFAULT_APP_NAME
       const removed = await deleteDueAccounts(db, Date.now(), 50, (to) =>

@@ -42,9 +42,12 @@ export type AuditType =
   | 'scim_connection_removed'
   | 'scim_token_created'
   | 'scim_token_revoked'
+  | 'scim_group_role_on'
+  | 'scim_group_role_off'
   | 'scim_user_provisioned'
   | 'scim_user_deactivated'
   | 'scim_user_reactivated'
+  | 'scim_role_changed'
 
 export interface AuditInput {
   type: AuditType

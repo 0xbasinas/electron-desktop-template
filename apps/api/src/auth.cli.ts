@@ -7,6 +7,7 @@ import { passkey } from '@better-auth/passkey'
 import { sso } from '@better-auth/sso'
 import { cimd } from '@better-auth/cimd'
 import { mcp } from '@better-auth/mcp'
+import { oauthDeviceAuthorization } from '@better-auth/oauth-provider'
 import { betterAuth } from 'better-auth'
 import { admin, jwt, magicLink, organization } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
@@ -33,6 +34,7 @@ export const auth = betterAuth({
       fetchClientMetadataResource: async () => new Response('', { status: 404 }),
       metadataProfile: 'mcp-2026-07-28'
     }),
+    oauthDeviceAuthorization({ verificationUri: '/device' }),
     passkey(),
     magicLink({ sendMagicLink: async () => {} })
   ]

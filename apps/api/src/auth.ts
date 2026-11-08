@@ -4,6 +4,7 @@ import { passkey } from '@better-auth/passkey'
 import { sso } from '@better-auth/sso'
 import { cimd } from '@better-auth/cimd'
 import { mcp } from '@better-auth/mcp'
+import { DEVICE_CODE_GRANT_TYPE, oauthDeviceAuthorization } from '@better-auth/oauth-provider'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { and, count, eq, inArray } from 'drizzle-orm'
@@ -28,6 +29,7 @@ import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
 import { isDeprovisioned } from './scimStore'
 import { revokeAppAccess } from './oauthPrune'
+import { tombstoneStatements } from './tombstones'
 import type { Bindings } from './env'
 
 /** The most API keys one person may have. */
@@ -35,6 +37,7 @@ export const MAX_API_KEYS = 10
 
 /** The scope an AI app is asked for to read the account (see /api/mcp). */
 export const MCP_READ_SCOPE = 'mcp:read'
+export const MCP_WRITE_SCOPE = 'mcp:write'
 
 /** The address of the MCP endpoint: tokens made for AI apps are only good there. */
 export const mcpResource = (baseUrl: string): string => new URL('/api/mcp', baseUrl).href
@@ -105,7 +108,8 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         // These start a fetch of an AI app's address (or read one), so they get a tighter limit than the rest.
         '/oauth2/authorize': { window: 60, max: 10 },
         '/oauth2/public-client': { window: 60, max: 20 },
-        '/oauth2/token': { window: 60, max: 20 }
+        '/oauth2/token': { window: 60, max: 20 },
+        '/device/code': { window: 60, max: 10 }
       }
     },
     hooks: {
@@ -272,6 +276,14 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     },
     databaseHooks: {
       user: {
+        delete: {
+          // A directory (SCIM) that still lists the person must not quietly create the account again.
+          before: async (deleted) => {
+            await revokeAppAccess(db, deleted.id)
+            const blocks = await tombstoneStatements(db, deleted.id)
+            if (blocks.length > 0) await db.batch(blocks as [(typeof blocks)[0], ...typeof blocks])
+          }
+        },
         create: {
           // A company's identity provider may only create accounts at the company's own domain. Without this a
           // provider whose domain was proven could mint accounts (and keep a session) for any address, and the
@@ -407,8 +419,8 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         loginPage: '/sign-in',
         consentPage: '/consent',
         resource: mcpResource(env.BETTER_AUTH_URL),
-        scopes: ['openid', 'profile', 'email', 'offline_access', MCP_READ_SCOPE],
-        grantTypes: ['authorization_code', 'refresh_token'],
+        scopes: ['openid', 'profile', 'email', 'offline_access', MCP_READ_SCOPE, MCP_WRITE_SCOPE],
+        grantTypes: ['authorization_code', 'refresh_token', DEVICE_CODE_GRANT_TYPE],
         // The default 30 s window lets a stolen refresh token be replayed once; strict is the safer choice.
         refreshTokenReuseInterval: 0,
         // Only staff may look at or remove clients; clients are created by cimd, never by hand.
@@ -417,6 +429,9 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         resourcePrivileges: () => false
       }),
       cimd({ fetchClientMetadataResource, metadataProfile: 'mcp-2026-07-28' }),
+      // For AI apps with no browser of their own (a terminal agent): they show a short code, the person types it on
+      // /device while signed in and approves there. The approval page names the app and what it asks for.
+      oauthDeviceAuthorization({ verificationUri: '/device' }),
       // Single sign-on for companies, by OpenID Connect. Only admins may register a provider (a company is set up by
       // us, not self-service), and a provider's domain must be proven with a DNS record before it can sign anyone in.
       sso({

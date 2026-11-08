@@ -19,6 +19,7 @@ import { StatusPage } from './pages/StatusPage'
 import { SubprocessorsPage } from './pages/SubprocessorsPage'
 import { SignInPage } from './pages/SignInPage'
 import { ConsentPage } from './pages/ConsentPage'
+import { DevicePage } from './pages/DevicePage'
 
 export function App(): JSX.Element {
   return (
@@ -32,6 +33,7 @@ export function App(): JSX.Element {
         <Route path="sub-processors" element={<SubprocessorsPage />} />
         <Route path="sign-in" element={<SignInPage />} />
         <Route path="consent" element={<ConsentPage />} />
+        <Route path="device" element={<DevicePage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="teams" element={<TeamsPage />} />
         <Route path="accept-invitation/:id" element={<AcceptInvitationPage />} />

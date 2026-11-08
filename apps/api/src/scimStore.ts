@@ -2,6 +2,7 @@ import { and, count, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import type { Db } from './db'
 import { schema } from './db'
 import { revokeAppAccessStatements } from './oauthPrune'
+import { isTombstoned } from './tombstones'
 import {
   accountEmail,
   emailValuesOf,
@@ -316,6 +317,12 @@ export async function createUser(
     if (linked || !(await mayLink(db, conn.organizationId, email)))
       throw new ScimError(409, 'uniqueness', 'An account with this email address already exists.')
   }
+  if (!existing && (await isTombstoned(db, conn.organizationId, email)))
+    throw new ScimError(
+      409,
+      undefined,
+      'This person deleted their account. A team owner must allow it again before the directory can recreate it.'
+    )
   if (record.active && !(await teamHasRoom(db, conn.organizationId)))
     throw new ScimError(409, undefined, 'The team has the most members allowed.')
 
@@ -325,6 +332,7 @@ export async function createUser(
     connectionId: conn.id,
     userId,
     createdAccount: !existing,
+    grantedAdmin: false,
     userName: record.userName,
     userNameLower: record.userName.toLowerCase(),
     externalId: record.externalId,
@@ -634,6 +642,7 @@ export async function createGroup(
     displayName: input.displayName,
     displayNameLower: input.displayName.toLowerCase(),
     externalId: input.externalId,
+    grantsAdmin: false,
     createdAt: now,
     updatedAt: now
   }
@@ -687,4 +696,67 @@ export async function saveGroup(
 
 export async function deleteGroup(db: Db, row: GroupRow): Promise<void> {
   await batch(db, [db.delete(schema.scimGroup).where(eq(schema.scimGroup.id, row.id))])
+}
+
+/**
+ * Team admin rights that follow directory groups. A team owner marks a group as one that grants admin; people in such
+ * a group become admins, and lose it again when they leave (only if the group gave it to them). Owners are never
+ * touched, and nothing here can make anyone an owner.
+ */
+export async function syncRoles(
+  db: Db,
+  conn: Connection,
+  scimUserIds: string[]
+): Promise<ScimEvent[]> {
+  const events: ScimEvent[] = []
+  for (const id of [...new Set(scimUserIds)]) {
+    const [row] = await db
+      .select()
+      .from(schema.scimUser)
+      .where(and(eq(schema.scimUser.id, id), eq(schema.scimUser.connectionId, conn.id)))
+    if (!row) continue
+    const [seat] = await db
+      .select({ id: schema.member.id, role: schema.member.role })
+      .from(schema.member)
+      .where(
+        and(
+          eq(schema.member.organizationId, conn.organizationId),
+          eq(schema.member.userId, row.userId)
+        )
+      )
+    if (!seat || seat.role === 'owner' || seat.role.split(',').includes('owner')) continue
+    const [granting] = await db
+      .select({ groupId: schema.scimGroupMember.groupId })
+      .from(schema.scimGroupMember)
+      .innerJoin(schema.scimGroup, eq(schema.scimGroup.id, schema.scimGroupMember.groupId))
+      .where(
+        and(eq(schema.scimGroupMember.scimUserId, row.id), eq(schema.scimGroup.grantsAdmin, true))
+      )
+    const wants = Boolean(granting) && row.active
+    if (wants && seat.role === 'member') {
+      await batch(db, [
+        db.update(schema.member).set({ role: 'admin' }).where(eq(schema.member.id, seat.id)),
+        db.update(schema.scimUser).set({ grantedAdmin: true }).where(eq(schema.scimUser.id, row.id))
+      ])
+      events.push({ type: 'scim_role_changed', userId: row.userId })
+    } else if (!wants && row.grantedAdmin) {
+      await batch(db, [
+        ...(seat.role === 'admin'
+          ? [db.update(schema.member).set({ role: 'member' }).where(eq(schema.member.id, seat.id))]
+          : []),
+        db
+          .update(schema.scimUser)
+          .set({ grantedAdmin: false })
+          .where(eq(schema.scimUser.id, row.id))
+      ])
+      if (seat.role === 'admin') events.push({ type: 'scim_role_changed', userId: row.userId })
+    }
+  }
+  return events
+}
+
+export async function setGroupGrantsAdmin(db: Db, row: GroupRow, grants: boolean): Promise<void> {
+  await batch(db, [
+    db.update(schema.scimGroup).set({ grantsAdmin: grants }).where(eq(schema.scimGroup.id, row.id))
+  ])
 }

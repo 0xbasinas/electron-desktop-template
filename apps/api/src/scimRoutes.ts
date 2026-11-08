@@ -5,6 +5,7 @@ import { Hono, type Context, type MiddlewareHandler } from 'hono'
 import { HTTPException } from 'hono/http-exception'
 import { z } from 'zod'
 import { recordAudit } from './audit'
+import { clearTombstones, countTombstones } from './tombstones'
 import { schema, type Db } from './db'
 import type { Bindings } from './env'
 import { sameOriginOnly } from './origin'
@@ -45,6 +46,8 @@ import {
   membersOf,
   recordOf,
   saveGroup,
+  setGroupGrantsAdmin,
+  syncRoles,
   saveUser,
   type Connection,
   type ScimEvent
@@ -214,14 +217,14 @@ export function createScimApi(): Hono<ScimEnv> {
       userFromBody(await readJson(c)),
       Date.now()
     )
-    record(c, saved.events)
+    record(c, [...saved.events, ...(await syncRoles(c.var.db, c.var.conn, [row.id]))])
     return send(c, userResource(saved.row, recordOf(saved.row), base(c)))
   })
   api.patch('/Users/:id', need('scim.users.write'), async (c) => {
     const row = await getUserRow(c.var.db, c.var.conn, c.req.param('id'))
     const next = patchUser(recordOf(row), parsePatch(await readJson(c)))
     const saved = await saveUser(c.var.db, c.var.conn, row, next, Date.now())
-    record(c, saved.events)
+    record(c, [...saved.events, ...(await syncRoles(c.var.db, c.var.conn, [row.id]))])
     return send(c, userResource(saved.row, recordOf(saved.row), base(c)))
   })
   api.delete('/Users/:id', need('scim.users.write'), async (c) => {
@@ -263,17 +266,23 @@ export function createScimApi(): Hono<ScimEnv> {
       groupFromBody(await readJson(c), false),
       Date.now()
     )
+    record(c, await syncRoles(c.var.db, c.var.conn, await memberIdsOf(c.var.db, row.id)))
     c.header('location', `${base(c)}/Groups/${row.id}`)
     return send(c, (await groupJson(c, [row]))[0], 201)
   })
   api.put('/Groups/:id', need('scim.groups.write'), async (c) => {
     const row = await getGroupRow(c.var.db, c.var.conn, c.req.param('id'))
+    const before = await memberIdsOf(c.var.db, row.id)
     const saved = await saveGroup(
       c.var.db,
       c.var.conn,
       row,
       groupFromBody(await readJson(c), false),
       Date.now()
+    )
+    record(
+      c,
+      await syncRoles(c.var.db, c.var.conn, [...before, ...(await memberIdsOf(c.var.db, row.id))])
     )
     return send(c, (await groupJson(c, [saved]))[0])
   })
@@ -286,10 +295,20 @@ export function createScimApi(): Hono<ScimEnv> {
     }
     const next = patchGroup(current, parsePatch(await readJson(c)))
     const saved = await saveGroup(c.var.db, c.var.conn, row, next, Date.now())
+    record(
+      c,
+      await syncRoles(c.var.db, c.var.conn, [
+        ...current.members,
+        ...(await memberIdsOf(c.var.db, row.id))
+      ])
+    )
     return send(c, (await groupJson(c, [saved]))[0])
   })
   api.delete('/Groups/:id', need('scim.groups.write'), async (c) => {
-    await deleteGroup(c.var.db, await getGroupRow(c.var.db, c.var.conn, c.req.param('id')))
+    const gone = await getGroupRow(c.var.db, c.var.conn, c.req.param('id'))
+    const members = await memberIdsOf(c.var.db, gone.id)
+    await deleteGroup(c.var.db, gone)
+    record(c, await syncRoles(c.var.db, c.var.conn, members))
     return send(c, null, 204)
   })
 
@@ -350,6 +369,8 @@ export function createScimAdmin(requireSession: MiddlewareHandler): Hono<AdminEn
       | 'scim_connection_removed'
       | 'scim_token_created'
       | 'scim_token_revoked'
+      | 'scim_group_role_on'
+      | 'scim_group_role_off'
   ) =>
     c.executionCtx.waitUntil(
       recordAudit(c.var.db, {
@@ -382,6 +403,7 @@ export function createScimAdmin(requireSession: MiddlewareHandler): Hono<AdminEn
       .select()
       .from(schema.scimConnection)
       .where(eq(schema.scimConnection.organizationId, organizationId))
+    const blocked = await countTombstones(c.var.db, [organizationId])
     const out = []
     for (const conn of connections) {
       const credentials = await c.var.db
@@ -403,6 +425,7 @@ export function createScimAdmin(requireSession: MiddlewareHandler): Hono<AdminEn
         name: conn.name,
         createdAt: new Date(conn.createdAt).toISOString(),
         people: people?.n ?? 0,
+        blocked: blocked.get(conn.organizationId) ?? 0,
         credentials: credentials.map((k) => ({
           id: k.id,
           expiresAt: new Date(k.expiresAt).toISOString(),
@@ -470,6 +493,54 @@ export function createScimAdmin(requireSession: MiddlewareHandler): Hono<AdminEn
         )
       )
     audit(c, 'scim_token_revoked')
+    return c.body(null, 204)
+  })
+
+  // The groups a directory has pushed, with whether each one makes its people team admins.
+  admin.get('/:id/groups', async (c) => {
+    const conn = await connectionFor(c, c.req.param('id'))
+    const rows = await c.var.db
+      .select({
+        id: schema.scimGroup.id,
+        name: schema.scimGroup.displayName,
+        grantsAdmin: schema.scimGroup.grantsAdmin
+      })
+      .from(schema.scimGroup)
+      .where(eq(schema.scimGroup.connectionId, conn.id))
+    return c.json({ groups: rows })
+  })
+
+  // Owners only (connectionFor checks): make a group grant team admin, or stop it. Never owner.
+  admin.put(
+    '/:id/groups/:groupId',
+    zValidator('json', z.object({ grantsAdmin: z.boolean() })),
+    async (c) => {
+      const conn = await connectionFor(c, c.req.param('id'))
+      const group = await getGroupRow(c.var.db, conn, c.req.param('groupId')).catch(() => null)
+      if (!group) throw new HTTPException(404, { message: 'No such group' })
+      await setGroupGrantsAdmin(c.var.db, group, c.req.valid('json').grantsAdmin)
+      const events = await syncRoles(c.var.db, conn, await memberIdsOf(c.var.db, group.id))
+      c.executionCtx.waitUntil(
+        Promise.all(
+          events.map((e) =>
+            recordAudit(c.var.db, {
+              type: e.type,
+              outcome: 'success',
+              userId: e.userId,
+              now: Date.now()
+            }).catch((error: unknown) => Sentry.captureException(error))
+          )
+        )
+      )
+      audit(c, c.req.valid('json').grantsAdmin ? 'scim_group_role_on' : 'scim_group_role_off')
+      return c.body(null, 204)
+    }
+  )
+
+  // People who deleted their accounts are not recreated by the directory until an owner allows it.
+  admin.delete('/:id/tombstones', async (c) => {
+    const conn = await connectionFor(c, c.req.param('id'))
+    await clearTombstones(c.var.db, conn.organizationId)
     return c.body(null, 204)
   })
 

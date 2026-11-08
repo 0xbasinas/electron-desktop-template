@@ -11,6 +11,7 @@ interface Connection {
   id: string
   name: string
   people: number
+  blocked?: number
   credentials: Credential[]
 }
 interface Shown {
@@ -19,6 +20,64 @@ interface Shown {
 }
 
 const day = (iso: string): string => new Date(iso).toLocaleDateString()
+
+interface GroupRow {
+  id: string
+  name: string
+  grantsAdmin: boolean
+}
+
+/** The groups the directory pushed. Ticking one makes everyone in it a team admin (never an owner). */
+function GroupRoles({ connectionId }: { connectionId: string }): JSX.Element | null {
+  const [groups, setGroups] = useState<GroupRow[]>([])
+  const [reload, setReload] = useState(0)
+  useEffect(() => {
+    let cancelled = false
+    void fetch(`/api/scim-connections/${connectionId}/groups`, { credentials: 'same-origin' })
+      .then((r) => (r.ok ? (r.json() as Promise<{ groups: GroupRow[] }>) : { groups: [] }))
+      .then((body) => {
+        if (!cancelled) setGroups(body.groups)
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [connectionId, reload])
+  if (groups.length === 0) return null
+  async function toggle(group: GroupRow): Promise<void> {
+    if (
+      !group.grantsAdmin &&
+      !window.confirm(
+        `Make everyone in "${group.name}" a team admin? Whoever manages that group in your directory will then decide who can change this team's sign-in settings.`
+      )
+    )
+      return
+    await fetch(`/api/scim-connections/${connectionId}/groups/${group.id}`, {
+      method: 'PUT',
+      credentials: 'same-origin',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ grantsAdmin: !group.grantsAdmin })
+    })
+    setReload((n) => n + 1)
+  }
+  return (
+    <div className="space-y-1">
+      <p className="text-muted-foreground">
+        Groups from the directory. A ticked group makes its people team admins.
+      </p>
+      <ul className="space-y-1">
+        {groups.map((g) => (
+          <li key={g.id}>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={g.grantsAdmin} onChange={() => void toggle(g)} />
+              {g.name}
+            </label>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 /** Team owners: connect the company directory (Okta, Entra ...) so staff are added and removed automatically. */
 export function DirectorySyncSection({ organizationId }: { organizationId: string }): JSX.Element {
@@ -88,6 +147,17 @@ export function DirectorySyncSection({ organizationId }: { organizationId: strin
     refresh()
   }
 
+  async function allowAgain(id: string): Promise<void> {
+    if (
+      !window.confirm(
+        'Let the directory create these accounts again? They were deleted by the people themselves.'
+      )
+    )
+      return
+    await call(`/${id}/tombstones`, 'DELETE')
+    refresh()
+  }
+
   async function remove(id: string): Promise<void> {
     if (
       !window.confirm(
@@ -132,6 +202,18 @@ export function DirectorySyncSection({ organizationId }: { organizationId: strin
               </Button>
             </span>
           </div>
+          {(conn.blocked ?? 0) > 0 && (
+            <p className="flex items-center justify-between gap-2 text-muted-foreground">
+              <span>
+                {conn.blocked} deleted {conn.blocked === 1 ? 'account is' : 'accounts are'} not
+                being recreated by the directory.
+              </span>
+              <Button variant="outline" size="sm" onClick={() => void allowAgain(conn.id)}>
+                Allow again
+              </Button>
+            </p>
+          )}
+          <GroupRoles connectionId={conn.id} />
           <ul className="space-y-1">
             {conn.credentials
               .filter((k) => !k.revoked)
