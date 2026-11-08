@@ -2,7 +2,7 @@ import { createApiClient } from '@repo/shared/client'
 import logger from 'electron-log/main'
 import { app, BrowserWindow } from 'electron'
 import { randomUUID } from 'crypto'
-import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { IPC } from '../shared/ipc'
 import { accountAvailable, apiUrl } from './auth'
@@ -22,12 +22,11 @@ export const getFlags = (): Record<string, boolean> => flags
 function installId(): string {
   const file = join(app.getPath('userData'), 'install-id')
   try {
-    if (existsSync(file)) {
-      const saved = readFileSync(file, 'utf8').trim()
-      if (/^[A-Za-z0-9_-]{8,64}$/.test(saved)) return saved
-    }
+    // Read directly instead of checking first: the file could change between a check and the read.
+    const saved = readFileSync(file, 'utf8').trim()
+    if (/^[A-Za-z0-9_-]{8,64}$/.test(saved)) return saved
   } catch {
-    // Fall through and make a new one.
+    // Missing or unreadable: make a new one.
   }
   const id = randomUUID()
   try {
