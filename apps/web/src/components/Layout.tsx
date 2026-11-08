@@ -63,6 +63,10 @@ export function Layout(): JSX.Element {
           Sub-processors
         </Link>{' '}
         ·{' '}
+        <Link className="underline" to="/status">
+          Version status
+        </Link>{' '}
+        ·{' '}
         <a className="underline" href="/.well-known/security.txt">
           Security
         </a>
