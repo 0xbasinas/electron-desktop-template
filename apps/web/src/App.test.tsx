@@ -43,11 +43,18 @@ const accountApi = vi.hoisted(() => ({
   privacy: vi.fn(),
   confirmEmailChange: vi.fn()
 }))
+const appConfigApi = vi.hoisted(() => vi.fn())
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 const feedbackApi = vi.hoisted(() => ({ send: vi.fn() }))
 const devicesApi = vi.hoisted(() => ({ list: vi.fn(), rename: vi.fn(), signOut: vi.fn() }))
 vi.mock('./lib/api', () => ({
-  api: { account: accountApi, preferences: prefsApi, feedback: feedbackApi, devices: devicesApi }
+  api: {
+    appConfig: appConfigApi,
+    account: accountApi,
+    preferences: prefsApi,
+    feedback: feedbackApi,
+    devices: devicesApi
+  }
 }))
 
 beforeEach(() => {
@@ -70,6 +77,7 @@ beforeEach(() => {
     pendingEmail: null
   })
   localStorage.clear()
+  appConfigApi.mockReset().mockResolvedValue({ minimumVersion: null })
   prefsApi.get.mockReset().mockResolvedValue({
     preferences: { theme: 'system', accent: 'neutral' },
     updatedAt: 0
@@ -297,6 +305,50 @@ describe('signing in from the desktop app', () => {
     at('/auth/desktop')
     expect(screen.getByRole('heading', { name: 'Opening the desktop app' })).toBeInTheDocument()
     expect(auth.ensureRedirect).toHaveBeenCalled()
+  })
+})
+
+describe('status page', () => {
+  const release = (tag: string, prerelease: boolean, hoursAgo: number): unknown => ({
+    tag_name: tag,
+    html_url: 'https://github.com/o/r/releases/tag/' + tag,
+    assets: [],
+    prerelease,
+    published_at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString()
+  })
+
+  it('shows the newest stable and beta versions and the usual rollout stage', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => [release('v1.0.9-beta', true, 3), release('v1.0.8', false, 30)]
+      })
+    )
+    appConfigApi.mockResolvedValue({ minimumVersion: '1.0.5' })
+    at('/status')
+    expect(await screen.findByText('v1.0.8')).toBeInTheDocument()
+    expect(screen.getByText('v1.0.9-beta')).toBeInTheDocument()
+    expect(screen.getByText(/about 25% of people/)).toBeInTheDocument()
+    expect(screen.getByText(/older than 1.0.5 must be updated/)).toBeInTheDocument()
+  })
+
+  it('still works when the minimum version cannot be read', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => [release('v1.0.8', false, 100)] })
+    )
+    appConfigApi.mockRejectedValue(new Error('down'))
+    at('/status')
+    expect(await screen.findByText('Offered to everyone.')).toBeInTheDocument()
+    expect(screen.getByText(/No limit/)).toBeInTheDocument()
+  })
+
+  it('says so when the releases cannot be loaded', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/status')
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load the releases')
   })
 })
 
