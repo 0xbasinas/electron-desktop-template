@@ -134,6 +134,13 @@
       "when": 1794162946555,
       "tag": "0018_clean_black_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1794164492326,
+      "tag": "0019_striped_hulk",
+      "breakpoints": true
     }
   ]
 }

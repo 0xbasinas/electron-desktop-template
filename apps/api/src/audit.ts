@@ -36,6 +36,13 @@ export type AuditType =
   | 'sso_provider_updated'
   | 'sso_provider_deleted'
   | 'sso_user_provisioned'
+  | 'scim_connection_created'
+  | 'scim_connection_removed'
+  | 'scim_token_created'
+  | 'scim_token_revoked'
+  | 'scim_user_provisioned'
+  | 'scim_user_deactivated'
+  | 'scim_user_reactivated'
 
 export interface AuditInput {
   type: AuditType

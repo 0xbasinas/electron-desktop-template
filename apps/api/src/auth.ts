@@ -23,6 +23,7 @@ import {
 import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
+import { isDeprovisioned } from './scimStore'
 import type { Bindings } from './env'
 
 /** The most API keys one person may have. */
@@ -63,7 +64,20 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     // The one thing the single sign-on plugin keeps in clear (a company's client secret) is encrypted on the way in.
     database: withEncryptedProviderSecrets(
       drizzleAdapter(db, { provider: 'sqlite', schema }),
-      env.BETTER_AUTH_SECRET
+      env.BETTER_AUTH_SECRET,
+      // Someone their company's directory switched off must not walk back into the team (by invitation or by
+      // single sign-on): both add the member through the adapter.
+      async (model, data) => {
+        if (
+          model === 'member' &&
+          typeof data.organizationId === 'string' &&
+          typeof data.userId === 'string' &&
+          (await isDeprovisioned(db, data.organizationId, data.userId))
+        )
+          throw new APIError('FORBIDDEN', {
+            message: 'Your company has switched off your access to this team.'
+          })
+      }
     ),
     session: {
       expiresIn: 60 * 60 * 24 * 30,

@@ -52,6 +52,7 @@ import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
 import { recentAudit, recordAudit } from './audit'
 import { teamsOf } from './teams'
+import { createScimAdmin, createScimApi } from './scimRoutes'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
@@ -357,6 +358,24 @@ export function createApp(options: AppOptions = {}) {
         signInActivity: await recentSignIns(c.var.db, c.var.userId),
         securityActivity: await recentAudit(c.var.db, c.var.userId),
         teams: await teamsOf(c.var.db, c.var.userId),
+        // What a company directory (SCIM) says about this person, per team.
+        directory: await c.var.db
+          .select({
+            team: schema.organization.name,
+            userName: schema.scimUser.userName,
+            externalId: schema.scimUser.externalId,
+            active: schema.scimUser.active
+          })
+          .from(schema.scimUser)
+          .innerJoin(
+            schema.scimConnection,
+            eq(schema.scimConnection.id, schema.scimUser.connectionId)
+          )
+          .innerJoin(
+            schema.organization,
+            eq(schema.organization.id, schema.scimConnection.organizationId)
+          )
+          .where(eq(schema.scimUser.userId, c.var.userId)),
         // Never the key itself or its hash: only enough to recognise which key it was.
         apiKeys: (
           await c.var.db
@@ -643,6 +662,9 @@ export function createApp(options: AppOptions = {}) {
         c.header('cache-control', 'private, max-age=60')
         return c.json({ flags: evaluateFlags(rules, channel, id) })
       })
+      // Directory sync: the company's identity provider calls /scim/v2 with a bearer token; owners manage tokens.
+      .route('/scim/v2', createScimApi())
+      .route('/scim-connections', createScimAdmin(requireSession(true)))
       .route('/preferences', preferences)
       .route('/devices', devices)
       .route('/feedback', feedback)

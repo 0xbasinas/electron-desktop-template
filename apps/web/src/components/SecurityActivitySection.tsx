@@ -28,7 +28,14 @@ const NAMES: Record<string, string> = {
   sso_provider_added: 'A company sign-in was added',
   sso_provider_updated: 'A company sign-in was changed',
   sso_provider_deleted: 'A company sign-in was removed',
-  sso_user_provisioned: 'Account created through company sign-in'
+  sso_user_provisioned: 'Account created through company sign-in',
+  scim_connection_created: 'A directory sync was set up',
+  scim_connection_removed: 'A directory sync was removed',
+  scim_token_created: 'A directory sync token was made',
+  scim_token_revoked: 'A directory sync token was revoked',
+  scim_user_provisioned: 'Added by your company directory',
+  scim_user_deactivated: 'Switched off by your company directory',
+  scim_user_reactivated: 'Switched back on by your company directory'
 }
 
 const eventName = (type: string): string => NAMES[type] ?? type.replaceAll('_', ' ')

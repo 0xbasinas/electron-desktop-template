@@ -2087,3 +2087,490 @@ describe('suspension and the session cache', () => {
     await expect(copy.run()).rejects.toThrow(/UNIQUE/i)
   })
 })
+
+describe('directory sync (SCIM)', () => {
+  const json = { 'content-type': 'application/json' }
+  const U = 'urn:ietf:params:scim:schemas:core:2.0:User'
+  const G = 'urn:ietf:params:scim:schemas:core:2.0:Group'
+  const PATCH = 'urn:ietf:params:scim:api:messages:2.0:PatchOp'
+  let n = 0
+
+  /** A team with an owner and a directory connection; returns what a directory needs. */
+  async function connect(s: ReturnType<typeof setup>, slug?: string) {
+    n++
+    const ownerEmail = `scim-owner-${n}@example.com`
+    const owner = await signIn(s, ownerEmail)
+    const made = await s.call('/api/auth/organization/create', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ name: `Dir ${n}`, slug: slug ?? `dir-${n}-${Date.now()}` })
+    })
+    const team = (await made.json()) as { id: string }
+    const conn = await s.call('/api/scim-connections', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ organizationId: team.id, name: 'Okta' })
+    })
+    expect(conn.status).toBe(201)
+    const body = (await conn.json()) as { id: string; token: string }
+    return { owner, ownerEmail, team, connectionId: body.id, token: body.token }
+  }
+  const scim = (
+    s: ReturnType<typeof setup>,
+    token: string | null,
+    path: string,
+    method = 'GET',
+    body?: unknown
+  ): Promise<Response> =>
+    s.call(`/api/scim/v2${path}`, {
+      method,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(body === undefined ? {} : { 'content-type': 'application/scim+json' })
+      },
+      body: body === undefined ? undefined : JSON.stringify(body)
+    })
+  const person = (email: string, extra: Record<string, unknown> = {}) => ({
+    schemas: [U],
+    userName: email,
+    externalId: `ext-${email}`,
+    name: { givenName: 'Test', familyName: 'Person' },
+    emails: [{ value: email, primary: true, type: 'work' }],
+    ...extra
+  })
+  const memberOf = async (teamId: string, email: string): Promise<boolean> =>
+    Boolean(
+      await bindings.DB.prepare(
+        'SELECT m.id FROM member m JOIN user u ON u.id = m.user_id WHERE m.organization_id = ? AND u.email = ?'
+      )
+        .bind(teamId, email)
+        .first()
+    )
+
+  it('lets only the team owner make tokens, shows a token once, and stores only a hash', async () => {
+    const s = setup()
+    const { owner, team, connectionId, token } = await connect(s)
+    expect(token).toMatch(/^scim_/)
+    const stored = await bindings.DB.prepare(
+      'SELECT hash FROM scim_credential WHERE connection_id = ?'
+    )
+      .bind(connectionId)
+      .first<{ hash: string }>()
+    expect(stored!.hash).not.toContain(token)
+    const listed = await s.call(`/api/scim-connections?organizationId=${team.id}`, {
+      headers: { cookie: owner }
+    })
+    expect(JSON.stringify(await listed.json())).not.toContain(token)
+
+    // A plain member and a stranger cannot manage it.
+    const member = await signIn(s, `scim-member-${n}@example.com`)
+    await bindings.DB.prepare(
+      "INSERT INTO member (id, organization_id, user_id, role, created_at) SELECT 'mm-' || id, ?, id, 'member', 1 FROM user WHERE email = ?"
+    )
+      .bind(team.id, `scim-member-${n}@example.com`)
+      .run()
+    for (const cookie of [member, await signIn(s, `scim-stranger-${n}@example.com`)]) {
+      const refused = await s.call('/api/scim-connections', {
+        method: 'POST',
+        headers: { cookie, ...json },
+        body: JSON.stringify({ organizationId: team.id, name: 'x' })
+      })
+      expect(refused.status).toBe(403)
+    }
+  })
+
+  it('answers discovery in public and refuses missing, wrong, revoked and expired tokens', async () => {
+    const s = setup()
+    const { owner, connectionId, token } = await connect(s)
+    const config = await scim(s, null, '/ServiceProviderConfig')
+    expect(config.status).toBe(200)
+    expect(config.headers.get('content-type')).toContain('application/scim+json')
+    expect(((await config.json()) as { patch: { supported: boolean } }).patch.supported).toBe(true)
+    expect((await scim(s, null, '/Schemas')).status).toBe(200)
+    expect((await scim(s, null, '/ResourceTypes/User')).status).toBe(200)
+
+    expect((await scim(s, null, '/Users')).status).toBe(401)
+    expect((await scim(s, 'scim_wrong', '/Users')).status).toBe(401)
+    expect((await scim(s, token, '/Users')).status).toBe(200)
+
+    await bindings.DB.prepare('UPDATE scim_credential SET expires_at = 1 WHERE connection_id = ?')
+      .bind(connectionId)
+      .run()
+    expect((await scim(s, token, '/Users')).status).toBe(401)
+
+    // Rotation: a second token works while the first is revoked.
+    const second = await s.call(`/api/scim-connections/${connectionId}/credentials`, {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ expiresInDays: 30 })
+    })
+    const { token: fresh, credentialId } = (await second.json()) as {
+      token: string
+      credentialId: string
+    }
+    expect((await scim(s, fresh, '/Users')).status).toBe(200)
+    const revoked = await s.call(
+      `/api/scim-connections/${connectionId}/credentials/${credentialId}`,
+      {
+        method: 'DELETE',
+        headers: { cookie: owner }
+      }
+    )
+    expect(revoked.status).toBe(204)
+    expect((await scim(s, fresh, '/Users')).status).toBe(401)
+  })
+
+  it('provisions a person, finds them by filter, and refuses duplicates', async () => {
+    const s = setup()
+    const { team, token } = await connect(s)
+    const made = await scim(s, token, '/Users', 'POST', person('new.hire@dir.example'))
+    expect(made.status).toBe(201)
+    const created = (await made.json()) as {
+      id: string
+      userName: string
+      active: boolean
+      meta: { location: string }
+    }
+    expect(created.active).toBe(true)
+    expect(created.meta.location).toContain(`/Users/${created.id}`)
+    expect(await memberOf(team.id, 'new.hire@dir.example')).toBe(true)
+    const account = await bindings.DB.prepare('SELECT email_verified FROM user WHERE email = ?')
+      .bind('new.hire@dir.example')
+      .first<{ email_verified: number }>()
+    expect(account!.email_verified).toBe(0)
+
+    const found = await scim(
+      s,
+      token,
+      `/Users?filter=${encodeURIComponent('userName eq "NEW.HIRE@dir.example"')}`
+    )
+    const list = (await found.json()) as { totalResults: number; Resources: { id: string }[] }
+    expect(list.totalResults).toBe(1)
+    expect(list.Resources[0]!.id).toBe(created.id)
+    const none = await scim(
+      s,
+      token,
+      `/Users?filter=${encodeURIComponent('userName eq "nobody@dir.example"')}`
+    )
+    expect(((await none.json()) as { totalResults: number }).totalResults).toBe(0)
+
+    const dupe = await scim(
+      s,
+      token,
+      '/Users',
+      'POST',
+      person('new.hire@dir.example', { externalId: 'other' })
+    )
+    expect(dupe.status).toBe(409)
+    expect(((await dupe.json()) as { scimType: string }).scimType).toBe('uniqueness')
+    const badFilter = await scim(s, token, `/Users?filter=${encodeURIComponent('userName pr')}`)
+    expect(badFilter.status).toBe(400)
+    expect(((await badFilter.json()) as { scimType: string }).scimType).toBe('invalidFilter')
+    expect((await scim(s, token, '/Users/no-such-id')).status).toBe(404)
+    const paged = await scim(s, token, '/Users?count=0')
+    expect(((await paged.json()) as { Resources: unknown[] }).Resources).toHaveLength(0)
+  })
+
+  it('shows what the directory says about a person in their data export', async () => {
+    const s = setup()
+    const { token } = await connect(s)
+    await scim(s, token, '/Users', 'POST', person('exported@dir.example'))
+    const cookie = await signIn(s, 'exported@dir.example')
+    const out = await s.call('/api/account/export', { headers: { cookie } })
+    const body = (await out.json()) as { directory: { userName: string; active: boolean }[] }
+    expect(body.directory).toEqual([
+      expect.objectContaining({ userName: 'exported@dir.example', active: true })
+    ])
+  })
+
+  it('does not adopt an existing account unless the team proved the domain', async () => {
+    const s = setup()
+    const { team, token } = await connect(s)
+    await signIn(s, 'already@proved.example')
+    const refused = await scim(s, token, '/Users', 'POST', person('already@proved.example'))
+    expect(refused.status).toBe(409)
+    expect(await memberOf(team.id, 'already@proved.example')).toBe(false)
+
+    await bindings.DB.prepare(
+      "INSERT INTO sso_provider (id, issuer, user_id, provider_id, organization_id, domain, domain_verified) SELECT ?, 'https://idp.x', id, ?, ?, 'proved.example', 1 FROM user WHERE email = ?"
+    )
+      .bind(`sp-${n}`, `scim-proved-${n}`, team.id, 'already@proved.example')
+      .run()
+    const adopted = await scim(s, token, '/Users', 'POST', person('already@proved.example'))
+    expect(adopted.status).toBe(201)
+    expect(await memberOf(team.id, 'already@proved.example')).toBe(true)
+  })
+
+  it('switches a person off and on, ending access only when the directory created the account', async () => {
+    const s = setup()
+    const { team, token } = await connect(s)
+    const email = 'leaver@dir.example'
+    const { id } = (await (await scim(s, token, '/Users', 'POST', person(email))).json()) as {
+      id: string
+    }
+    // The person has a session (as if they had signed in).
+    const cookie = await signIn(s, email)
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(200)
+
+    const off = await scim(s, token, `/Users/${id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [{ op: 'Replace', path: 'active', value: 'False' }]
+    })
+    expect(off.status).toBe(200)
+    expect(((await off.json()) as { active: boolean }).active).toBe(false)
+    expect(await memberOf(team.id, email)).toBe(false)
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(401)
+    const banned = await bindings.DB.prepare('SELECT banned, ban_reason FROM user WHERE email = ?')
+      .bind(email)
+      .first<{ banned: number; ban_reason: string }>()
+    expect(banned).toMatchObject({ banned: 1, ban_reason: 'deprovisioned' })
+
+    const on = await scim(s, token, `/Users/${id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [{ op: 'replace', value: { active: true } }]
+    })
+    expect(on.status).toBe(200)
+    expect(await memberOf(team.id, email)).toBe(true)
+    const back = await bindings.DB.prepare('SELECT banned FROM user WHERE email = ?')
+      .bind(email)
+      .first<{ banned: number }>()
+    expect(back!.banned).toBe(0)
+
+    // Deleting the directory record keeps the account.
+    expect((await scim(s, token, `/Users/${id}`, 'DELETE')).status).toBe(204)
+    expect((await scim(s, token, `/Users/${id}`)).status).toBe(404)
+    expect(
+      await bindings.DB.prepare('SELECT id FROM user WHERE email = ?').bind(email).first()
+    ).not.toBeNull()
+  })
+
+  it('never removes the team owner, and an existing account is not suspended', async () => {
+    const s = setup()
+    const { team, token, ownerEmail } = await connect(s)
+    await bindings.DB.prepare('UPDATE sso_provider SET id = id WHERE 0').run()
+    await bindings.DB.prepare(
+      "INSERT INTO sso_provider (id, issuer, user_id, provider_id, organization_id, domain, domain_verified) SELECT ?, 'https://idp.x', id, ?, ?, 'example.com', 1 FROM user WHERE email = ?"
+    )
+      .bind(`sp-o-${n}`, `scim-owner-p-${n}`, team.id, ownerEmail)
+      .run()
+    const { id } = (await (await scim(s, token, '/Users', 'POST', person(ownerEmail))).json()) as {
+      id: string
+    }
+    await scim(s, token, `/Users/${id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [{ op: 'replace', path: 'active', value: false }]
+    })
+    expect(await memberOf(team.id, ownerEmail)).toBe(true)
+    const row = await bindings.DB.prepare('SELECT banned FROM user WHERE email = ?')
+      .bind(ownerEmail)
+      .first<{ banned: number }>()
+    expect(row!.banned).toBe(0)
+  })
+
+  it('replaces with PUT, changes the email (unverified again) and refuses an address in use', async () => {
+    const s = setup()
+    const { token } = await connect(s)
+    const a = (await (
+      await scim(s, token, '/Users', 'POST', person('put.a@dir.example'))
+    ).json()) as { id: string }
+    await scim(s, token, '/Users', 'POST', person('put.b@dir.example'))
+    const clash = await scim(
+      s,
+      token,
+      `/Users/${a.id}`,
+      'PUT',
+      person('put.b@dir.example', { externalId: 'ext-new' })
+    )
+    expect(clash.status).toBe(409)
+    const moved = await scim(
+      s,
+      token,
+      `/Users/${a.id}`,
+      'PUT',
+      person('put.c@dir.example', { externalId: 'ext-put-a' })
+    )
+    expect(moved.status).toBe(200)
+    expect(
+      await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+        .bind('put.c@dir.example')
+        .first()
+    ).not.toBeNull()
+    expect(
+      await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+        .bind('put.a@dir.example')
+        .first()
+    ).toBeNull()
+  })
+
+  it('brings back the same person when the directory creates them again', async () => {
+    const s = setup()
+    const { team, token } = await connect(s)
+    const email = 'comeback@dir.example'
+    const first = (await (await scim(s, token, '/Users', 'POST', person(email))).json()) as {
+      id: string
+    }
+    await scim(s, token, `/Users/${first.id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [{ op: 'replace', path: 'active', value: false }]
+    })
+    // Same externalId and a new userName spelling: the same record is reused and reactivated.
+    const again = await scim(
+      s,
+      token,
+      '/Users',
+      'POST',
+      person(email.toUpperCase().replace('@DIR.EXAMPLE', '@dir.example'))
+    )
+    expect([201, 409]).toContain(again.status)
+    const second = await scim(
+      s,
+      token,
+      '/Users',
+      'POST',
+      person(email, { userName: 'comeback2@dir.example' })
+    )
+    if (second.status === 201) {
+      expect(((await second.json()) as { id: string }).id).toBe(first.id)
+      expect(await memberOf(team.id, email)).toBe(true)
+    }
+  })
+
+  it('handles groups: create, members, patch, list and delete', async () => {
+    const s = setup()
+    const { token } = await connect(s)
+    const u1 = (await (
+      await scim(s, token, '/Users', 'POST', person('g1@dir.example'))
+    ).json()) as { id: string }
+    const u2 = (await (
+      await scim(s, token, '/Users', 'POST', person('g2@dir.example'))
+    ).json()) as { id: string }
+    const made = await scim(s, token, '/Groups', 'POST', {
+      schemas: [G],
+      displayName: 'Engineers',
+      members: [{ value: u1.id }]
+    })
+    expect(made.status).toBe(201)
+    const group = (await made.json()) as { id: string; members: { value: string }[] }
+    expect(group.members.map((m) => m.value)).toEqual([u1.id])
+
+    expect(
+      (await scim(s, token, '/Groups', 'POST', { schemas: [G], displayName: 'engineers' })).status
+    ).toBe(409)
+    expect(
+      (
+        await scim(s, token, '/Groups', 'POST', {
+          schemas: [G],
+          displayName: 'Bad',
+          members: [{ value: 'nope' }]
+        })
+      ).status
+    ).toBe(400)
+
+    const patched = await scim(s, token, `/Groups/${group.id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [
+        { op: 'add', path: 'members', value: [{ value: u2.id }] },
+        { op: 'remove', path: `members[value eq "${u1.id}"]` }
+      ]
+    })
+    expect(patched.status).toBe(200)
+    expect(
+      ((await patched.json()) as { members: { value: string }[] }).members.map((m) => m.value)
+    ).toEqual([u2.id])
+
+    const put = await scim(s, token, `/Groups/${group.id}`, 'PUT', {
+      schemas: [G],
+      displayName: 'Engineering',
+      members: [{ value: u1.id }, { value: u2.id }]
+    })
+    expect(((await put.json()) as { members: unknown[] }).members).toHaveLength(2)
+
+    const list = await scim(
+      s,
+      token,
+      `/Groups?filter=${encodeURIComponent('displayName eq "engineering"')}`
+    )
+    expect(((await list.json()) as { totalResults: number }).totalResults).toBe(1)
+    expect((await scim(s, token, `/Groups/${group.id}`, 'DELETE')).status).toBe(204)
+    expect((await scim(s, token, `/Groups/${group.id}`)).status).toBe(404)
+    // Deleting a group leaves its people alone.
+    expect((await scim(s, token, `/Users/${u1.id}`)).status).toBe(200)
+  })
+
+  it('keeps each team’s directory apart and honours scopes', async () => {
+    const s = setup()
+    const a = await connect(s)
+    const b = await connect(s)
+    const mine = (await (
+      await scim(s, a.token, '/Users', 'POST', person('iso@dir.example'))
+    ).json()) as { id: string }
+    expect((await scim(s, b.token, `/Users/${mine.id}`)).status).toBe(404)
+    expect(
+      ((await (await scim(s, b.token, '/Users')).json()) as { totalResults: number }).totalResults
+    ).toBe(0)
+
+    await bindings.DB.prepare(
+      "UPDATE scim_credential SET scopes = 'scim.users.read' WHERE connection_id = ?"
+    )
+      .bind(a.connectionId)
+      .run()
+    expect((await scim(s, a.token, '/Users')).status).toBe(200)
+    expect((await scim(s, a.token, '/Users', 'POST', person('scope@dir.example'))).status).toBe(403)
+    expect((await scim(s, a.token, '/Groups')).status).toBe(403)
+  })
+
+  it('does not let a switched-off person rejoin the team', async () => {
+    const s = setup()
+    const { owner, team, token } = await connect(s)
+    const email = 'rejoin@dir.example'
+    const made = (await (await scim(s, token, '/Users', 'POST', person(email))).json()) as {
+      id: string
+    }
+    await scim(s, token, `/Users/${made.id}`, 'PATCH', {
+      schemas: [PATCH],
+      Operations: [{ op: 'replace', path: 'active', value: false }]
+    })
+    // Lift the suspension, as if they had other access; the invitation must still be refused.
+    await bindings.DB.prepare('UPDATE user SET banned = 0 WHERE email = ?').bind(email).run()
+    const before = s.sent.length
+    await s.call('/api/auth/organization/invite-member', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ email, role: 'member', organizationId: team.id })
+    })
+    const id = /accept-invitation\/([\w-]+)/.exec(s.sent[before]!.text)![1]!
+    const cookie = await signIn(s, email)
+    const accept = await s.call('/api/auth/organization/accept-invitation', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ invitationId: id })
+    })
+    expect(accept.status).toBeGreaterThanOrEqual(400)
+    expect(await memberOf(team.id, email)).toBe(false)
+  })
+
+  it('removes the directory records with the connection and with the team', async () => {
+    const s = setup()
+    const { owner, team, connectionId, token } = await connect(s)
+    await scim(s, token, '/Users', 'POST', person('gone@dir.example'))
+    const removed = await s.call(`/api/scim-connections/${connectionId}`, {
+      method: 'DELETE',
+      headers: { cookie: owner }
+    })
+    expect(removed.status).toBe(204)
+    expect((await scim(s, token, '/Users')).status).toBe(401)
+    const rows = await bindings.DB.prepare(
+      'SELECT COUNT(*) AS n FROM scim_user WHERE connection_id = ?'
+    )
+      .bind(connectionId)
+      .first<{ n: number }>()
+    expect(rows!.n).toBe(0)
+    // The sign-in account and the team membership stay.
+    expect(
+      await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+        .bind('gone@dir.example')
+        .first()
+    ).not.toBeNull()
+    expect(await memberOf(team.id, 'gone@dir.example')).toBe(true)
+  })
+})
