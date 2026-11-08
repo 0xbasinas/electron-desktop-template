@@ -145,6 +145,19 @@
     @apply bg-background text-foreground antialiased;
   }
 
+  /* Switching theme: fade the colours instead of jumping (the class is added for a moment by fadeThemeChange). */
+  html.theme-fade,
+  html.theme-fade *,
+  html.theme-fade *::before,
+  html.theme-fade *::after {
+    transition:
+      background-color 250ms ease,
+      border-color 250ms ease,
+      color 250ms ease,
+      fill 250ms ease,
+      stroke 250ms ease !important;
+  }
+
   /* Thin, quiet scrollbars that follow the theme: the thumb is a faint tint of the text colour, the track is invisible. */
   * {
     scrollbar-width: thin;

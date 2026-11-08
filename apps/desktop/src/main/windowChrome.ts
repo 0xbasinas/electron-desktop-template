@@ -49,9 +49,11 @@ export function loadRenderer(win: BrowserWindow, hash = ''): void {
 
 /** Keep the native window-controls overlay in step with the system light/dark setting. */
 export function watchTheme(win: BrowserWindow): void {
-  if (isMac) return
   const update = (): void => {
-    if (!win.isDestroyed()) win.setTitleBarOverlay(overlay())
+    if (win.isDestroyed()) return
+    // The native background changes too, so no light strip shows through while the page repaints.
+    win.setBackgroundColor(backgroundColor())
+    if (!isMac) win.setTitleBarOverlay(overlay())
   }
   nativeTheme.on('updated', update)
   win.on('closed', () => nativeTheme.off('updated', update))

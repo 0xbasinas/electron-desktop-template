@@ -3,6 +3,7 @@ import './assets/index.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { isAccent } from '@repo/shared/accents'
+import { fadeThemeChange } from '@repo/ui'
 import App from './App'
 import { SettingsWindow } from './components/SettingsWindow'
 
@@ -12,7 +13,8 @@ const applyTheme = (): void => {
   document.documentElement.classList.toggle('dark', darkQuery.matches)
 }
 applyTheme()
-darkQuery.addEventListener('change', applyTheme)
+// Later changes (the user picked another theme, or the system switched) fade rather than jump.
+darkQuery.addEventListener('change', () => fadeThemeChange(applyTheme))
 
 // The accent colour is a setting: put it on <html> now and whenever it changes (from any window, or another device).
 // The last value is remembered in localStorage so the first paint already has it; main's answer then corrects it.
