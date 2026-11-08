@@ -1,4 +1,4 @@
-import { soloTeamsDeletion } from './teams'
+import { handOverProvidersStatement, soloTeamsDeletion } from './teams'
 import { deletionDate } from '@repo/shared'
 import { and, eq, lte } from 'drizzle-orm'
 import type { Db } from './db'
@@ -106,6 +106,8 @@ export async function deleteDueAccounts(
       db.delete(schema.verification).where(eq(schema.verification.identifier, email)),
       ...blocks,
       ...revokeAppAccessStatements(db, userId),
+      // A team's company sign-in outlives the person who registered it.
+      handOverProvidersStatement(db, userId),
       // Teams only this person belongs to would be left with nobody to reach them.
       soloTeamsDeletion(db, userId),
       // API keys point at the person without a foreign key, so they are removed here.

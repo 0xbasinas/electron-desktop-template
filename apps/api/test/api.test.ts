@@ -509,6 +509,85 @@ describe('account', () => {
     expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(200)
   })
 
+  it("keeps a team's company sign-in when the person who set it up is deleted", async () => {
+    const s = setup()
+    await signIn(s, 'setup-owner@example.com')
+    await signIn(s, 'setup-admin@example.com')
+    await signIn(s, 'setup-solo@example.com')
+    const db = bindings.DB
+    const id = async (email: string): Promise<string> =>
+      (await db.prepare('SELECT id FROM user WHERE email = ?').bind(email).first<{ id: string }>())!
+        .id
+    const [owner, admin, solo] = [
+      await id('setup-owner@example.com'),
+      await id('setup-admin@example.com'),
+      await id('setup-solo@example.com')
+    ]
+    const now = Date.now()
+    const insert = async (sql: string, ...v: unknown[]): Promise<void> => {
+      await db
+        .prepare(sql)
+        .bind(...v)
+        .run()
+    }
+    await insert(
+      "INSERT INTO organization (id, name, slug, created_at) VALUES ('t-shared', 'Shared', 't-shared', ?)",
+      now
+    )
+    await insert(
+      "INSERT INTO organization (id, name, slug, created_at) VALUES ('t-solo', 'Solo', 't-solo', ?)",
+      now
+    )
+    await insert(
+      "INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES ('m1', 't-shared', ?, 'owner', ?)",
+      owner,
+      now
+    )
+    await insert(
+      "INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES ('m2', 't-shared', ?, 'admin', ?)",
+      admin,
+      now
+    )
+    await insert(
+      "INSERT INTO member (id, organization_id, user_id, role, created_at) VALUES ('m3', 't-solo', ?, 'owner', ?)",
+      solo,
+      now
+    )
+    await insert(
+      "INSERT INTO sso_provider (id, issuer, user_id, provider_id, organization_id, domain) VALUES ('p1', 'https://idp.a', ?, 'prov-shared', 't-shared', 'a.example')",
+      owner
+    )
+    await insert(
+      "INSERT INTO sso_provider (id, issuer, user_id, provider_id, organization_id, domain) VALUES ('p2', 'https://idp.b', ?, 'prov-solo', 't-solo', 'b.example')",
+      solo
+    )
+    await insert(
+      "INSERT INTO account_deletion (user_id, requested_at, scheduled_for, cancel_token_hash) VALUES (?, ?, ?, 'x')",
+      owner,
+      now - 2000,
+      now - 1000
+    )
+    await insert(
+      "INSERT INTO account_deletion (user_id, requested_at, scheduled_for, cancel_token_hash) VALUES (?, ?, ?, 'x')",
+      solo,
+      now - 2000,
+      now - 1000
+    )
+
+    expect(await deleteDueAccounts(createDb(db), now)).toBe(2)
+    const kept = await db
+      .prepare('SELECT user_id FROM sso_provider WHERE provider_id = ?')
+      .bind('prov-shared')
+      .first<{ user_id: string }>()
+    expect(kept?.user_id).toBe(admin)
+    expect(
+      await db
+        .prepare('SELECT id FROM sso_provider WHERE provider_id = ?')
+        .bind('prov-solo')
+        .first()
+    ).toBeNull()
+  })
+
   it('does not let a cross-site page cancel with a token', async () => {
     const s = setup()
     const response = await s.call('/api/account/deletion/cancel-with-token', {
