@@ -1231,3 +1231,63 @@ describe('feature flags', () => {
     expect((await s.call('/api/flags?id=x')).status).toBe(400)
   })
 })
+
+describe('consent ledger', () => {
+  const post = (cookie: string, body: unknown): RequestInit => ({
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify(body)
+  })
+  type Ledger = {
+    current: Record<string, boolean>
+    history: { purpose: string; granted: boolean }[]
+  }
+
+  it('records agreements and withdrawals as entries and never edits old ones', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'consent@example.com')
+    const first = (await (
+      await s.call('/api/account/consents', { headers: { cookie } })
+    ).json()) as Ledger
+    expect(first).toEqual({ current: {}, history: [] })
+
+    await s.call('/api/account/consents', post(cookie, { purpose: 'crash-reports', granted: true }))
+    // Repeating the same answer adds nothing; withdrawing adds an entry.
+    await s.call('/api/account/consents', post(cookie, { purpose: 'crash-reports', granted: true }))
+    const res = await s.call(
+      '/api/account/consents',
+      post(cookie, { purpose: 'crash-reports', granted: false })
+    )
+    const ledger = (await res.json()) as Ledger
+    expect(ledger.current).toEqual({ 'crash-reports': false })
+    expect(ledger.history.map((e) => e.granted)).toEqual([false, true])
+  })
+
+  it('ignores a withdrawal of something never agreed to, rejects odd purposes, and needs sign-in', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'consent2@example.com')
+    const res = await s.call(
+      '/api/account/consents',
+      post(cookie, { purpose: 'product-emails', granted: false })
+    )
+    expect(((await res.json()) as Ledger).history).toEqual([])
+    expect(
+      (await s.call('/api/account/consents', post(cookie, { purpose: 'ads', granted: true })))
+        .status
+    ).toBe(400)
+    expect((await s.call('/api/account/consents')).status).toBe(401)
+  })
+
+  it('is part of the export', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'consent3@example.com')
+    await s.call(
+      '/api/account/consents',
+      post(cookie, { purpose: 'product-emails', granted: true })
+    )
+    const out = (await (await s.call('/api/account/export', { headers: { cookie } })).json()) as {
+      consents: { purpose: string }[]
+    }
+    expect(out.consents).toHaveLength(1)
+  })
+})

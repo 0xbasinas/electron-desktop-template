@@ -13,6 +13,12 @@ import {
 } from './emailChange'
 import { flagsSchema, type FlagChannel, type Flags } from './flags'
 import { appConfigSchema, type AppConfig } from './version'
+import {
+  consentsSchema,
+  setConsentInputSchema,
+  type ConsentPurpose,
+  type Consents
+} from './consents'
 import { dataRequestsSchema, type DataRequest } from './dataRequests'
 import { privacySummarySchema, type PrivacySummary } from './privacy'
 import { signInsSchema, type SignIn } from './signIns'
@@ -74,6 +80,9 @@ export interface ApiClient {
     /** Keeps the account using the token from the email (no sign-in needed). */
     cancelDeletionWithToken(token: string): Promise<void>
     /** Requests about personal data (export, deletion) with their status and deadline. */
+    consents(): Promise<Consents>
+    /** Agree to or withdraw a purpose; adds an entry to the ledger. */
+    setConsent(purpose: ConsentPurpose, granted: boolean): Promise<Consents>
     requests(): Promise<DataRequest[]>
     /** How much of each kind of data we hold about the signed-in person. */
     privacy(): Promise<PrivacySummary>
@@ -159,6 +168,12 @@ export function createApiClient({
         request('/account/deletion/cancel-with-token', null, {
           method: 'POST',
           body: JSON.stringify(cancelDeletionInputSchema.parse({ token }))
+        }),
+      consents: (): Promise<Consents> => request('/account/consents', consentsSchema),
+      setConsent: (purpose: ConsentPurpose, granted: boolean): Promise<Consents> =>
+        request('/account/consents', consentsSchema, {
+          method: 'POST',
+          body: JSON.stringify(setConsentInputSchema.parse({ purpose, granted }))
         }),
       requests: (): Promise<DataRequest[]> => request('/account/requests', dataRequestsSchema),
       privacy: (): Promise<PrivacySummary> => request('/account/privacy', privacySummarySchema),

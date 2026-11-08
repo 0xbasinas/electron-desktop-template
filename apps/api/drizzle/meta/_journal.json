@@ -85,6 +85,13 @@
       "when": 1794154959557,
       "tag": "0011_familiar_annihilus",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794155354778,
+      "tag": "0012_sparkling_carmella_unuscione",
+      "breakpoints": true
     }
   ]
 }
