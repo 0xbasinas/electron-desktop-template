@@ -9,6 +9,7 @@ import { apiKey } from '@better-auth/api-key'
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
 import { admin, captcha, magicLink, organization } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
+import { withEncryptedProviderSecrets } from './secretStore'
 import { eventForCall, recordAudit } from './audit'
 import type { Db } from './db'
 import { schema } from './db'
@@ -59,12 +60,16 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     baseURL: env.BETTER_AUTH_URL,
     secret: env.BETTER_AUTH_SECRET,
     trustedOrigins: [env.BETTER_AUTH_URL, ...extraOrigins],
-    database: drizzleAdapter(db, { provider: 'sqlite', schema }),
+    // The one thing the single sign-on plugin keeps in clear (a company's client secret) is encrypted on the way in.
+    database: withEncryptedProviderSecrets(
+      drizzleAdapter(db, { provider: 'sqlite', schema }),
+      env.BETTER_AUTH_SECRET
+    ),
     session: {
       expiresIn: 60 * 60 * 24 * 30,
       updateAge: 60 * 60 * 24,
-      // The session is also kept in a signed cookie for 5 minutes, so most requests skip the database.
-      cookieCache: { enabled: true, maxAge: 5 * 60 }
+      // The session is also kept in a signed cookie for 1 minute, so most requests skip the database.
+      cookieCache: { enabled: true, maxAge: 60 }
     },
     rateLimit: {
       enabled: true,

@@ -52,7 +52,7 @@ Cloudflare Workers Free allows 100,000 requests/day and 10 ms CPU per request; D
 The design keeps well inside that:
 
 - **No passwords**: password hashing is CPU heavy and would not fit in 10 ms. Magic links need no hashing.
-- **Session cookie cache** (5 minutes): most requests do not read the database.
+- **Session cookie cache** (1 minute): most Better Auth requests do not read the database. Our own routes still check, by primary key, that the session exists and the person is not suspended, so a suspension or sign-out stops them at once.
 - **Rate limits only on sign-in**: each counted request is a D1 write, so `/get-session` is not counted.
 - **Static files are free**: only `/api/*` runs Worker code.
 - Resend's free plan is 100 emails/day, 3,000/month, so sign-in emails are the real ceiling.
@@ -95,7 +95,7 @@ which one is the caller's. `PATCH /api/devices/:id` sets or clears the nickname 
 which goes with the session or the account), and `DELETE /api/devices/:id` signs that device out. The id is the session's row id,
 never its token, every query is limited to the caller's own sessions, and the caller's own session cannot be deleted this way
 (sign out instead). These routes check the database on every call, so a device you signed out stops working at once; routes that
-use the 5-minute session cookie cache (preferences, feedback) can take up to 5 minutes to notice.
+use the session cookie cache (preferences, feedback) still check the session and suspension in the database, so they stop at once too.
 
 The web app shows this on `/account` ("Your devices") and the desktop app in Settings. A nickname belongs to a session, so signing
 in again on the same device starts without one. Nicknames are listed in the data export.
@@ -143,9 +143,9 @@ Table `audit_event` (`apps/api/src/audit.ts`) records what happened to an accoun
 The Better Auth `admin` plugin is on, with two roles (`apps/api/src/permissions.ts`): **admin** (list, create, update, set role or password, suspend, impersonate, revoke sessions; not delete, not impersonate other admins) and **support** (list and look up people and sessions only). Everyone else is `user` and can do nothing there.
 
 - Nobody is staff by default and sign-up never grants a role. Give or take one with `pnpm admin:grant <email> [admin|support]` and `pnpm admin:revoke <email>` (local database; add `--remote` for the real one). The person must have signed in once.
-- A role change shows up on their next sign-in, or within 5 minutes (the session cookie cache).
+- A role change shows up on their next sign-in, or within 1 minute (the session cookie cache).
 - `/admin` in the website lists people (search by email, pages of 25) and lets an admin suspend or restore them. Suspending ends their sessions and blocks new ones; the server enforces permissions, the page only hides buttons.
-- Suspending ends the person's sessions at once, but a session cookie already issued can still pass a plain `get-session` for up to 5 minutes (the cookie cache). Account actions and API keys check the database, so they stop immediately.
+- Suspending ends the person's sessions at once. Our own routes (account, preferences, feedback, API keys) refuse a suspended person immediately. Only Better Auth's own endpoints (for example the admin and team routes) read the session cookie cache, so a demoted or suspended staff member could still act there for up to 1 minute.
 - `GET /api/admin/audit/:userId` (admin and support) returns one person's security activity; the "Activity" button on `/admin` shows it.
 - Admin actions are written to the audit trail with `actor_id` set to the staff member.
 - Deleting an account stays on the person's own cooling-off flow; the plugin's delete is not granted to anyone.
@@ -193,7 +193,7 @@ table with `wrangler d1 execute` until the admin dashboard exists.
 `/account` on the site (signed-in only) lets a person sign out everywhere, download their data and delete their account.
 The API behind it is `GET /api/account`, `GET /api/account/export` and `DELETE /api/account` (`apps/api/src/app.ts`).
 
-- These routes ask the database for the session instead of trusting the 5-minute cookie cache, so a deleted account or a
+- These routes ask the database for the session instead of trusting the 1-minute cookie cache, so a deleted account or a
   revoked session stops working at once.
 - The export lists the account, the settings and the sign-ins (time, IP, browser) and never any token.
 - Deleting needs the email typed again, and it is a request first: `DELETE /api/account` answers `202 { scheduledFor }` and the account stays for

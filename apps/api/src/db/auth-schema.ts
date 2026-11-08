@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -124,7 +124,7 @@ export const apikey = sqliteTable(
   (table) => [
     index("apikey_configId_idx").on(table.configId),
     index("apikey_referenceId_idx").on(table.referenceId),
-    index("apikey_key_idx").on(table.key),
+    uniqueIndex("apikey_key_idx").on(table.key),
   ],
 );
 

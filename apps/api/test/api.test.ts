@@ -1808,6 +1808,7 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
   }
 
   /** A pretend identity provider: signs id tokens with its own key and publishes the public half. */
+  const tokenCalls: (string | null)[] = []
   async function fakeIdp(claims: () => Record<string, unknown>): Promise<void> {
     const pair = (await crypto.subtle.generateKey(
       {
@@ -1830,6 +1831,7 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
       const url = input instanceof Request ? input.url : String(input)
       if (url === `${IDP}/jwks`) return Response.json({ keys: [jwk] })
       if (url === `${IDP}/token`) {
+        tokenCalls.push(new Headers(init?.headers).get('authorization'))
         const head = b64(JSON.stringify({ alg: 'RS256', kid: 'k1', typ: 'JWT' }))
         const now = Math.floor(Date.now() / 1000)
         const body = b64(
@@ -1924,6 +1926,15 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
     expect(back.status).toBe(302)
     expect(back.headers.get('location')).toContain('/app')
     expect(back.headers.getSetCookie().join(';')).toContain('session_token')
+    // The provider was asked with the real secret, although the database only holds it encrypted.
+    expect(tokenCalls.at(-1)).toBe(`Basic ${btoa('client:secret')}`)
+    const stored = await bindings.DB.prepare(
+      'SELECT oidc_config FROM sso_provider WHERE provider_id = ?'
+    )
+      .bind('good-co')
+      .first<{ oidc_config: string }>()
+    expect(stored!.oidc_config).toContain('enc:v1:')
+    expect(stored!.oidc_config).not.toContain('"secret"')
     const person = await bindings.DB.prepare('SELECT email FROM user WHERE email = ?')
       .bind('ada@good-co.example')
       .first()
@@ -1954,5 +1965,55 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
       body: JSON.stringify({ email: 'ada@unproven-co.example', callbackURL: '/app' })
     })
     expect(start.status).toBe(401)
+  })
+})
+
+describe('suspension and the session cache', () => {
+  it('stops a suspended person on every route at once, even with a cached session', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'cached@example.com')
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(200)
+    // Suspend without touching the sessions, as if the cookie were still inside its cache window.
+    await bindings.DB.prepare('UPDATE user SET banned = 1 WHERE email = ?')
+      .bind('cached@example.com')
+      .run()
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(401)
+    expect((await s.call('/api/account', { headers: { cookie } })).status).toBe(401)
+  })
+
+  it('lets a person back in once a timed suspension has ended', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'timed@example.com')
+    await bindings.DB.prepare('UPDATE user SET banned = 1, ban_expires = ? WHERE email = ?')
+      .bind(Date.now() - 1000, 'timed@example.com')
+      .run()
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(200)
+  })
+
+  it('stops a revoked session on cached routes at once', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'revoked@example.com')
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(200)
+    await bindings.DB.prepare(
+      'DELETE FROM session WHERE user_id = (SELECT id FROM user WHERE email = ?)'
+    )
+      .bind('revoked@example.com')
+      .run()
+    expect((await s.call('/api/preferences', { headers: { cookie } })).status).toBe(401)
+  })
+
+  it('never lets two API keys share a hash', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'dupe@example.com')
+    const made = await s.call('/api/auth/api-key/create', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'one' })
+    })
+    const { id } = (await made.json()) as { id: string }
+    const copy = bindings.DB.prepare(
+      "INSERT INTO apikey (id, reference_id, key, created_at, updated_at) SELECT 'copy', reference_id, key, 1, 1 FROM apikey WHERE id = ?"
+    ).bind(id)
+    await expect(copy.run()).rejects.toThrow(/UNIQUE/i)
   })
 })

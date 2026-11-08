@@ -70,7 +70,7 @@ export const defaultEmailSender = (env: Bindings): EmailSender =>
     : createConsoleSender()
 
 /**
- * Requires a signed-in user. `fresh` skips the 5-minute session cookie cache and asks the database, which account
+ * Requires a signed-in user. `fresh` skips the 1-minute session cookie cache and asks the database, which account
  * actions need: a deleted account or a revoked session must stop working at once, not five minutes later.
  */
 const requireSession =
@@ -81,6 +81,14 @@ const requireSession =
       query: fresh ? { disableCookieCache: true } : undefined
     })
     if (!session) throw new HTTPException(401, { message: 'Sign in first' })
+    // The session itself (cached or not) cannot know about a suspension: ask the database, by primary key.
+    const [live] = await c.var.db
+      .select({ banned: schema.user.banned, banExpires: schema.user.banExpires })
+      .from(schema.session)
+      .innerJoin(schema.user, eq(schema.user.id, schema.session.userId))
+      .where(eq(schema.session.id, session.session.id))
+    const suspended = live?.banned && (!live.banExpires || live.banExpires.getTime() > Date.now())
+    if (!live || suspended) throw new HTTPException(401, { message: 'Sign in first' })
     c.set('userId', session.user.id)
     c.set('sessionId', session.session.id)
     await next()
@@ -156,7 +164,7 @@ export function createApp(options: AppOptions = {}) {
   // Where the person is signed in: one entry per session, with an optional name. Every query is limited to their own sessions.
   const devices = new Hono<AppEnv>()
     .use(sameOriginOnly)
-    // Fresh: a session signed out from another device must stop counting at once, not after the 5-minute cookie cache.
+    // Fresh: a session signed out from another device must stop counting at once, not after the 1-minute cookie cache.
     .use(requireSession(true))
     .get('/', async (c) => {
       const rows = await c.var.db
