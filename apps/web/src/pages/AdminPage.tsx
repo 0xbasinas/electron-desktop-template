@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Button } from '@repo/ui'
 import { Navigate } from 'react-router'
+import { SsoAdminSection } from '../components/SsoAdminSection'
 import { authClient } from '../lib/auth'
 
 interface Person {
@@ -170,6 +171,7 @@ export function AdminPage(): JSX.Element {
           Next
         </Button>
       </div>
+      {role === 'admin' && <SsoAdminSection />}
     </div>
   )
 }

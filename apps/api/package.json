@@ -23,6 +23,7 @@
     "@better-auth/drizzle-adapter": "^1.7.18",
     "@better-auth/electron": "^1.7.18",
     "@better-auth/passkey": "^1.7.18",
+    "@better-auth/sso": "1.7.18",
     "@hono/zod-validator": "^0.9.1",
     "@repo/shared": "workspace:*",
     "@sentry/cloudflare": "^11.11.0",

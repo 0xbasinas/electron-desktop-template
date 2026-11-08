@@ -4,6 +4,7 @@ import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { apiKey } from '@better-auth/api-key'
 import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
+import { sso } from '@better-auth/sso'
 import { betterAuth } from 'better-auth'
 import { admin, magicLink, organization } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
@@ -17,6 +18,7 @@ export const auth = betterAuth({
     electron(),
     admin({ ac, roles }),
     organization(),
+    sso({ domainVerification: { enabled: true } }),
     passkey(),
     magicLink({ sendMagicLink: async () => {} })
   ]

@@ -10,6 +10,8 @@ const auth = vi.hoisted(() => ({
   pending: false,
   magicLink: vi.fn(),
   apiKey: { list: vi.fn(), create: vi.fn(), delete: vi.fn() },
+  signInSso: vi.fn(),
+  sso: { register: vi.fn(), verifyDomain: vi.fn() },
   organization: {
     list: vi.fn(),
     create: vi.fn(),
@@ -41,7 +43,7 @@ const auth = vi.hoisted(() => ({
 vi.mock('./lib/auth', () => ({
   authClient: {
     useSession: () => ({ data: auth.session, isPending: auth.pending }),
-    signIn: { magicLink: auth.magicLink, passkey: auth.signInPasskey },
+    signIn: { magicLink: auth.magicLink, passkey: auth.signInPasskey, sso: auth.signInSso },
     passkey: {
       listUserPasskeys: auth.listPasskeys,
       addPasskey: auth.addPasskey,
@@ -51,6 +53,7 @@ vi.mock('./lib/auth', () => ({
     admin: auth.admin,
     apiKey: auth.apiKey,
     organization: auth.organization,
+    sso: auth.sso,
     $fetch: auth.transfer,
     ensureElectronRedirect: auth.ensureRedirect,
     revokeSessions: auth.revoke
@@ -925,5 +928,61 @@ describe('accepting an invitation', () => {
     expect(await screen.findByRole('heading', { name: 'Teams' })).toBeInTheDocument()
     at('/sign-in?next=%2F%2Fevil.example')
     expect(screen.queryByText('evil.example')).not.toBeInTheDocument()
+  })
+})
+
+describe('company sign-in', () => {
+  it('starts single sign-on with the work email', async () => {
+    auth.session = null
+    auth.signInSso.mockResolvedValue({ data: {}, error: null })
+    at('/sign-in')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with your company' }))
+    expect(auth.signInSso).not.toHaveBeenCalled()
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@acme.example')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with your company' }))
+    expect(auth.signInSso).toHaveBeenCalledWith({
+      email: 'ada@acme.example',
+      callbackURL: '/app'
+    })
+  })
+
+  it('explains when the company has no single sign-on', async () => {
+    auth.session = null
+    auth.signInSso.mockResolvedValue({ data: null, error: { status: 404 } })
+    at('/sign-in')
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@nobody.example')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in with your company' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('not set up single sign-on')
+  })
+
+  it('lets an admin add a provider and shows the DNS record to publish', async () => {
+    auth.session = { user: { email: 'me@example.com', id: 'u1', role: 'admin' } } as never
+    auth.admin.listUsers.mockResolvedValue({ data: { users: [], total: 0 }, error: null })
+    auth.sso.register.mockResolvedValue({
+      data: { domainVerificationToken: 'tok123' },
+      error: null
+    })
+    auth.sso.verifyDomain.mockResolvedValue({ data: {}, error: null })
+    at('/admin')
+    await userEvent.type(await screen.findByLabelText('Provider name'), 'acme')
+    await userEvent.type(screen.getByLabelText('Issuer URL'), 'https://idp.acme.example')
+    await userEvent.type(screen.getByLabelText('Email domain'), 'Acme.Example')
+    await userEvent.type(screen.getByLabelText('Client ID'), 'cid')
+    await userEvent.type(screen.getByLabelText('Client secret'), 'shh')
+    await userEvent.click(screen.getByRole('button', { name: 'Add provider' }))
+    expect(auth.sso.register).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: 'acme', domain: 'acme.example' })
+    )
+    expect(await screen.findByText(/tok123/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Check the record' }))
+    expect(await screen.findByText(/Domain verified/)).toBeInTheDocument()
+  })
+
+  it('does not show provider setup to support staff', async () => {
+    auth.session = { user: { email: 'help@example.com', id: 'u3', role: 'support' } } as never
+    auth.admin.listUsers.mockResolvedValue({ data: { users: [], total: 0 }, error: null })
+    at('/admin')
+    await screen.findByRole('heading', { name: 'People' })
+    expect(screen.queryByLabelText('Provider name')).not.toBeInTheDocument()
   })
 })

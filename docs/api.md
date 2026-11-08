@@ -165,6 +165,16 @@ The Better Auth `organization` plugin is on (tables `organization`, `member`, `i
 - All foreign keys cascade. Deleting an account also deletes teams nobody else belongs to (`soloTeamsDeletion`, same batch as the deletion); teams with other members stay. The data export lists a person's teams and their role.
 - The audit trail records team created/deleted/left, invitations sent and accepted, and members removed.
 
+## Single sign-on for companies (OpenID Connect)
+
+`@better-auth/sso` is on, **OpenID Connect only**. Table `sso_provider` (cascades with the admin who added it, so deleting that admin removes the provider).
+
+- **Who sets it up:** only an `admin` can register a provider (`providersLimit` is 25 for admins and 0 for everyone else), from the "Company sign-in" section of `/admin`: provider name, issuer URL, email domain, client id and secret. The secret is stored in the database row; treat the database as secret-bearing and use `defaultSSO` in code instead if you prefer to keep it out.
+- **Proof of domain:** domain verification is on. A provider cannot sign anyone in until its domain has a DNS TXT record `_better-auth-token-<provider>.<domain>` with the token shown after registering; "Check the record" confirms it (a lookup that uses `node:dns/promises`, which works on Workers with `nodejs_compat`).
+- **Signing in:** "Sign in with your company" on the sign-in page takes the work email, finds the provider by its domain and redirects to the company's login. An unverified domain answers 401. A new person is created on first sign-in; an existing person is linked only when the domain is verified.
+- **SAML is refused** (`/sso/register` with a `samlConfig` answers 400). Checking a SAML response took about 10 to 15 ms in a local test, above the 10 ms CPU limit of the free Workers plan. Enable it only on the paid plan, after measuring in production.
+- Tested here with a fake provider (registration rules, SAML refusal, unverified domain). A real login against Google Workspace, Okta or Entra has not been tried: test each in gozap before promising it to a customer. Deleting a provider does not end sessions already created through it.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics

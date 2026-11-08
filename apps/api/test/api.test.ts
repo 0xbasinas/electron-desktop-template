@@ -1594,3 +1594,78 @@ describe('teams (organization plugin)', () => {
     expect(await exists(shared.id)).not.toBeNull()
   })
 })
+
+describe('single sign-on (OpenID Connect)', () => {
+  const json = { 'content-type': 'application/json' }
+  const provider = (providerId: string, extra: Record<string, unknown> = {}): string =>
+    JSON.stringify({
+      providerId,
+      issuer: 'https://idp.example.com',
+      domain: 'acme.example',
+      oidcConfig: {
+        clientId: 'client',
+        clientSecret: 'secret',
+        authorizationEndpoint: 'https://idp.example.com/authorize',
+        tokenEndpoint: 'https://idp.example.com/token',
+        jwksEndpoint: 'https://idp.example.com/jwks',
+        discoveryEndpoint: 'https://idp.example.com/.well-known/openid-configuration',
+        skipDiscovery: true,
+        scopes: ['openid', 'email', 'profile']
+      },
+      ...extra
+    })
+  const register = (s: ReturnType<typeof setup>, cookie: string, body: string): Promise<Response> =>
+    s.call('/api/auth/sso/register', { method: 'POST', headers: { cookie, ...json }, body })
+
+  it('lets only an admin register a provider', async () => {
+    const s = setup()
+    const plain = await signIn(s, 'plain-sso@example.com')
+    expect((await register(s, plain, provider('acme'))).status).toBe(403)
+
+    await signIn(s, 'boss-sso@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?")
+      .bind('boss-sso@example.com')
+      .run()
+    const admin = await signIn(s, 'boss-sso@example.com')
+    const made = await register(s, admin, provider('acme'))
+    expect(made.status).toBe(200)
+    expect(await made.json()).toMatchObject({ providerId: 'acme', domainVerified: false })
+  })
+
+  it('refuses SAML providers, even from an admin', async () => {
+    const s = setup()
+    await signIn(s, 'boss-saml@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?")
+      .bind('boss-saml@example.com')
+      .run()
+    const admin = await signIn(s, 'boss-saml@example.com')
+    const saml = await register(
+      s,
+      admin,
+      JSON.stringify({
+        providerId: 'saml-co',
+        issuer: 'https://idp.example.com',
+        domain: 'saml.example',
+        samlConfig: { entryPoint: 'https://idp.example.com/sso', cert: 'x', callbackUrl: '/x' }
+      })
+    )
+    expect(saml.status).toBe(400)
+  })
+
+  it('does not sign anyone in through a domain that has not been proven', async () => {
+    const s = setup()
+    await signIn(s, 'boss-dom@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?")
+      .bind('boss-dom@example.com')
+      .run()
+    const admin = await signIn(s, 'boss-dom@example.com')
+    await register(s, admin, provider('unproven'))
+    const start = await s.call('/api/auth/sign-in/sso', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ providerId: 'unproven', callbackURL: '/app' })
+    })
+    expect(start.status).toBe(401)
+    expect(await start.text()).toContain('has not been verified')
+  })
+})

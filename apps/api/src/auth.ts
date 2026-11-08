@@ -1,6 +1,7 @@
 import { drizzleAdapter } from '@better-auth/drizzle-adapter'
 import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
+import { sso } from '@better-auth/sso'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { count, eq } from 'drizzle-orm'
@@ -75,6 +76,14 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
     hooks: {
       // At most MAX_API_KEYS keys per person, so one account cannot fill the table.
       before: createAuthMiddleware(async (ctx) => {
+        // SAML needs more CPU per sign-in than the free Workers plan allows, so only OpenID Connect is offered.
+        if (
+          ctx.path === '/sso/register' &&
+          (ctx.body as { samlConfig?: unknown } | undefined)?.samlConfig
+        )
+          throw new APIError('BAD_REQUEST', {
+            message: 'Only OpenID Connect providers are supported.'
+          })
         if (ctx.path !== '/api-key/create') return
         const session = ctx.context.session ?? (await getSessionFromCtx(ctx))
         if (!session) return
@@ -227,6 +236,12 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
             })
           )
         }
+      }),
+      // Single sign-on for companies, by OpenID Connect. Only admins may register a provider (a company is set up by
+      // us, not self-service), and a provider's domain must be proven with a DNS record before it can sign anyone in.
+      sso({
+        providersLimit: (user) => ((user as { role?: string | null }).role === 'admin' ? 25 : 0),
+        domainVerification: { enabled: true }
       }),
       // Staff tools (roles: admin, support). Banning also ends the person's sessions. Nobody is an admin until
       // `pnpm admin:grant <email>` says so; the sign-up flow never grants a role.

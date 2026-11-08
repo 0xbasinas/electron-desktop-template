@@ -70,6 +70,20 @@ export function SignInPage(): JSX.Element {
       setError('That passkey did not work. Try the email link instead.')
   }
 
+  async function signInWithCompany(): Promise<void> {
+    const parsed = emailSchema.safeParse(email)
+    if (!parsed.success) {
+      setError('Enter your work email address first.')
+      return
+    }
+    setError(null)
+    const { error: failure } = await authClient.signIn.sso({
+      email: parsed.data,
+      callbackURL: desktop ? '/auth/desktop' : next
+    })
+    if (failure) setError('Your company has not set up single sign-on here. Use the email link.')
+  }
+
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
     const parsed = emailSchema.safeParse(email)
@@ -155,6 +169,14 @@ export function SignInPage(): JSX.Element {
       )}
       <Button type="submit" disabled={state === 'sending'} className="w-full">
         {state === 'sending' ? 'Sending...' : 'Email me a sign-in link'}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={() => void signInWithCompany()}
+      >
+        Sign in with your company
       </Button>
       {passkeysSupported() && (
         <Button
