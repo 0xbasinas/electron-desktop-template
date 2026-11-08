@@ -145,6 +145,7 @@ The Better Auth `admin` plugin is on, with two roles (`apps/api/src/permissions.
 - Nobody is staff by default and sign-up never grants a role. Give or take one with `pnpm admin:grant <email> [admin|support]` and `pnpm admin:revoke <email>` (local database; add `--remote` for the real one). The person must have signed in once.
 - A role change shows up on their next sign-in, or within 5 minutes (the session cookie cache).
 - `/admin` in the website lists people (search by email, pages of 25) and lets an admin suspend or restore them. Suspending ends their sessions and blocks new ones; the server enforces permissions, the page only hides buttons.
+- Suspending ends the person's sessions at once, but a session cookie already issued can still pass a plain `get-session` for up to 5 minutes (the cookie cache). Account actions and API keys check the database, so they stop immediately.
 - Admin actions are written to the audit trail with `actor_id` set to the staff member.
 - Deleting an account stays on the person's own cooling-off flow; the plugin's delete is not granted to anyone.
 
