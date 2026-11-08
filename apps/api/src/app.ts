@@ -384,6 +384,34 @@ export function createApp(options: AppOptions = {}) {
       await cancelDeletion(c.var.db, c.var.userId)
       return c.body(null, 204)
     })
+    // What we hold about the person, as counts (the data itself is in the export). The page shows it next to the export and delete buttons.
+    .get('/privacy', async (c) => {
+      const userId = c.var.userId
+      const countOf = async (
+        table:
+          | typeof schema.session
+          | typeof schema.signInEvent
+          | typeof schema.passkey
+          | typeof schema.feedback
+      ): Promise<number> => {
+        const [row] = await c.var.db
+          .select({ n: count() })
+          .from(table)
+          .where(eq(table.userId, userId))
+        return row?.n ?? 0
+      }
+      const [prefs] = await c.var.db
+        .select({ userId: schema.preference.userId })
+        .from(schema.preference)
+        .where(eq(schema.preference.userId, userId))
+      return c.json({
+        devices: await countOf(schema.session),
+        signIns: await countOf(schema.signInEvent),
+        passkeys: await countOf(schema.passkey),
+        feedback: await countOf(schema.feedback),
+        hasSyncedSettings: prefs !== undefined
+      })
+    })
     .get('/sign-ins', async (c) => c.json(await recentSignIns(c.var.db, c.var.userId)))
     // Moving to a new address: a link goes to the NEW address and nothing changes until it is used. The answer is the
     // same whether or not the address is already taken, so this cannot be used to find out who has an account.

@@ -11,6 +11,7 @@ import {
   emailChangedSchema,
   type EmailChanged
 } from './emailChange'
+import { privacySummarySchema, type PrivacySummary } from './privacy'
 import { signInsSchema, type SignIn } from './signIns'
 import { devicesSchema, type Device } from './devices'
 import { feedbackReceiptSchema, type FeedbackInput } from './feedback'
@@ -65,6 +66,8 @@ export interface ApiClient {
     cancelDeletion(): Promise<void>
     /** Keeps the account using the token from the email (no sign-in needed). */
     cancelDeletionWithToken(token: string): Promise<void>
+    /** How much of each kind of data we hold about the signed-in person. */
+    privacy(): Promise<PrivacySummary>
     /** The last sign-ins to the account, newest first. */
     signIns(): Promise<SignIn[]>
     /** Asks to move the account to a new address. A link goes to the new address; nothing changes until it is used. */
@@ -142,6 +145,7 @@ export function createApiClient({
           method: 'POST',
           body: JSON.stringify(cancelDeletionInputSchema.parse({ token }))
         }),
+      privacy: (): Promise<PrivacySummary> => request('/account/privacy', privacySummarySchema),
       signIns: (): Promise<SignIn[]> => request('/account/sign-ins', signInsSchema),
       changeEmail: (newEmail: string): Promise<void> =>
         request('/account/email-change', null, {
