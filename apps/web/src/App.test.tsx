@@ -34,8 +34,9 @@ vi.mock('./lib/auth', () => ({
 }))
 const accountApi = vi.hoisted(() => ({ get: vi.fn(), export: vi.fn(), remove: vi.fn() }))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
+const feedbackApi = vi.hoisted(() => ({ send: vi.fn() }))
 vi.mock('./lib/api', () => ({
-  api: { account: accountApi, preferences: prefsApi }
+  api: { account: accountApi, preferences: prefsApi, feedback: feedbackApi }
 }))
 
 beforeEach(() => {
@@ -61,6 +62,7 @@ beforeEach(() => {
     updatedAt: 0
   })
   prefsApi.put.mockReset().mockImplementation((r: unknown) => Promise.resolve(r))
+  feedbackApi.send.mockReset().mockResolvedValue({ id: 'f1' })
   accountApi.export.mockReset()
   accountApi.remove.mockReset().mockResolvedValue(undefined)
 })
@@ -348,5 +350,36 @@ describe('theme sync', () => {
     await userEvent.click(await screen.findByRole('radio', { name: 'Dark' }))
     expect(await screen.findByRole('status')).toHaveTextContent('Saved on this device')
     expect(document.documentElement.classList.contains('dark')).toBe(true)
+  })
+})
+
+describe('feedback page', () => {
+  it('sends you to sign in first', () => {
+    at('/feedback')
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('sends the message with its kind and thanks you', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    at('/feedback')
+    await userEvent.click(await screen.findByRole('radio', { name: 'An idea' }))
+    await userEvent.type(screen.getByLabelText('Your message'), 'Please add a dark mode')
+    await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
+    await waitFor(() =>
+      expect(feedbackApi.send).toHaveBeenCalledWith(
+        expect.objectContaining({ kind: 'idea', message: 'Please add a dark mode', source: 'web' })
+      )
+    )
+    expect(await screen.findByRole('status')).toHaveTextContent('Thank you')
+  })
+
+  it('shows why sending failed', async () => {
+    auth.session = { user: { email: 'ada@example.com' } }
+    feedbackApi.send.mockRejectedValue(new Error('You have sent a lot of feedback.'))
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    at('/feedback')
+    await userEvent.type(await screen.findByLabelText('Your message'), 'Something is wrong')
+    await userEvent.click(screen.getByRole('button', { name: 'Send feedback' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('a lot of feedback')
   })
 })

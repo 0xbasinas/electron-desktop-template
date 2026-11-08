@@ -87,6 +87,17 @@ which is stored encrypted with the operating system's keychain (Electron `safeSt
   secret) to your deployed address for release builds; in development it defaults to `http://localhost:8787`.
 - The Worker already trusts `<scheme>:/` as an origin (`TRUSTED_ORIGINS` in `wrangler.jsonc`); `pnpm rename` updates it.
 
+## Feedback
+
+`POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics
+report up to 24000) in the `feedback` table. It needs a session, so there is no anonymous spam, and each person can send
+5 per hour (one indexed count; `FEEDBACK_PER_HOUR` in `packages/shared/src/feedback.ts`).
+
+The web app has `/feedback`. The desktop app has a Settings section; its main process sends the message as the signed-in
+person (`apps/desktop/src/main/feedback.ts`) and can attach the diagnostics report. Feedback is deleted with the account
+(`ON DELETE CASCADE`) and listed in the data export, without the diagnostics text. Reading it is for the owner: query the
+table with `wrangler d1 execute` until the admin dashboard exists.
+
 ## Account page, data export and deletion
 
 `/account` on the site (signed-in only) lets a person sign out everywhere, download their data and delete their account.

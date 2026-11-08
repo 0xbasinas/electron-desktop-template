@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { feedbackExportSchema } from './feedback'
 import { preferencesRecordSchema } from './preferences'
 
 /** An email address, normalised the same way everywhere (trimmed, lower case). */
@@ -24,6 +25,7 @@ export const accountExportSchema = z.object({
       createdAt: z.string().nullable()
     })
   ),
+  feedback: z.array(feedbackExportSchema).default([]),
   sessions: z.array(
     z.object({
       createdAt: z.string(),

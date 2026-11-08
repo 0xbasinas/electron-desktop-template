@@ -55,6 +55,10 @@ export function Layout(): JSX.Element {
       </main>
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
         {SITE_NAME} ·{' '}
+        <Link className="underline" to="/feedback">
+          Feedback
+        </Link>{' '}
+        ·{' '}
         <Link className="underline" to="/sub-processors">
           Sub-processors
         </Link>{' '}

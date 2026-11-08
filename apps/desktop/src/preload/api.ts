@@ -3,6 +3,8 @@ import {
   IPC,
   type Account,
   type AppInfo,
+  type FeedbackRequest,
+  type FeedbackResult,
   type Settings,
   type UpdaterEvent,
   type WhatsNew
@@ -47,6 +49,10 @@ export const api = {
   getAccount: (): Promise<Account> => ipcRenderer.invoke(IPC.accountGet),
   signIn: (): Promise<void> => ipcRenderer.invoke(IPC.accountSignIn),
   signOut: (): Promise<void> => ipcRenderer.invoke(IPC.accountSignOut),
+
+  // Feedback (sent by main, as the signed-in person)
+  sendFeedback: (request: FeedbackRequest): Promise<FeedbackResult> =>
+    ipcRenderer.invoke(IPC.feedbackSend, request),
 
   // Account sync
   getSyncStatus: (): Promise<SyncStatus> => ipcRenderer.invoke(IPC.syncStatus),
