@@ -131,6 +131,13 @@ The email-link request (`POST /sign-in/magic-link`) is the one endpoint that sen
 - To try it locally use Cloudflare's test keys: site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`.
 - The page's security headers (`apps/web/public/_headers`) allow `https://challenges.cloudflare.com` for scripts, frames and connections.
 
+## Security activity (audit trail)
+
+Table `audit_event` (`apps/api/src/audit.ts`) records what happened to an account: sign-ins (from the session hook), failed magic-link and passkey sign-ins, sessions revoked, profile and passkey changes, and admin actions. Better Auth `hooks.after` decides what to record (`eventForCall`, tested); a bad magic link is a redirect with `error=`, not an error object. Writes run after the response and never fail a request.
+
+- `GET /api/account/security-activity` lists the person's own latest 50 events; the same list is in the data export, and the privacy summary counts them.
+- `detail` holds a code only, never what a stranger typed. Failed sign-ins have no person attached and are removed after 30 days; everything else after a year (daily job). Events about a person are deleted with the account.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics

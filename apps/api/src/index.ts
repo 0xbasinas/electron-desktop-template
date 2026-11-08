@@ -7,6 +7,7 @@ import { accountDeletedEmail, deleteDueAccounts } from './deletion'
 import type { Bindings } from './env'
 import { withPreviewUrl } from './preview'
 import { pruneSignIns } from './signIns'
+import { pruneAudit } from './audit'
 
 export type { AppType } from './app'
 export type { Bindings } from './env'
@@ -30,6 +31,7 @@ export default Sentry.withSentry(
     scheduled: async (_controller, env: Bindings) => {
       const db = createDb(env.DB)
       await pruneSignIns(db, Date.now())
+      await pruneAudit(db, Date.now())
       await pruneRequests(db, Date.now())
       const appName = env.APP_NAME || DEFAULT_APP_NAME
       const removed = await deleteDueAccounts(db, Date.now(), 50, (to) =>

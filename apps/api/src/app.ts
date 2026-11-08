@@ -50,6 +50,7 @@ import { evaluateFlags, loadRules } from './flags'
 import { listConsents, recordConsent } from './consents'
 import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
+import { recentAudit } from './audit'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
@@ -345,6 +346,7 @@ export function createApp(options: AppOptions = {}) {
           createdAt: new Date(r.createdAt).toISOString()
         })),
         signInActivity: await recentSignIns(c.var.db, c.var.userId),
+        securityActivity: await recentAudit(c.var.db, c.var.userId),
         dataRequests: await listRequests(c.var.db, c.var.userId),
         consents: (await listConsents(c.var.db, c.var.userId)).history,
         sessions: sessionRows.map((s) => ({
@@ -403,6 +405,7 @@ export function createApp(options: AppOptions = {}) {
         table:
           | typeof schema.session
           | typeof schema.signInEvent
+          | typeof schema.auditEvent
           | typeof schema.passkey
           | typeof schema.feedback
       ): Promise<number> => {
@@ -419,11 +422,13 @@ export function createApp(options: AppOptions = {}) {
       return c.json({
         devices: await countOf(schema.session),
         signIns: await countOf(schema.signInEvent),
+        securityEvents: await countOf(schema.auditEvent),
         passkeys: await countOf(schema.passkey),
         feedback: await countOf(schema.feedback),
         hasSyncedSettings: prefs !== undefined
       })
     })
+    .get('/security-activity', async (c) => c.json(await recentAudit(c.var.db, c.var.userId)))
     .get('/consents', async (c) => c.json(await listConsents(c.var.db, c.var.userId)))
     .post('/consents', zValidator('json', setConsentInputSchema), async (c) => {
       const { purpose, granted } = c.req.valid('json')

@@ -1111,6 +1111,7 @@ describe('privacy summary', () => {
     expect(summary).toEqual({
       devices: 1,
       signIns: 1,
+      securityEvents: 1,
       passkeys: 0,
       feedback: 1,
       hasSyncedSettings: false
@@ -1316,5 +1317,50 @@ describe('consent ledger', () => {
       consents: { purpose: string }[]
     }
     expect(out.consents).toHaveLength(1)
+  })
+})
+
+describe('security activity (audit trail)', () => {
+  type Entry = { type: string; outcome: string; label: string | null }
+  const activity = async (s: ReturnType<typeof setup>, cookie: string): Promise<Entry[]> =>
+    (await s.call('/api/account/security-activity', { headers: { cookie } })).json()
+
+  it('records a sign-in and lists it for the person only', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'audit@example.com', 'Mozilla/5.0 (Windows NT 10.0) Chrome/120')
+    const mine = await activity(s, cookie)
+    expect(mine.map((e) => e.type)).toContain('user_signed_in')
+    const other = await signIn(s, 'other-audit@example.com')
+    expect((await activity(s, other)).length).toBe(1)
+  })
+
+  it('records a bad magic link as a failed sign-in with no person attached', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'audit2@example.com')
+    const bad = await s.call('/api/auth/magic-link/verify?token=nope&callbackURL=/app')
+    expect(bad.headers.get('location') ?? '').toMatch(/error/i)
+    // Anonymous events are not shown to anyone's account page.
+    expect((await activity(s, cookie)).every((e) => e.outcome === 'success')).toBe(true)
+  })
+
+  it('records revoking all sessions and counts events in the privacy summary and export', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'audit3@example.com')
+    const revoke = await s.call('/api/auth/revoke-other-sessions', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: '{}'
+    })
+    expect(revoke.status).toBe(200)
+    const types = (await activity(s, cookie)).map((e) => e.type)
+    expect(types).toContain('all_sessions_revoked')
+    const privacy = (await (
+      await s.call('/api/account/privacy', { headers: { cookie } })
+    ).json()) as { securityEvents: number }
+    expect(privacy.securityEvents).toBeGreaterThanOrEqual(2)
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as { securityActivity: Entry[] }
+    expect(exported.securityActivity.length).toBeGreaterThanOrEqual(2)
   })
 })

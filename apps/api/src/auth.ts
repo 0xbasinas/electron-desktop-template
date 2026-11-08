@@ -4,7 +4,9 @@ import { passkey } from '@better-auth/passkey'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
 import { eq } from 'drizzle-orm'
+import { APIError, createAuthMiddleware } from 'better-auth/api'
 import { captcha, magicLink } from 'better-auth/plugins'
+import { eventForCall, recordAudit } from './audit'
 import type { Db } from './db'
 import { schema } from './db'
 import { BRAND } from './brand'
@@ -59,6 +61,38 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       max: 30,
       customRules: { '/get-session': false }
     },
+    hooks: {
+      // The security trail: failed sign-ins and account changes. After the response, and never fatal.
+      after: createAuthMiddleware(async (ctx) => {
+        const returned = ctx.context.returned
+        const failed = returned instanceof APIError
+        const event = eventForCall({
+          path: ctx.path,
+          failed,
+          errorCode: failed ? (returned.body?.code as string | undefined) : undefined,
+          location: ctx.context.responseHeaders?.get('location')
+        })
+        if (!event) return
+        const userId = ctx.context.session?.user.id ?? null
+        const actorId = ctx.path.startsWith('/admin/') ? userId : null
+        const target = ctx.path.startsWith('/admin/')
+          ? ((ctx.body as { userId?: string } | undefined)?.userId ?? null)
+          : userId
+        waitUntil(
+          recordAudit(db, {
+            ...event,
+            userId: ctx.path.startsWith('/admin/') ? target : userId,
+            actorId,
+            ipAddress: ctx.headers?.get('cf-connecting-ip') ?? null,
+            userAgent: ctx.headers?.get('user-agent') ?? null,
+            now: Date.now()
+          }).catch((error: unknown) => {
+            console.error('Could not record the audit event', error)
+            Sentry.captureException(error)
+          })
+        )
+      })
+    },
     databaseHooks: {
       session: {
         create: {
@@ -69,6 +103,14 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
               (async () => {
                 const now = Date.now()
                 const ipAddress = created.ipAddress ?? null
+                await recordAudit(db, {
+                  type: 'user_signed_in',
+                  outcome: 'success',
+                  userId: created.userId,
+                  ipAddress,
+                  userAgent: created.userAgent ?? null,
+                  now
+                })
                 const recorded = await recordSignIn(db, {
                   userId: created.userId,
                   ipAddress,
