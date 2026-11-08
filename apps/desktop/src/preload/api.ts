@@ -39,6 +39,8 @@ export const api = {
   openSettings: (): Promise<void> => ipcRenderer.invoke(IPC.settingsOpenWindow),
   getAppInfo: (): Promise<AppInfo> => ipcRenderer.invoke(IPC.appInfo),
   openLogs: (): Promise<void> => ipcRenderer.invoke(IPC.appOpenLogs),
+  /** A text report (versions, GPU, settings, log tail) the user can copy into a bug report. */
+  getDiagnostics: (): Promise<string> => ipcRenderer.invoke(IPC.appDiagnostics),
 
   // Account (sign in through the system browser)
   getAccount: (): Promise<Account> => ipcRenderer.invoke(IPC.accountGet),

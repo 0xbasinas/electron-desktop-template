@@ -9,6 +9,7 @@ const SETTING_KEYS = [
   'updateChannel',
   'closeToTray',
   'launchAtLogin',
+  'notifications',
   'crashReports'
 ] as const
 
@@ -44,6 +45,7 @@ export function parseSettingsPatch(input: unknown): Partial<Settings> {
         break
       case 'closeToTray':
       case 'launchAtLogin':
+      case 'notifications':
       case 'crashReports':
         if (typeof value !== 'boolean')
           throw new Error(`Invalid settings: ${key} must be a boolean`)

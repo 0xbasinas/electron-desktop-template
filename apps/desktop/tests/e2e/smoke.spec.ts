@@ -27,6 +27,7 @@ test('packaged app opens and the renderer talks to main', async () => {
       updateChannel: 'latest',
       closeToTray: false,
       launchAtLogin: false,
+      notifications: true,
       crashReports: false
     })
 
