@@ -1,9 +1,11 @@
+import { ACCENTS, isAccent } from '@repo/shared'
 import type { Settings } from './ipc'
 
 // The renderer is untrusted: anything it sends over IPC is checked here before main acts on it.
 
 const SETTING_KEYS = [
   'theme',
+  'accent',
   'updateChannel',
   'closeToTray',
   'launchAtLogin',
@@ -33,6 +35,12 @@ export function parseSettingsPatch(input: unknown): Partial<Settings> {
           throw new Error('Invalid settings: theme must be "system", "light" or "dark"')
         }
         patch.theme = value
+        break
+      case 'accent':
+        if (!isAccent(value)) {
+          throw new Error(`Invalid settings: accent must be one of ${ACCENTS.join(', ')}`)
+        }
+        patch.accent = value
         break
       case 'closeToTray':
       case 'launchAtLogin':

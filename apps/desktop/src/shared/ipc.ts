@@ -1,6 +1,8 @@
 // IPC channel names and payload types shared by main, preload and renderer.
 // Add new channels here first so all three processes stay in sync.
 
+import type { Preferences } from '@repo/shared'
+
 export const IPC = {
   // renderer -> main (invoke)
   updaterCheck: 'updater:check',
@@ -31,9 +33,14 @@ export type UpdateChannel = 'latest' | 'beta'
 /** User preferences. Everything here can be changed from the settings window. */
 export type Theme = 'system' | 'light' | 'dark'
 
+/** Accent colour preset (the list lives in @repo/shared so the web app offers the same ones). */
+export type Accent = Preferences['accent']
+
 export interface Settings {
   /** Light, dark or follow the system. Synced with the account's other devices when signed in. */
   theme: Theme
+  /** Colour of buttons, focus rings and checkboxes. Synced with the theme. */
+  accent: Accent
   updateChannel: UpdateChannel
   /** Closing the window hides it to the tray instead of quitting (Windows and Linux). */
   closeToTray: boolean

@@ -11,7 +11,7 @@ import {
 } from './preferences'
 
 const rec = (theme: 'system' | 'light' | 'dark', updatedAt: number): PreferencesRecord => ({
-  preferences: { theme },
+  preferences: { theme, accent: 'neutral' },
   updatedAt
 })
 
@@ -39,7 +39,12 @@ describe('preferences', () => {
   })
 
   it('reads stored values defensively and fills defaults', () => {
-    expect(parsePreferences({ theme: 'dark' })).toEqual({ theme: 'dark' })
+    expect(parsePreferences({ theme: 'dark' })).toEqual({ theme: 'dark', accent: 'neutral' })
+    expect(parsePreferences({ theme: 'light', accent: 'blue' })).toEqual({
+      theme: 'light',
+      accent: 'blue'
+    })
+    expect(parsePreferences({ accent: 'chartreuse' })).toEqual(defaultPreferences)
     expect(parsePreferences({ theme: 'pink' })).toEqual(defaultPreferences)
     expect(parsePreferences(null)).toEqual(defaultPreferences)
     expect(parsePreferences({})).toEqual(defaultPreferences)
@@ -52,5 +57,11 @@ describe('preferences', () => {
       preferencesRecordSchema.safeParse({ preferences: { theme: 'x' }, updatedAt: 1 }).success
     ).toBe(false)
     expect(preferencesRecordSchema.safeParse(rec('light', 1.5)).success).toBe(false)
+    expect(
+      preferencesRecordSchema.safeParse({
+        preferences: { theme: 'light', accent: 'url(javascript:x)' },
+        updatedAt: 1
+      }).success
+    ).toBe(false)
   })
 })

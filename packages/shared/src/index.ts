@@ -5,7 +5,10 @@ export {
   emailSchema
 } from './schemas'
 export type { Account, AccountExport } from './schemas'
+export { ACCENTS, isAccent } from './accents'
+export type { Accent } from './accents'
 export {
+  accentSchema,
   clampUpdatedAt,
   defaultPreferences,
   emptyPreferences,

@@ -1,16 +1,20 @@
 import { z } from 'zod'
+import { ACCENTS } from './accents'
 
 // Per-person preferences that follow them between the web app and the desktop app. Add a field here (with a default)
 // and it syncs. Keep it small: it is stored as one row per person.
 
 export const themeSchema = z.enum(['system', 'light', 'dark'])
 
+export const accentSchema = z.enum(ACCENTS)
+
 export const preferencesSchema = z.object({
-  theme: themeSchema.default('system')
+  theme: themeSchema.default('system'),
+  accent: accentSchema.default('neutral')
 })
 
 export type Preferences = z.infer<typeof preferencesSchema>
-export const defaultPreferences: Preferences = { theme: 'system' }
+export const defaultPreferences: Preferences = { theme: 'system', accent: 'neutral' }
 
 /** What is stored and exchanged: the preferences and when they were last changed (milliseconds since 1970). */
 export const preferencesRecordSchema = z.object({

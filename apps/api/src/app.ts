@@ -84,11 +84,18 @@ export function createApp(options: AppOptions = {}) {
     .get('/', async (c) => c.json(await readPreferences(c.var.db, c.var.userId)))
     .put('/', zValidator('json', preferencesRecordSchema), async (c) => {
       const incoming = c.req.valid('json')
+      const current = await readPreferences(c.var.db, c.var.userId)
+      // An app from before the accent colour existed sends only the theme, and the schema would fill in the default
+      // accent. Keep the stored one instead, so an older device cannot reset it.
+      const sent = ((await c.req.json()) as { preferences?: Record<string, unknown> }).preferences
       const record: PreferencesRecord = {
-        preferences: incoming.preferences,
+        preferences: {
+          ...incoming.preferences,
+          accent:
+            sent && 'accent' in sent ? incoming.preferences.accent : current.preferences.accent
+        },
         updatedAt: clampUpdatedAt(incoming.updatedAt, Date.now())
       }
-      const current = await readPreferences(c.var.db, c.var.userId)
       const winner = newerWins(record, current)
       // Only write when the incoming copy is actually newer: a stale device then costs a read, not a write.
       if (winner === record && record.updatedAt > current.updatedAt) {

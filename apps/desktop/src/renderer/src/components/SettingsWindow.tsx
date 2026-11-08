@@ -5,7 +5,8 @@ import { WhatsNewDialog } from '@renderer/components/WhatsNewDialog'
 import { useAccount } from '@renderer/hooks/useAccount'
 import { useSettings } from '@renderer/hooks/useSettings'
 import { useUpdater } from '@renderer/hooks/useUpdater'
-import { Button, cn } from '@repo/ui'
+import { ACCENTS } from '@repo/shared/accents'
+import { AccentPicker, Button, cn } from '@repo/ui'
 
 const CHANNELS: { value: UpdateChannel; label: string; hint: string }[] = [
   { value: 'latest', label: 'Stable', hint: 'Tested releases. Recommended.' },
@@ -191,6 +192,23 @@ export function SettingsWindow(): React.JSX.Element {
               <option value="dark">Dark</option>
             </select>
           </label>
+          <div className="flex items-center justify-between gap-3 text-sm">
+            <span>
+              Accent colour
+              <span className="block text-xs text-muted-foreground">
+                {account?.user
+                  ? 'Synced with your other devices.'
+                  : 'Sign in to use it on every device.'}
+              </span>
+            </span>
+            <AccentPicker
+              accents={ACCENTS}
+              value={settings?.accent}
+              disabled={!settings}
+              label="Accent colour"
+              onChange={(accent) => void update({ accent })}
+            />
+          </div>
           {platform !== 'darwin' && (
             <Toggle
               label="Keep running in the tray when closed"
