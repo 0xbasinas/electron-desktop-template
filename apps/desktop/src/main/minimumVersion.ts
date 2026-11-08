@@ -10,6 +10,8 @@ import { accountAvailable, apiUrl } from './auth'
 // sense, nobody is blocked, so an outage can never lock people out of their app.
 
 const CHECK_EVERY_MS = 6 * 60 * 60 * 1000
+// After a failed check (offline at launch, say) try again soon instead of waiting for the next regular check.
+const RETRY_MS = 10 * 60 * 1000
 
 let required = false
 
@@ -24,13 +26,16 @@ function setRequired(next: boolean): void {
 }
 
 async function check(): Promise<void> {
+  let failed = false
   try {
     const { minimumVersion } = await createApiClient({ baseUrl: apiUrl() }).appConfig()
     setRequired(isOlderVersion(app.getVersion(), minimumVersion))
   } catch (error) {
     // Keep whatever we knew: a failed check neither blocks nor unblocks.
     logger.warn('[min-version] check failed', error)
+    failed = true
   }
+  if (failed) setTimeout(() => void check(), RETRY_MS).unref()
 }
 
 /** Check at start-up and every few hours. Does nothing in development, or when the app has no website. */
