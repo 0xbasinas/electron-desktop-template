@@ -1632,6 +1632,76 @@ describe('single sign-on (OpenID Connect)', () => {
     expect(await made.json()).toMatchObject({ providerId: 'acme', domainVerified: false })
   })
 
+  it('lets a team owner add a provider for the team, but not a plain member or a stranger', async () => {
+    const s = setup()
+    const owner = await signIn(s, 'team-owner-sso@example.com')
+    const made = await s.call('/api/auth/organization/create', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ name: 'Co', slug: 'co-sso-1' })
+    })
+    const team = (await made.json()) as { id: string }
+    // Without a team it is refused; with the team it works.
+    expect((await register(s, owner, provider('team-co-a'))).status).toBe(403)
+    const ok = await register(s, owner, provider('team-co-b', { organizationId: team.id }))
+    expect(ok.status).toBe(200)
+    // Someone who is not in the team cannot attach a provider to it.
+    const stranger = await signIn(s, 'team-stranger-sso@example.com')
+    const refused = await register(s, stranger, provider('team-co-c', { organizationId: team.id }))
+    expect(refused.status).toBeGreaterThanOrEqual(400)
+  })
+
+  it('ends the sessions of people who signed in through a provider when it is deleted', async () => {
+    const s = setup()
+    const owner = await signIn(s, 'team-owner-del@example.com')
+    const made = await s.call('/api/auth/organization/create', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ name: 'Co2', slug: 'co-sso-2' })
+    })
+    const team = (await made.json()) as { id: string }
+    expect(
+      (await register(s, owner, provider('team-co-del', { organizationId: team.id }))).status
+    ).toBe(200)
+    const victim = await signIn(s, 'person-del@acme.example')
+    await bindings.DB.prepare(
+      "INSERT INTO account (id, account_id, provider_id, user_id, created_at, updated_at) SELECT 'acc-del', 'sub-1', 'team-co-del', id, 1, 1 FROM user WHERE email = ?"
+    )
+      .bind('person-del@acme.example')
+      .run()
+    expect((await s.call('/api/preferences', { headers: { cookie: victim } })).status).toBe(200)
+    const gone = await s.call('/api/auth/sso/delete-provider', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ providerId: 'team-co-del' })
+    })
+    expect(gone.status).toBe(200)
+    expect((await s.call('/api/preferences', { headers: { cookie: victim } })).status).toBe(401)
+  })
+
+  it('removes a team’s providers when the team is deleted', async () => {
+    const s = setup()
+    const owner = await signIn(s, 'team-owner-gone@example.com')
+    const made = await s.call('/api/auth/organization/create', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ name: 'Co3', slug: 'co-sso-3' })
+    })
+    const team = (await made.json()) as { id: string }
+    expect(
+      (await register(s, owner, provider('team-co-gone', { organizationId: team.id }))).status
+    ).toBe(200)
+    await s.call('/api/auth/organization/delete', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ organizationId: team.id })
+    })
+    const left = await bindings.DB.prepare('SELECT id FROM sso_provider WHERE provider_id = ?')
+      .bind('team-co-gone')
+      .first()
+    expect(left).toBeNull()
+  })
+
   it('refuses SAML providers, even from an admin', async () => {
     const s = setup()
     await signIn(s, 'boss-saml@example.com')

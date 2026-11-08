@@ -1,22 +1,50 @@
-import { useState, type FormEvent, type JSX } from 'react'
+import { useCallback, useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Button } from '@repo/ui'
 import { authClient } from '../lib/auth'
 
-interface Registered {
+interface Provider {
+  providerId: string
+  domain: string
+  organizationId?: string | null
+  domainVerified?: boolean
+}
+
+interface Pending {
   providerId: string
   domain: string
   token: string
 }
 
-/** Admins only: set up a company's OpenID Connect sign-in, then prove its domain with a DNS record. */
-export function SsoAdminSection(): JSX.Element {
+/**
+ * Set up a company's OpenID Connect sign-in, prove its domain with a DNS record, and remove it again. Staff see the
+ * providers they made; with `organizationId` (a team owner or admin) the list and the new provider belong to that team.
+ */
+export function SsoAdminSection({ organizationId }: { organizationId?: string }): JSX.Element {
   const [providerId, setProviderId] = useState('')
   const [issuer, setIssuer] = useState('')
   const [domain, setDomain] = useState('')
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
-  const [done, setDone] = useState<Registered | null>(null)
+  const [pending, setPending] = useState<Pending | null>(null)
+  const [providers, setProviders] = useState<Provider[]>([])
   const [message, setMessage] = useState<string | null>(null)
+  const [reload, setReload] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    void authClient.sso.providers().then(({ data }) => {
+      if (cancelled) return
+      const list = ((data as { providers?: Provider[] } | Provider[] | null) ?? []) as
+        Provider[] | { providers?: Provider[] }
+      const all = Array.isArray(list) ? list : (list.providers ?? [])
+      setProviders(organizationId ? all.filter((p) => p.organizationId === organizationId) : all)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [organizationId, reload])
+
+  const refresh = useCallback(() => setReload((n) => n + 1), [])
 
   async function register(event: FormEvent): Promise<void> {
     event.preventDefault()
@@ -25,6 +53,7 @@ export function SsoAdminSection(): JSX.Element {
       providerId: providerId.trim(),
       issuer: issuer.trim(),
       domain: domain.trim().toLowerCase(),
+      ...(organizationId ? { organizationId } : {}),
       oidcConfig: {
         clientId: clientId.trim(),
         clientSecret,
@@ -36,26 +65,87 @@ export function SsoAdminSection(): JSX.Element {
       return
     }
     setClientSecret('')
-    setDone({
+    setPending({
       providerId: providerId.trim(),
       domain: domain.trim().toLowerCase(),
       token: (data as { domainVerificationToken?: string }).domainVerificationToken ?? ''
     })
+    refresh()
   }
 
-  async function verify(): Promise<void> {
-    if (!done) return
-    const { error } = await authClient.sso.verifyDomain({ providerId: done.providerId })
+  async function verify(id: string): Promise<void> {
+    const { error } = await authClient.sso.verifyDomain({ providerId: id })
     setMessage(
       error
         ? 'The DNS record was not found yet. It can take a while to appear; try again later.'
         : 'Domain verified. People at this company can now sign in.'
     )
+    refresh()
+  }
+
+  async function showRecord(id: string): Promise<void> {
+    const { data, error } = await authClient.sso.requestDomainVerification({ providerId: id })
+    const found = providers.find((p) => p.providerId === id)
+    if (error || !found) {
+      setMessage(error?.message ?? 'Could not get the DNS record.')
+      return
+    }
+    setPending({
+      providerId: id,
+      domain: found.domain,
+      token: (data as { domainVerificationToken?: string } | null)?.domainVerificationToken ?? ''
+    })
+  }
+
+  async function remove(id: string): Promise<void> {
+    if (
+      !window.confirm(
+        'Remove this sign-in? Everyone who signed in through it is signed out, and their company link is deleted. Their accounts and team memberships stay.'
+      )
+    )
+      return
+    const { error } = await authClient.sso.deleteProvider({ providerId: id })
+    setMessage(error ? (error.message ?? 'Could not remove it.') : 'Removed.')
+    setPending(null)
+    refresh()
   }
 
   return (
     <section className="space-y-3" aria-label="Company sign-in">
       <h2 className="text-lg font-semibold">Company sign-in (OpenID Connect)</h2>
+      {providers.length > 0 && (
+        <ul className="divide-y divide-border rounded-lg border border-border">
+          {providers.map((p) => (
+            <li key={p.providerId} className="flex items-center justify-between gap-2 p-3 text-sm">
+              <span>
+                {p.providerId} ({p.domain}){' '}
+                <span className="text-muted-foreground">
+                  {p.domainVerified ? 'domain proven' : 'domain not proven yet'}
+                </span>
+              </span>
+              <span className="flex gap-2">
+                {!p.domainVerified && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void showRecord(p.providerId)}
+                    >
+                      DNS record
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => void verify(p.providerId)}>
+                      Check
+                    </Button>
+                  </>
+                )}
+                <Button variant="outline" size="sm" onClick={() => void remove(p.providerId)}>
+                  Remove
+                </Button>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
       <form onSubmit={(e) => void register(e)} className="grid max-w-md gap-2">
         {(
           [
@@ -87,16 +177,16 @@ export function SsoAdminSection(): JSX.Element {
           Add provider
         </Button>
       </form>
-      {done && (
+      {pending && (
         <div role="status" className="space-y-2 rounded-md border border-border p-3 text-sm">
           <p>
-            Add this DNS TXT record to prove {done.domain} belongs to them:
+            Add this DNS TXT record to prove {pending.domain} belongs to them:
             <br />
             <code className="break-all">
-              _better-auth-token-{done.providerId}.{done.domain} = {done.token}
+              _better-auth-token-{pending.providerId}.{pending.domain} = {pending.token}
             </code>
           </p>
-          <Button variant="outline" size="sm" onClick={() => void verify()}>
+          <Button variant="outline" size="sm" onClick={() => void verify(pending.providerId)}>
             Check the record
           </Button>
         </div>

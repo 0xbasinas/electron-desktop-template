@@ -4,7 +4,7 @@ import { passkey } from '@better-auth/passkey'
 import { sso } from '@better-auth/sso'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
-import { count, eq } from 'drizzle-orm'
+import { and, count, eq, inArray } from 'drizzle-orm'
 import { apiKey } from '@better-auth/api-key'
 import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
 import { admin, captcha, magicLink, organization } from 'better-auth/plugins'
@@ -89,6 +89,90 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           throw new APIError('BAD_REQUEST', {
             message: 'Only OpenID Connect providers are supported.'
           })
+        // Only staff may register a provider for nobody in particular. Anyone else must tie it to a team they own or
+        // administer (the plugin checks that), and the domain still has to be proven with DNS before anyone signs in.
+        if (ctx.path === '/sso/register') {
+          const registrant = ctx.context.session ?? (await getSessionFromCtx(ctx))
+          const staff = (registrant?.user as { role?: string | null } | undefined)?.role === 'admin'
+          if (
+            registrant &&
+            !staff &&
+            !(ctx.body as { organizationId?: string } | undefined)?.organizationId
+          )
+            throw new APIError('FORBIDDEN', { message: 'Choose the team this sign-in belongs to.' })
+        }
+        // Deleting a provider removes its linked accounts but not the sessions they hold; end those too.
+        if (ctx.path === '/sso/delete-provider') {
+          const providerId = (ctx.body as { providerId?: string } | undefined)?.providerId
+          const caller = ctx.context.session ?? (await getSessionFromCtx(ctx))
+          if (providerId && caller) {
+            const [provider] = await db
+              .select({
+                userId: schema.ssoProvider.userId,
+                organizationId: schema.ssoProvider.organizationId
+              })
+              .from(schema.ssoProvider)
+              .where(eq(schema.ssoProvider.providerId, providerId))
+            // Only when the caller may delete it (the plugin refuses everyone else after this hook).
+            let allowed =
+              provider?.userId === caller.user.id ||
+              (caller.user as { role?: string | null }).role === 'admin'
+            if (provider && !allowed && provider.organizationId) {
+              const [seat] = await db
+                .select({ role: schema.member.role })
+                .from(schema.member)
+                .where(
+                  and(
+                    eq(schema.member.organizationId, provider.organizationId),
+                    eq(schema.member.userId, caller.user.id)
+                  )
+                )
+              allowed = seat?.role === 'owner' || seat?.role === 'admin'
+            }
+            if (provider && allowed) {
+              const linked = await db
+                .select({ userId: schema.account.userId })
+                .from(schema.account)
+                .where(eq(schema.account.providerId, providerId))
+              const ids = linked.map((row) => row.userId)
+              if (ids.length)
+                await db.delete(schema.session).where(inArray(schema.session.userId, ids))
+            }
+          }
+        }
+        // A deleted team takes its company sign-ins with it (the provider table has no foreign key to teams).
+        if (ctx.path === '/organization/delete') {
+          const organizationId = (ctx.body as { organizationId?: string } | undefined)
+            ?.organizationId
+          const caller = ctx.context.session ?? (await getSessionFromCtx(ctx))
+          if (organizationId && caller) {
+            const [seat] = await db
+              .select({ role: schema.member.role })
+              .from(schema.member)
+              .where(
+                and(
+                  eq(schema.member.organizationId, organizationId),
+                  eq(schema.member.userId, caller.user.id)
+                )
+              )
+            if (seat?.role === 'owner') {
+              const linked = await db
+                .select({ userId: schema.account.userId })
+                .from(schema.account)
+                .innerJoin(
+                  schema.ssoProvider,
+                  eq(schema.ssoProvider.providerId, schema.account.providerId)
+                )
+                .where(eq(schema.ssoProvider.organizationId, organizationId))
+              const ids = linked.map((row) => row.userId)
+              if (ids.length)
+                await db.delete(schema.session).where(inArray(schema.session.userId, ids))
+              await db
+                .delete(schema.ssoProvider)
+                .where(eq(schema.ssoProvider.organizationId, organizationId))
+            }
+          }
+        }
         if (ctx.path !== '/api-key/create') return
         const session = ctx.context.session ?? (await getSessionFromCtx(ctx))
         if (!session) return
@@ -272,8 +356,25 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       // Single sign-on for companies, by OpenID Connect. Only admins may register a provider (a company is set up by
       // us, not self-service), and a provider's domain must be proven with a DNS record before it can sign anyone in.
       sso({
-        providersLimit: (user) => ((user as { role?: string | null }).role === 'admin' ? 25 : 0),
-        domainVerification: { enabled: true }
+        // Staff set up companies; a team owner or admin may add a few for their own team (see the before hook).
+        providersLimit: (user) => ((user as { role?: string | null }).role === 'admin' ? 25 : 3),
+        domainVerification: { enabled: true },
+        // A person who signs in through a team's provider joins that team as a plain member. A role is never taken
+        // from the company's group claims: that would let whoever manages the group run the team's sign-in controls.
+        organizationProvisioning: { disabled: false, defaultRole: 'member' },
+        provisionUser: async ({ user }) => {
+          waitUntil(
+            recordAudit(db, {
+              type: 'sso_user_provisioned',
+              outcome: 'success',
+              userId: user.id,
+              now: Date.now()
+            }).catch((error: unknown) => {
+              console.error('Could not record the provisioning', error)
+              Sentry.captureException(error)
+            })
+          )
+        }
       }),
       // Staff tools (roles: admin, support). Banning also ends the person's sessions. Nobody is an admin until
       // `pnpm admin:grant <email>` says so; the sign-up flow never grants a role.

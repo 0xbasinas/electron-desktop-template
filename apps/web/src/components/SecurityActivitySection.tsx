@@ -24,7 +24,11 @@ const NAMES: Record<string, string> = {
   member_invited: 'Someone was invited to a team',
   invitation_accepted: 'Joined a team',
   member_removed: 'A team member was removed',
-  team_role_changed: 'A team role was changed'
+  team_role_changed: 'A team role was changed',
+  sso_provider_added: 'A company sign-in was added',
+  sso_provider_updated: 'A company sign-in was changed',
+  sso_provider_deleted: 'A company sign-in was removed',
+  sso_user_provisioned: 'Account created through company sign-in'
 }
 
 const eventName = (type: string): string => NAMES[type] ?? type.replaceAll('_', ' ')

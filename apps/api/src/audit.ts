@@ -32,6 +32,10 @@ export type AuditType =
   | 'user_impersonated'
   | 'user_impersonated_stopped'
   | 'user_removed'
+  | 'sso_provider_added'
+  | 'sso_provider_updated'
+  | 'sso_provider_deleted'
+  | 'sso_user_provisioned'
 
 export interface AuditInput {
   type: AuditType
@@ -91,7 +95,10 @@ const BY_PATH: Record<string, AuditType> = {
   '/admin/set-role': 'user_role_updated',
   '/admin/impersonate-user': 'user_impersonated',
   '/admin/stop-impersonating': 'user_impersonated_stopped',
-  '/admin/remove-user': 'user_removed'
+  '/admin/remove-user': 'user_removed',
+  '/sso/register': 'sso_provider_added',
+  '/sso/update-provider': 'sso_provider_updated',
+  '/sso/delete-provider': 'sso_provider_deleted'
 }
 
 /**

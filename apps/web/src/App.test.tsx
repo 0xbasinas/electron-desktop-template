@@ -11,7 +11,13 @@ const auth = vi.hoisted(() => ({
   magicLink: vi.fn(),
   apiKey: { list: vi.fn(), create: vi.fn(), delete: vi.fn() },
   signInSso: vi.fn(),
-  sso: { register: vi.fn(), verifyDomain: vi.fn() },
+  sso: {
+    register: vi.fn(),
+    verifyDomain: vi.fn(),
+    providers: vi.fn(async () => ({ data: [], error: null })),
+    requestDomainVerification: vi.fn(),
+    deleteProvider: vi.fn()
+  },
   organization: {
     list: vi.fn(),
     create: vi.fn(),
