@@ -3,8 +3,12 @@ import { electron } from '@better-auth/electron'
 import { passkey } from '@better-auth/passkey'
 import * as Sentry from '@sentry/cloudflare'
 import { betterAuth } from 'better-auth'
-import { eq } from 'drizzle-orm'
-import { magicLink } from 'better-auth/plugins'
+import { count, eq } from 'drizzle-orm'
+import { apiKey } from '@better-auth/api-key'
+import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/api'
+import { admin, captcha, magicLink } from 'better-auth/plugins'
+import { ac, roles } from './permissions'
+import { eventForCall, recordAudit } from './audit'
 import type { Db } from './db'
 import { schema } from './db'
 import { BRAND } from './brand'
@@ -12,6 +16,9 @@ import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
 import type { Bindings } from './env'
+
+/** The most API keys one person may have. */
+export const MAX_API_KEYS = 10
 
 /** Used when the variable APP_NAME is not set. */
 export const DEFAULT_APP_NAME = 'Electron Desktop Template'
@@ -59,6 +66,52 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       max: 30,
       customRules: { '/get-session': false }
     },
+    hooks: {
+      // At most MAX_API_KEYS keys per person, so one account cannot fill the table.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.path !== '/api-key/create') return
+        const session = ctx.context.session ?? (await getSessionFromCtx(ctx))
+        if (!session) return
+        const [row] = await db
+          .select({ n: count() })
+          .from(schema.apikey)
+          .where(eq(schema.apikey.referenceId, session.user.id))
+        if ((row?.n ?? 0) >= MAX_API_KEYS)
+          throw new APIError('BAD_REQUEST', {
+            message: 'You have the most keys allowed. Delete one first.'
+          })
+      }),
+      // The security trail: failed sign-ins and account changes. After the response, and never fatal.
+      after: createAuthMiddleware(async (ctx) => {
+        const returned = ctx.context.returned
+        const failed = returned instanceof APIError
+        const event = eventForCall({
+          path: ctx.path,
+          failed,
+          errorCode: failed ? (returned.body?.code as string | undefined) : undefined,
+          location: ctx.context.responseHeaders?.get('location')
+        })
+        if (!event) return
+        const userId = ctx.context.session?.user.id ?? null
+        const actorId = ctx.path.startsWith('/admin/') ? userId : null
+        const target = ctx.path.startsWith('/admin/')
+          ? ((ctx.body as { userId?: string } | undefined)?.userId ?? null)
+          : userId
+        waitUntil(
+          recordAudit(db, {
+            ...event,
+            userId: ctx.path.startsWith('/admin/') ? target : userId,
+            actorId,
+            ipAddress: ctx.headers?.get('cf-connecting-ip') ?? null,
+            userAgent: ctx.headers?.get('user-agent') ?? null,
+            now: Date.now()
+          }).catch((error: unknown) => {
+            console.error('Could not record the audit event', error)
+            Sentry.captureException(error)
+          })
+        )
+      })
+    },
     databaseHooks: {
       session: {
         create: {
@@ -69,6 +122,14 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
               (async () => {
                 const now = Date.now()
                 const ipAddress = created.ipAddress ?? null
+                await recordAudit(db, {
+                  type: 'user_signed_in',
+                  outcome: 'success',
+                  userId: created.userId,
+                  ipAddress,
+                  userAgent: created.userAgent ?? null,
+                  now
+                })
                 const recorded = await recordSignIn(db, {
                   userId: created.userId,
                   ipAddress,
@@ -101,6 +162,35 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       backgroundTasks: { handler: waitUntil }
     },
     plugins: [
+      // Bot check on the one endpoint that sends email. Only when both keys are set, so the site never asks for a
+      // challenge it cannot show. The client sends the token in the `x-captcha-response` header.
+      ...(env.TURNSTILE_SECRET_KEY && env.TURNSTILE_SITE_KEY
+        ? [
+            captcha({
+              provider: 'cloudflare-turnstile',
+              secretKey: env.TURNSTILE_SECRET_KEY,
+              endpoints: ['/sign-in/magic-link']
+            })
+          ]
+        : []),
+      // Keys a person makes on their account page to call the API from scripts. Sent in the x-api-key header.
+      apiKey({
+        defaultPrefix: 'key_',
+        requireName: true,
+        // The key is stored as a hash; the full key is shown once, when it is made.
+        keyExpiration: { defaultExpiresIn: 90 * 86_400, minExpiresIn: 1, maxExpiresIn: 365 },
+        rateLimit: { enabled: true, timeWindow: 60_000, maxRequests: 60 },
+        // Usage counters are written after the response, so checking a key does not wait for a database write.
+        deferUpdates: true
+      }),
+      // Staff tools (roles: admin, support). Banning also ends the person's sessions. Nobody is an admin until
+      // `pnpm admin:grant <email>` says so; the sign-up flow never grants a role.
+      admin({
+        ac,
+        roles,
+        defaultRole: 'user',
+        bannedUserMessage: 'This account has been suspended.'
+      }),
       // Lets the desktop app sign in through the system browser (PKCE, then a one-time code over the deep link).
       electron(),
       // Sign in with a fingerprint, face or security key instead of waiting for an email. A passkey is tied to the

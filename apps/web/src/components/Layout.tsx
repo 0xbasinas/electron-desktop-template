@@ -29,6 +29,13 @@ export function Layout(): JSX.Element {
             <NavLink to="/app" className={link}>
               Open web app
             </NavLink>
+            {['admin', 'support'].includes(
+              (session?.user as { role?: string | null } | undefined)?.role ?? ''
+            ) && (
+              <NavLink to="/admin" className={link}>
+                Admin
+              </NavLink>
+            )}
             {session && (
               <NavLink to="/account" className={link}>
                 Account

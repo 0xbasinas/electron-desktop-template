@@ -19,6 +19,7 @@
     "auth:schema": "auth generate --config src/auth.cli.ts --output src/db/auth-schema.ts -y"
   },
   "dependencies": {
+    "@better-auth/api-key": "1.7.18",
     "@better-auth/drizzle-adapter": "^1.7.18",
     "@better-auth/electron": "^1.7.18",
     "@better-auth/passkey": "^1.7.18",

@@ -139,6 +139,33 @@ describe('sign-in with a magic link', () => {
     expect(second.headers.getSetCookie().join(';')).not.toContain('session_token')
   })
 
+  it('sends no link without a solved challenge when Turnstile is set up, and says so to the page', async () => {
+    const s = setup({ TURNSTILE_SECRET_KEY: 'secret', TURNSTILE_SITE_KEY: 'site' })
+    const response = await s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'bot@example.com', callbackURL: '/app' })
+    })
+    expect(response.status).toBe(400)
+    expect(s.sent).toHaveLength(0)
+    const config = await s.call('/api/app-config')
+    expect(await config.json()).toEqual({ minimumVersion: null, turnstileSiteKey: 'site' })
+  })
+
+  it('asks for no challenge unless both Turnstile keys are set', async () => {
+    const s = setup({ TURNSTILE_SITE_KEY: 'site' })
+    expect(await (await s.call('/api/app-config')).json()).toEqual({
+      minimumVersion: null,
+      turnstileSiteKey: null
+    })
+    await s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email: 'human@example.com', callbackURL: '/app' })
+    })
+    expect(s.sent).toHaveLength(1)
+  })
+
   it('rejects a malformed email', async () => {
     const s = setup()
     const response = await s.call('/api/auth/sign-in/magic-link', {
@@ -1084,6 +1111,7 @@ describe('privacy summary', () => {
     expect(summary).toEqual({
       devices: 1,
       signIns: 1,
+      securityEvents: 1,
       passkeys: 0,
       feedback: 1,
       hasSyncedSettings: false
@@ -1095,17 +1123,17 @@ describe('app config', () => {
   it('says which app version is the oldest allowed, and is public', async () => {
     const none = await setup().call('/api/app-config')
     expect(none.status).toBe(200)
-    expect(await none.json()).toEqual({ minimumVersion: null })
+    expect(await none.json()).toEqual({ minimumVersion: null, turnstileSiteKey: null })
 
     const set = setup({ MIN_APP_VERSION: ' 0.1.42 ' })
     const response = await set.call('/api/app-config')
-    expect(await response.json()).toEqual({ minimumVersion: '0.1.42' })
+    expect(await response.json()).toEqual({ minimumVersion: '0.1.42', turnstileSiteKey: null })
     expect(response.headers.get('cache-control')).toContain('max-age')
   })
 
   it('ignores a value that is not a version, so a typo cannot lock anyone out', async () => {
     const response = await setup({ MIN_APP_VERSION: 'soon' }).call('/api/app-config')
-    expect(await response.json()).toEqual({ minimumVersion: null })
+    expect(await response.json()).toEqual({ minimumVersion: null, turnstileSiteKey: null })
   })
 })
 
@@ -1289,5 +1317,180 @@ describe('consent ledger', () => {
       consents: { purpose: string }[]
     }
     expect(out.consents).toHaveLength(1)
+  })
+})
+
+describe('security activity (audit trail)', () => {
+  type Entry = { type: string; outcome: string; label: string | null }
+  const activity = async (s: ReturnType<typeof setup>, cookie: string): Promise<Entry[]> =>
+    (await s.call('/api/account/security-activity', { headers: { cookie } })).json()
+
+  it('records a sign-in and lists it for the person only', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'audit@example.com', 'Mozilla/5.0 (Windows NT 10.0) Chrome/120')
+    const mine = await activity(s, cookie)
+    expect(mine.map((e) => e.type)).toContain('user_signed_in')
+    const other = await signIn(s, 'other-audit@example.com')
+    expect((await activity(s, other)).length).toBe(1)
+  })
+
+  it('records a bad magic link as a failed sign-in with no person attached', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'audit2@example.com')
+    const bad = await s.call('/api/auth/magic-link/verify?token=nope&callbackURL=/app')
+    expect(bad.headers.get('location') ?? '').toMatch(/error/i)
+    // Anonymous events are not shown to anyone's account page.
+    expect((await activity(s, cookie)).every((e) => e.outcome === 'success')).toBe(true)
+  })
+
+  it('records revoking all sessions and counts events in the privacy summary and export', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'audit3@example.com')
+    const revoke = await s.call('/api/auth/revoke-other-sessions', {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: '{}'
+    })
+    expect(revoke.status).toBe(200)
+    const types = (await activity(s, cookie)).map((e) => e.type)
+    expect(types).toContain('all_sessions_revoked')
+    const privacy = (await (
+      await s.call('/api/account/privacy', { headers: { cookie } })
+    ).json()) as { securityEvents: number }
+    expect(privacy.securityEvents).toBeGreaterThanOrEqual(2)
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as { securityActivity: Entry[] }
+    expect(exported.securityActivity.length).toBeGreaterThanOrEqual(2)
+  })
+})
+
+describe('staff roles (admin plugin)', () => {
+  const json = { 'content-type': 'application/json' }
+  /** Makes the account, gives it the role, then signs in again so the new session carries the role. */
+  async function staff(s: ReturnType<typeof setup>, email: string, role: string): Promise<string> {
+    await signIn(s, email)
+    await bindings.DB.prepare('UPDATE user SET role = ? WHERE email = ?').bind(role, email).run()
+    return signIn(s, email)
+  }
+  const list = (s: ReturnType<typeof setup>, cookie: string): Promise<Response> =>
+    s.call('/api/auth/admin/list-users?limit=5', { headers: { cookie } })
+
+  it('lets an admin list people, and nobody else', async () => {
+    const s = setup()
+    const admin = await staff(s, 'boss@example.com', 'admin')
+    expect((await list(s, admin)).status).toBe(200)
+    const plain = await signIn(s, 'plain@example.com')
+    expect((await list(s, plain)).status).toBe(403)
+    expect((await list(s, '')).status).toBeGreaterThanOrEqual(401)
+  })
+
+  it('gives support a read-only view', async () => {
+    const s = setup()
+    const support = await staff(s, 'help@example.com', 'support')
+    expect((await list(s, support)).status).toBe(200)
+    const ban = await s.call('/api/auth/admin/ban-user', {
+      method: 'POST',
+      headers: { cookie: support, ...json },
+      body: JSON.stringify({ userId: 'whoever' })
+    })
+    expect(ban.status).toBe(403)
+  })
+
+  it('bans a person: their sessions end, they cannot sign in again, and it is in the trail', async () => {
+    const s = setup()
+    const admin = await staff(s, 'boss2@example.com', 'admin')
+    const victim = await signIn(s, 'victim@example.com')
+    const row = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('victim@example.com')
+      .first<{ id: string }>()
+    const ban = await s.call('/api/auth/admin/ban-user', {
+      method: 'POST',
+      headers: { cookie: admin, ...json },
+      body: JSON.stringify({ userId: row!.id, banReason: 'abuse' })
+    })
+    expect(ban.status).toBe(200)
+    const events = await bindings.DB.prepare(
+      "SELECT actor_id FROM audit_event WHERE user_id = ? AND type = 'user_banned'"
+    )
+      .bind(row!.id)
+      .all()
+    expect(events.results).toHaveLength(1)
+    expect(events.results[0]!.actor_id).not.toBeNull()
+    // A new link no longer signs them in.
+    const before = s.sent.length
+    await s.call('/api/auth/sign-in/magic-link', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ email: 'victim@example.com', callbackURL: '/app' })
+    })
+    const link = /https?:\/\/\S+magic-link\/verify\S+/.exec(s.sent[before]!.text)![0]
+    const verify = await s.call(new URL(link).pathname + new URL(link).search)
+    expect(verify.headers.getSetCookie().join(';')).not.toContain('session_token')
+    void victim
+  })
+})
+
+describe('API keys', () => {
+  const json = { 'content-type': 'application/json' }
+  const make = (s: ReturnType<typeof setup>, cookie: string, name = 'script'): Promise<Response> =>
+    s.call('/api/auth/api-key/create', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ name })
+    })
+
+  it('makes a key that works once in the header, and stops working when deleted', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'keys@example.com')
+    const created = await make(s, cookie)
+    expect(created.status).toBe(200)
+    const body = (await created.json()) as { key: string; id: string; expiresAt: string | null }
+    expect(body.key).toMatch(/^key_/)
+    expect(body.expiresAt).not.toBeNull()
+
+    const me = await s.call('/api/v1/me', { headers: { 'x-api-key': body.key } })
+    expect(me.status).toBe(200)
+    expect(await me.json()).toMatchObject({ email: 'keys@example.com' })
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': 'key_nope' } })).status).toBe(401)
+    expect((await s.call('/api/v1/me')).status).toBe(401)
+
+    // The database holds a hash, never the key.
+    const stored = await bindings.DB.prepare('SELECT key FROM apikey WHERE id = ?')
+      .bind(body.id)
+      .first<{ key: string }>()
+    expect(stored!.key).not.toBe(body.key)
+
+    const exported = (await (
+      await s.call('/api/account/export', { headers: { cookie } })
+    ).json()) as { apiKeys: { name: string }[] }
+    expect(exported.apiKeys).toHaveLength(1)
+    expect(JSON.stringify(exported)).not.toContain(body.key)
+
+    await s.call('/api/auth/api-key/delete', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ keyId: body.id })
+    })
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': body.key } })).status).toBe(401)
+  })
+
+  it('needs a name, a session, and stops at ten keys', async () => {
+    const s = setup()
+    expect((await make(s, '')).status).toBeGreaterThanOrEqual(401)
+    const cookie = await signIn(s, 'many@example.com')
+    expect((await make(s, cookie, '')).status).toBe(400)
+    for (let i = 0; i < 10; i++) expect((await make(s, cookie, `k${i}`)).status).toBe(200)
+    expect((await make(s, cookie, 'eleventh')).status).toBe(400)
+  })
+
+  it('does not accept a key from a suspended person', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'gone@example.com')
+    const { key } = (await (await make(s, cookie)).json()) as { key: string }
+    await bindings.DB.prepare('UPDATE user SET banned = 1 WHERE email = ?')
+      .bind('gone@example.com')
+      .run()
+    expect((await s.call('/api/v1/me', { headers: { 'x-api-key': key } })).status).toBe(401)
   })
 })

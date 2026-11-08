@@ -121,6 +121,41 @@ agreed to is ignored). Entries are never edited, go when the account is deleted,
 thing, add it to `CONSENT_PURPOSES` and `CONSENT_LABELS`; bump `POLICY_VERSION` when the policy text changes. The privacy page
 shows "Your agreements". Nothing here is needed to sign in.
 
+## Bot check on sign-in (Cloudflare Turnstile, optional)
+
+The email-link request (`POST /sign-in/magic-link`) is the one endpoint that sends email, so it can be protected with Cloudflare Turnstile, which is free and runs on your own Cloudflare account.
+
+- Create a Turnstile widget in the Cloudflare dashboard (hostname: your site). Put the **site key** in `TURNSTILE_SITE_KEY` (a public variable in `apps/api/wrangler.jsonc`) and the **secret key** with `wrangler secret put TURNSTILE_SECRET_KEY`.
+- The check turns on only when **both** are set. `/api/app-config` then returns `turnstileSiteKey`; the sign-in page shows the widget and sends the token in the `x-captcha-response` header. Without a token the API answers 400 and sends no email; a failed check is 403. A token works once, so the page asks for a new one after every try.
+- Only `/sign-in/magic-link` is checked (not the link itself, and not passkeys). A request without a valid token still counts against the sign-in rate limit.
+- To try it locally use Cloudflare's test keys: site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`.
+- The page's security headers (`apps/web/public/_headers`) allow `https://challenges.cloudflare.com` for scripts, frames and connections.
+
+## Security activity (audit trail)
+
+Table `audit_event` (`apps/api/src/audit.ts`) records what happened to an account: sign-ins (from the session hook), failed magic-link and passkey sign-ins, sessions revoked, profile and passkey changes, and admin actions. Better Auth `hooks.after` decides what to record (`eventForCall`, tested); a bad magic link is a redirect with `error=`, not an error object. Writes run after the response and never fail a request.
+
+- `GET /api/account/security-activity` lists the person's own latest 50 events; the same list is in the data export, and the privacy summary counts them.
+- `detail` holds a code only, never what a stranger typed. Failed sign-ins have no person attached and are removed after 30 days; everything else after a year (daily job). Events about a person are deleted with the account.
+
+## Staff roles and the admin page
+
+The Better Auth `admin` plugin is on, with two roles (`apps/api/src/permissions.ts`): **admin** (list, create, update, set role or password, suspend, impersonate, revoke sessions; not delete, not impersonate other admins) and **support** (list and look up people and sessions only). Everyone else is `user` and can do nothing there.
+
+- Nobody is staff by default and sign-up never grants a role. Give or take one with `pnpm admin:grant <email> [admin|support]` and `pnpm admin:revoke <email>` (local database; add `--remote` for the real one). The person must have signed in once.
+- A role change shows up on their next sign-in, or within 5 minutes (the session cookie cache).
+- `/admin` in the website lists people (search by email, pages of 25) and lets an admin suspend or restore them. Suspending ends their sessions and blocks new ones; the server enforces permissions, the page only hides buttons.
+- Suspending ends the person's sessions at once, but a session cookie already issued can still pass a plain `get-session` for up to 5 minutes (the cookie cache). Account actions and API keys check the database, so they stop immediately.
+- Admin actions are written to the audit trail with `actor_id` set to the staff member.
+- Deleting an account stays on the person's own cooling-off flow; the plugin's delete is not granted to anyone.
+
+## API keys
+
+People make keys on their account page for scripts that act as them (`@better-auth/api-key`, table `apikey`). A key is shown once, is stored as a hash, expires after 90 days by default (at most 365), is limited to 60 requests a minute, needs a name, and a person may hold ten. Send it in the `x-api-key` header; `GET /api/v1/me` is the example call and shows how to check a key on the server (`auth.api.verifyApiKey`, which rejects suspended people). Usage counters are written after the response (`deferUpdates`).
+
+- `apikey.reference_id` has no foreign key, so the daily deletion job removes a person's keys itself (`deletion.ts`). The data export lists name, first characters and dates, never the key.
+- A key identifies a person, not a permission: new routes that accept keys must check what the key may do. Do not enable `enableSessionForAPIKeys`.
+
 ## Feedback
 
 `POST /api/feedback` stores a message (kind `bug`, `idea` or `other`, up to 4000 characters, plus an optional diagnostics

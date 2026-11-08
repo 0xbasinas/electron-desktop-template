@@ -1,4 +1,11 @@
-import { accountExportSchema, accountSchema, type Account, type AccountExport } from './schemas'
+import {
+  accountExportSchema,
+  accountSchema,
+  securityEventsSchema,
+  type Account,
+  type AccountExport,
+  type SecurityEvent
+} from './schemas'
 import { preferencesRecordSchema, type PreferencesRecord } from './preferences'
 import {
   cancelDeletionInputSchema,
@@ -88,6 +95,7 @@ export interface ApiClient {
     privacy(): Promise<PrivacySummary>
     /** The last sign-ins to the account, newest first. */
     signIns(): Promise<SignIn[]>
+    securityActivity(): Promise<SecurityEvent[]>
     /** Asks to move the account to a new address. A link goes to the new address; nothing changes until it is used. */
     changeEmail(newEmail: string): Promise<void>
     /** Finishes the change with the token from the email (no sign-in needed). */
@@ -178,6 +186,8 @@ export function createApiClient({
       requests: (): Promise<DataRequest[]> => request('/account/requests', dataRequestsSchema),
       privacy: (): Promise<PrivacySummary> => request('/account/privacy', privacySummarySchema),
       signIns: (): Promise<SignIn[]> => request('/account/sign-ins', signInsSchema),
+      securityActivity: (): Promise<SecurityEvent[]> =>
+        request('/account/security-activity', securityEventsSchema),
       changeEmail: (newEmail: string): Promise<void> =>
         request('/account/email-change', null, {
           method: 'POST',

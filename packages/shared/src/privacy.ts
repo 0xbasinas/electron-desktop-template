@@ -4,6 +4,7 @@ import { z } from 'zod'
 export const privacySummarySchema = z.object({
   devices: z.number(),
   signIns: z.number(),
+  securityEvents: z.number().default(0),
   passkeys: z.number(),
   feedback: z.number(),
   hasSyncedSettings: z.boolean()

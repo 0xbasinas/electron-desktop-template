@@ -4,6 +4,8 @@ import { emailSchema } from '@repo/shared'
 import { Navigate, useSearchParams } from 'react-router'
 import { authClient } from '../lib/auth'
 import { readDesktopParams } from '../lib/desktop'
+import { api } from '../lib/api'
+import { Turnstile } from '../components/Turnstile'
 
 type State = 'idle' | 'sending' | 'sent'
 
@@ -16,6 +18,16 @@ export function SignInPage(): JSX.Element {
   const desktop = readDesktopParams(params)
   const [email, setEmail] = useState('')
   const [state, setState] = useState<State>('idle')
+  // Turnstile: the key comes from the API; with none, no challenge is asked for.
+  const [siteKey, setSiteKey] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+  const [challenge, setChallenge] = useState(0)
+  useEffect(() => {
+    void api
+      .appConfig()
+      .then((config) => setSiteKey(config.turnstileSiteKey ?? null))
+      .catch(() => undefined)
+  }, [])
   const [error, setError] = useState<string | null>(
     params.get('error')
       ? 'That sign-in link did not work. It may have expired or been used already.'
@@ -60,6 +72,10 @@ export function SignInPage(): JSX.Element {
       setError('Enter a valid email address.')
       return
     }
+    if (siteKey && !token) {
+      setError('Complete the check below first.')
+      return
+    }
     setError(null)
     setState('sending')
     const { error: failure } = await authClient.signIn.magicLink({
@@ -67,8 +83,20 @@ export function SignInPage(): JSX.Element {
       // From the desktop app, the link ends on a page that opens the app; otherwise the web app.
       callbackURL: desktop ? '/auth/desktop' : '/app',
       errorCallbackURL: '/sign-in?error=link',
-      ...(desktop ? { fetchOptions: { query: desktop } } : {})
+      ...(desktop || (siteKey && token)
+        ? {
+            fetchOptions: {
+              ...(desktop ? { query: desktop } : {}),
+              ...(siteKey && token ? { headers: { 'x-captcha-response': token } } : {})
+            }
+          }
+        : {})
     })
+    // A token works once: ask for a new one whatever the answer was.
+    if (siteKey) {
+      setToken(null)
+      setChallenge((n) => n + 1)
+    }
     if (failure) {
       setState('idle')
       setError(
@@ -114,6 +142,7 @@ export function SignInPage(): JSX.Element {
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
         />
       </label>
+      {siteKey && <Turnstile siteKey={siteKey} onToken={setToken} resetKey={challenge} />}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -9,6 +9,8 @@ const auth = vi.hoisted(() => ({
   session: null as null | { user: { email: string } },
   pending: false,
   magicLink: vi.fn(),
+  apiKey: { list: vi.fn(), create: vi.fn(), delete: vi.fn() },
+  admin: { listUsers: vi.fn(), banUser: vi.fn(), unbanUser: vi.fn() },
   transfer: vi.fn(),
   ensureRedirect: vi.fn(() => 0),
   revoke: vi.fn(),
@@ -27,6 +29,8 @@ vi.mock('./lib/auth', () => ({
       deletePasskey: auth.deletePasskey
     },
     signOut: vi.fn(),
+    admin: auth.admin,
+    apiKey: auth.apiKey,
     $fetch: auth.transfer,
     ensureElectronRedirect: auth.ensureRedirect,
     revokeSessions: auth.revoke
@@ -47,6 +51,15 @@ const accountApi = vi.hoisted(() => ({
   confirmEmailChange: vi.fn()
 }))
 const appConfigApi = vi.hoisted(() => vi.fn())
+const turnstileProps = vi.hoisted(() => ({
+  onToken: vi.fn() as (token: string | null) => void
+}))
+vi.mock('./components/Turnstile', () => ({
+  Turnstile: (props: { onToken: (token: string | null) => void }) => {
+    turnstileProps.onToken = props.onToken
+    return <div data-testid="turnstile" />
+  }
+}))
 const prefsApi = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn() }))
 const feedbackApi = vi.hoisted(() => ({ send: vi.fn() }))
 const devicesApi = vi.hoisted(() => ({ list: vi.fn(), rename: vi.fn(), signOut: vi.fn() }))
@@ -68,6 +81,9 @@ beforeEach(() => {
   auth.ensureRedirect.mockClear()
   auth.signInPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.listPasskeys.mockReset().mockResolvedValue({ data: [], error: null })
+  auth.apiKey.list.mockReset().mockResolvedValue({ data: { apiKeys: [] }, error: null })
+  auth.apiKey.create.mockReset()
+  auth.apiKey.delete.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.addPasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.deletePasskey.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.revoke.mockReset().mockResolvedValue({ data: {}, error: null })
@@ -285,6 +301,25 @@ describe('sign-in page', () => {
     auth.session = { user: { email: 'ada@example.com' } }
     at('/sign-in')
     expect(screen.getByRole('heading', { name: 'Web app' })).toBeInTheDocument()
+  })
+})
+
+describe('sign-in challenge', () => {
+  it('asks for the check first and sends its token with the request', async () => {
+    appConfigApi.mockResolvedValue({ minimumVersion: null, turnstileSiteKey: 'site-key' })
+    at('/sign-in')
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com')
+    await screen.findByTestId('turnstile')
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }))
+    expect(auth.magicLink).not.toHaveBeenCalled()
+    expect(screen.getByRole('alert')).toHaveTextContent('Complete the check')
+    act(() => turnstileProps.onToken('tok-1'))
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }))
+    expect(auth.magicLink).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fetchOptions: { headers: { 'x-captcha-response': 'tok-1' } }
+      })
+    )
   })
 })
 
@@ -666,5 +701,77 @@ describe('devices', () => {
     await userEvent.type(screen.getByLabelText('Device name'), 'Home PC')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => expect(devicesApi.rename).toHaveBeenCalledWith('d1', 'Home PC'))
+  })
+})
+
+describe('admin page', () => {
+  const people = {
+    data: {
+      users: [
+        { id: 'u1', email: 'me@example.com', role: 'admin', banned: false },
+        { id: 'u2', email: 'them@example.com', role: 'user', banned: false }
+      ],
+      total: 2
+    },
+    error: null
+  }
+
+  it('sends people who are not staff away', () => {
+    auth.session = { user: { email: 'a@b.co', id: 'u9', role: 'user' } } as never
+    at('/admin')
+    expect(auth.admin.listUsers).not.toHaveBeenCalled()
+    expect(screen.queryByRole('heading', { name: 'People' })).not.toBeInTheDocument()
+  })
+
+  it('lets an admin list and suspend people, but not themselves', async () => {
+    auth.session = { user: { email: 'me@example.com', id: 'u1', role: 'admin' } } as never
+    auth.admin.listUsers.mockResolvedValue(people)
+    auth.admin.banUser.mockResolvedValue({ data: {}, error: null })
+    at('/admin')
+    expect(await screen.findByText('them@example.com')).toBeInTheDocument()
+    const buttons = screen.getAllByRole('button', { name: 'Suspend' })
+    expect(buttons).toHaveLength(1)
+    await userEvent.click(buttons[0]!)
+    expect(auth.admin.banUser).toHaveBeenCalledWith(expect.objectContaining({ userId: 'u2' }))
+  })
+
+  it('shows support the list without any buttons to change it', async () => {
+    auth.session = { user: { email: 'help@example.com', id: 'u3', role: 'support' } } as never
+    auth.admin.listUsers.mockResolvedValue(people)
+    at('/admin')
+    expect(await screen.findByText('them@example.com')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Suspend' })).not.toBeInTheDocument()
+  })
+})
+
+describe('API keys on the account page', () => {
+  beforeEach(() => {
+    auth.session = { user: { email: 'ada@example.com' } }
+  })
+
+  it('shows a new key once, and lists keys by name', async () => {
+    auth.apiKey.create.mockResolvedValue({ data: { key: 'key_secret123' }, error: null })
+    auth.apiKey.list.mockResolvedValue({
+      data: { apiKeys: [{ id: 'k1', name: 'Backup', start: 'key_ab', expiresAt: null }] },
+      error: null
+    })
+    at('/account')
+    expect(await screen.findByText(/Backup/)).toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Key name'), 'Deploy')
+    await userEvent.click(screen.getByRole('button', { name: 'Make a key' }))
+    expect(auth.apiKey.create).toHaveBeenCalledWith({ name: 'Deploy' })
+    expect(await screen.findByText('key_secret123')).toBeInTheDocument()
+  })
+
+  it('deletes a key', async () => {
+    auth.apiKey.list.mockResolvedValue({
+      data: { apiKeys: [{ id: 'k1', name: 'Backup', start: 'key_ab', expiresAt: null }] },
+      error: null
+    })
+    at('/account')
+    await screen.findByText(/Backup/)
+    const list = screen.getByRole('region', { name: 'API keys' })
+    await userEvent.click(within(list).getByRole('button', { name: 'Delete' }))
+    expect(auth.apiKey.delete).toHaveBeenCalledWith({ keyId: 'k1' })
   })
 })

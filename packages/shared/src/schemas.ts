@@ -20,6 +20,17 @@ export const accountSchema = z.object({
   pendingEmail: z.string().nullable().default(null)
 })
 
+/** One security event about the account: a sign-in, a failed attempt, a revoked session, a passkey change. */
+export const securityEventSchema = z.object({
+  at: z.string(),
+  type: z.string(),
+  outcome: z.string(),
+  label: z.string().nullable(),
+  ipAddress: z.string().nullable()
+})
+export const securityEventsSchema = z.array(securityEventSchema)
+export type SecurityEvent = z.infer<typeof securityEventSchema>
+
 /** Everything we hold about a person (the "download my data" file). No tokens or secrets are included. */
 export const accountExportSchema = z.object({
   exportedAt: z.string(),
@@ -34,6 +45,17 @@ export const accountExportSchema = z.object({
   ),
   feedback: z.array(feedbackExportSchema).default([]),
   signInActivity: z.array(signInSchema).default([]),
+  securityActivity: z.array(securityEventSchema).default([]),
+  apiKeys: z
+    .array(
+      z.object({
+        name: z.string().nullable(),
+        start: z.string().nullable(),
+        createdAt: z.string(),
+        expiresAt: z.string().nullable()
+      })
+    )
+    .default([]),
   dataRequests: z.array(dataRequestSchema).default([]),
   consents: z.array(consentEventSchema).default([]),
   sessions: z.array(

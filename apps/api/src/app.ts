@@ -50,6 +50,7 @@ import { evaluateFlags, loadRules } from './flags'
 import { listConsents, recordConsent } from './consents'
 import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
+import { recentAudit } from './audit'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
 
 type Variables = { auth: Auth; db: Db; userId: string; sessionId: string }
@@ -345,6 +346,24 @@ export function createApp(options: AppOptions = {}) {
           createdAt: new Date(r.createdAt).toISOString()
         })),
         signInActivity: await recentSignIns(c.var.db, c.var.userId),
+        securityActivity: await recentAudit(c.var.db, c.var.userId),
+        // Never the key itself or its hash: only enough to recognise which key it was.
+        apiKeys: (
+          await c.var.db
+            .select({
+              name: schema.apikey.name,
+              start: schema.apikey.start,
+              createdAt: schema.apikey.createdAt,
+              expiresAt: schema.apikey.expiresAt
+            })
+            .from(schema.apikey)
+            .where(eq(schema.apikey.referenceId, c.var.userId))
+        ).map((k) => ({
+          name: k.name,
+          start: k.start,
+          createdAt: k.createdAt.toISOString(),
+          expiresAt: k.expiresAt ? k.expiresAt.toISOString() : null
+        })),
         dataRequests: await listRequests(c.var.db, c.var.userId),
         consents: (await listConsents(c.var.db, c.var.userId)).history,
         sessions: sessionRows.map((s) => ({
@@ -403,6 +422,7 @@ export function createApp(options: AppOptions = {}) {
         table:
           | typeof schema.session
           | typeof schema.signInEvent
+          | typeof schema.auditEvent
           | typeof schema.passkey
           | typeof schema.feedback
       ): Promise<number> => {
@@ -419,11 +439,13 @@ export function createApp(options: AppOptions = {}) {
       return c.json({
         devices: await countOf(schema.session),
         signIns: await countOf(schema.signInEvent),
+        securityEvents: await countOf(schema.auditEvent),
         passkeys: await countOf(schema.passkey),
         feedback: await countOf(schema.feedback),
         hasSyncedSettings: prefs !== undefined
       })
     })
+    .get('/security-activity', async (c) => c.json(await recentAudit(c.var.db, c.var.userId)))
     .get('/consents', async (c) => c.json(await listConsents(c.var.db, c.var.userId)))
     .post('/consents', zValidator('json', setConsentInputSchema), async (c) => {
       const { purpose, granted } = c.req.valid('json')
@@ -514,6 +536,19 @@ export function createApp(options: AppOptions = {}) {
         await next()
       })
       .get('/health', (c) => c.json({ ok: true }))
+      // The simplest call a script can make with an API key (header x-api-key): who owns this key.
+      .get('/v1/me', async (c) => {
+        const key = c.req.header('x-api-key')
+        const checked = key ? await c.var.auth.api.verifyApiKey({ body: { key } }) : null
+        if (!checked?.valid || !checked.key)
+          throw new HTTPException(401, { message: 'Invalid key' })
+        const [owner] = await c.var.db
+          .select({ id: schema.user.id, email: schema.user.email, banned: schema.user.banned })
+          .from(schema.user)
+          .where(eq(schema.user.id, checked.key.referenceId))
+        if (!owner || owner.banned) throw new HTTPException(401, { message: 'Invalid key' })
+        return c.json({ id: owner.id, email: owner.email })
+      })
       // Sign-in, sessions and sign-out: handled by Better Auth under /api/auth/*.
       .on(['GET', 'POST'], '/auth/*', (c) => c.var.auth.handler(c.req.raw))
       // Resend tells us about bounces and spam complaints. Signed (Svix), so only Resend can call it; off without the secret.
@@ -548,7 +583,12 @@ export function createApp(options: AppOptions = {}) {
       .get('/app-config', (c) => {
         const minimum = (c.env.MIN_APP_VERSION ?? '').trim()
         c.header('cache-control', 'public, max-age=300')
-        return c.json({ minimumVersion: parseVersion(minimum) ? minimum : null })
+        // The site key is only offered when the secret is set too, matching when the server asks for a challenge.
+        const siteKey = (c.env.TURNSTILE_SITE_KEY ?? '').trim()
+        return c.json({
+          minimumVersion: parseVersion(minimum) ? minimum : null,
+          turnstileSiteKey: siteKey && c.env.TURNSTILE_SECRET_KEY ? siteKey : null
+        })
       })
       // Feature flags for one install. Public (no sign-in) and cheap: the table is read at most once per cache period.
       .get('/flags', zValidator('query', flagsQuerySchema), async (c) => {

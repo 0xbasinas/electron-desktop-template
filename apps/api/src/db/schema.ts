@@ -144,3 +144,28 @@ export const feedback = sqliteTable(
   },
   (table) => [index('feedback_user_created_idx').on(table.userId, table.createdAt)]
 )
+
+/**
+ * Security events about an account (sign-ins, failures, sessions revoked, profile and passkey changes, admin actions).
+ * `userId` is the person it is about; null for a failure that cannot be tied to anyone. `actorId` is who did it when
+ * that is someone else (an admin), with no foreign key so it survives their own deletion. `detail` holds codes only,
+ * never what a stranger typed. See audit.ts.
+ */
+export const auditEvent = sqliteTable(
+  'audit_event',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id').references(() => user.id, { onDelete: 'cascade' }),
+    actorId: text('actor_id'),
+    type: text('type').notNull(),
+    outcome: text('outcome').notNull(),
+    ipAddress: text('ip_address'),
+    label: text('label'),
+    detail: text('detail'),
+    at: integer('at').notNull()
+  },
+  (table) => [
+    index('audit_event_user_at_idx').on(table.userId, table.at),
+    index('audit_event_type_at_idx').on(table.type, table.at)
+  ]
+)
