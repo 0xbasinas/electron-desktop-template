@@ -54,6 +54,11 @@ export function SignInPage(): JSX.Element {
         : null
   )
 
+  // Signed in and an AI app is waiting: carry on to the authorize step (a full page load, since the server answers).
+  useEffect(() => {
+    if (session && oauthQuery) window.location.replace(next)
+  }, [session, oauthQuery, next])
+
   // Already signed in on the web and the desktop app asked for a sign-in: hand the session over.
   const signedIn = Boolean(session)
   useEffect(() => {
@@ -76,7 +81,6 @@ export function SignInPage(): JSX.Element {
     )
   }
   if (session && oauthQuery) {
-    window.location.replace(next)
     return (
       <p className="text-center text-muted-foreground" role="status">
         Continuing...

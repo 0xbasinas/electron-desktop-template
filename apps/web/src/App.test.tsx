@@ -305,6 +305,19 @@ describe('routes', () => {
 })
 
 describe('sign-in page', () => {
+  it('sends the email link back to the authorize step when an AI app is waiting', async () => {
+    at(
+      '/sign-in?client_id=https%3A%2F%2Fa.example%2Fc.json&scope=openid&state=s&sig=abc&exp=1&next=%2Fevil'
+    )
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com')
+    await userEvent.click(screen.getByRole('button', { name: 'Email me a sign-in link' }))
+    const call = auth.magicLink.mock.calls[0]![0] as { callbackURL: string }
+    expect(call.callbackURL.startsWith('/api/auth/oauth2/authorize?client_id=')).toBe(true)
+    // The old signature is dropped (the server signs the request again) and nothing else leaks in.
+    expect(call.callbackURL).not.toContain('sig=')
+    expect(call.callbackURL).not.toContain('evil')
+  })
+
   it('asks for a link and tells the user to check their email', async () => {
     at('/sign-in')
     await userEvent.type(screen.getByLabelText('Email'), ' Ada@Example.com ')

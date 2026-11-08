@@ -27,6 +27,7 @@ import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
 import { isDeprovisioned } from './scimStore'
+import { revokeAppAccess } from './oauthPrune'
 import type { Bindings } from './env'
 
 /** The most API keys one person may have. */
@@ -99,7 +100,13 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
       storage: 'database',
       window: 60,
       max: 30,
-      customRules: { '/get-session': false }
+      customRules: {
+        '/get-session': false,
+        // These start a fetch of an AI app's address (or read one), so they get a tighter limit than the rest.
+        '/oauth2/authorize': { window: 60, max: 10 },
+        '/oauth2/public-client': { window: 60, max: 20 },
+        '/oauth2/token': { window: 60, max: 20 }
+      }
     },
     hooks: {
       // At most MAX_API_KEYS keys per person, so one account cannot fill the table.
@@ -123,6 +130,11 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
             !(ctx.body as { organizationId?: string } | undefined)?.organizationId
           )
             throw new APIError('FORBIDDEN', { message: 'Choose the team this sign-in belongs to.' })
+        }
+        // "Sign out everywhere" also cuts off the AI apps the person approved.
+        if (ctx.path === '/revoke-sessions') {
+          const caller = ctx.context.session ?? (await getSessionFromCtx(ctx))
+          if (caller) await revokeAppAccess(db, caller.user.id)
         }
         // Deleting a provider removes its linked accounts but not the sessions they hold; end those too.
         if (ctx.path === '/sso/delete-provider') {
@@ -219,6 +231,11 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           location: ctx.context.responseHeaders?.get('location'),
           accepted: (ctx.body as { accept?: unknown } | undefined)?.accept === true
         })
+        // A suspended person's AI apps lose access too (their tokens would be refused anyway; this removes them).
+        if (ctx.path === '/admin/ban-user' && !failed) {
+          const target = (ctx.body as { userId?: string } | undefined)?.userId
+          if (target) await revokeAppAccess(db, target)
+        }
         if (!event) return
         const sessionUser = ctx.context.session?.user.id ?? null
         const admin = ctx.path.startsWith('/admin/')

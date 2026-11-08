@@ -1,6 +1,7 @@
 import { and, count, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
 import type { Db } from './db'
 import { schema } from './db'
+import { revokeAppAccessStatements } from './oauthPrune'
 import {
   accountEmail,
   emailValuesOf,
@@ -225,7 +226,8 @@ async function deactivation(db: Db, conn: Connection, row: UserRow): Promise<Sta
         .update(schema.user)
         .set({ banned: true, banReason: 'deprovisioned', banExpires: null })
         .where(eq(schema.user.id, row.userId)),
-      db.delete(schema.session).where(eq(schema.session.userId, row.userId))
+      db.delete(schema.session).where(eq(schema.session.userId, row.userId)),
+      ...revokeAppAccessStatements(db, row.userId)
     )
   }
   return statements

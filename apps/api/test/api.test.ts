@@ -2658,9 +2658,10 @@ describe('AI apps (MCP): OAuth sign-in and the /api/mcp endpoint', () => {
   /** Runs sign-in, consent and the token request; returns the tokens. */
   async function getTokens(
     s: ReturnType<typeof setup>,
-    cookie: string
+    cookie: string,
+    scope?: string
   ): Promise<{ access_token: string; refresh_token: string }> {
-    const { response, verifier } = await authorize(s, cookie)
+    const { response, verifier } = await authorize(s, cookie, scope)
     expect(response.status).toBe(302)
     const consentUrl = new URL(response.headers.get('location')!, ORIGIN)
     expect(consentUrl.pathname).toBe('/consent')
@@ -2848,6 +2849,100 @@ describe('AI apps (MCP): OAuth sign-in and the /api/mcp endpoint', () => {
       await s.call('/api/auth/oauth2/get-consents', { headers: { cookie } })
     ).json()) as unknown[]
     expect(after).toHaveLength(0)
+  })
+
+  it('refuses a token without the mcp:read scope', async () => {
+    publishClient()
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-noscope@example.com')
+    const tokens = await getTokens(s, cookie, 'openid offline_access')
+    expect((await call(s, tokens.access_token, 'tools/list')).status).toBe(403)
+  })
+
+  it('does not hand out a code for a bad redirect address or without PKCE', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-redirect@example.com')
+    const base = {
+      client_id: CLIENT_ID,
+      redirect_uri: REDIRECT,
+      response_type: 'code',
+      scope: 'openid mcp:read',
+      code_challenge: 'x'.repeat(43),
+      code_challenge_method: 'S256',
+      resource: RESOURCE
+    }
+    const location = async (query: Record<string, string>): Promise<string> => {
+      const r = await s.call(`/api/auth/oauth2/authorize?${new URLSearchParams(query)}`, {
+        headers: { cookie }
+      })
+      return r.headers.get('location') ?? ''
+    }
+    publishClient({ redirect_uris: ['javascript:alert(1)'] })
+    expect(await location({ ...base, redirect_uri: 'javascript:alert(1)' })).not.toContain(
+      '/consent'
+    )
+    vi.restoreAllMocks()
+    publishClient()
+    // A redirect address the app did not list.
+    expect(await location({ ...base, redirect_uri: 'https://evil.example/cb' })).not.toContain(
+      '/consent'
+    )
+    // No PKCE challenge.
+    const noPkce: Record<string, string> = { ...base }
+    delete noPkce.code_challenge
+    delete noPkce.code_challenge_method
+    expect(await location(noPkce)).not.toContain('/consent')
+  })
+
+  it('cuts an app off when the person is suspended or signs out everywhere', async () => {
+    publishClient()
+    const s = setup()
+    await signIn(s, 'mcp-boss@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?")
+      .bind('mcp-boss@example.com')
+      .run()
+    const staffCookie = await signIn(s, 'mcp-boss@example.com')
+    const victim = await signIn(s, 'mcp-victim@example.com')
+    await getTokens(s, victim)
+    const row = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('mcp-victim@example.com')
+      .first<{ id: string }>()
+    const count = async (): Promise<number> =>
+      (await bindings.DB.prepare('SELECT COUNT(*) AS n FROM oauth_consent WHERE user_id = ?')
+        .bind(row!.id)
+        .first<{ n: number }>())!.n
+    expect(await count()).toBe(1)
+    const ban = await s.call('/api/auth/admin/ban-user', {
+      method: 'POST',
+      headers: { cookie: staffCookie, ...json },
+      body: JSON.stringify({ userId: row!.id })
+    })
+    expect(ban.status).toBe(200)
+    expect(await count()).toBe(0)
+    const refreshLeft = await bindings.DB.prepare(
+      'SELECT COUNT(*) AS n FROM oauth_refresh_token WHERE user_id = ?'
+    )
+      .bind(row!.id)
+      .first<{ n: number }>()
+    expect(refreshLeft!.n).toBe(0)
+
+    const other = await signIn(s, 'mcp-everywhere@example.com')
+    await getTokens(s, other)
+    const mine = await bindings.DB.prepare('SELECT id FROM user WHERE email = ?')
+      .bind('mcp-everywhere@example.com')
+      .first<{ id: string }>()
+    const out = await s.call('/api/auth/revoke-sessions', {
+      method: 'POST',
+      headers: { cookie: other, ...json },
+      body: '{}'
+    })
+    expect(out.status).toBe(200)
+    const left = await bindings.DB.prepare(
+      'SELECT COUNT(*) AS n FROM oauth_consent WHERE user_id = ?'
+    )
+      .bind(mine!.id)
+      .first<{ n: number }>()
+    expect(left!.n).toBe(0)
   })
 
   it('does not let people create or list clients by hand, or register one', async () => {

@@ -24,6 +24,13 @@ export function ConsentPage(): JSX.Element {
   const params = new URLSearchParams(query)
   const clientId = params.get('client_id')
   const scopes = (params.get('scope') ?? '').split(' ').filter(Boolean)
+  // The name is whatever the app calls itself, so the address it is served from is shown as well.
+  let host = clientId ?? ''
+  try {
+    host = new URL(clientId ?? '').host
+  } catch {
+    /* shown as given */
+  }
   const [name, setName] = useState<string | null>(null)
   const [status, setStatus] = useState<Status>('ready')
 
@@ -60,7 +67,8 @@ export function ConsentPage(): JSX.Element {
     <div className="mx-auto max-w-xl space-y-4">
       <h1 className="text-3xl font-bold tracking-tight">Connect {name ?? 'this app'}?</h1>
       <p className="text-muted-foreground">
-        <strong>{name ?? clientId}</strong> wants to act for you. It will be able to:
+        <strong>{name ?? host}</strong> (from <strong>{host}</strong>) wants to act for you. It will
+        be able to:
       </p>
       <ul className="list-disc space-y-1 pl-6 text-sm">
         {scopes.map((scope) => (

@@ -356,4 +356,7 @@ How it works:
 - **`/api/mcp`** checks the token against our own signing keys read in the same Worker (not by calling our own address), requires the `mcp:read` scope and the `azp` claim, then looks the person up so a suspension takes effect at once. The tools (`src/mcpServer.ts`) are read-only and limited to the person the token was issued to: `whoami`, `list_teams`, `list_devices`, `recent_security_activity`. It speaks the 2026-07-28 protocol only (`legacy: 'reject'`); requests need the `Mcp-Method` header, and `Mcp-Name` for tool calls.
 - **Housekeeping.** Approval and removal are in the security activity (`app_connected`, `app_disconnected`) and the data export (`connectedApps`, never the tokens). All OAuth rows cascade with the account. The daily job removes expired tokens (`src/oauthPrune.ts`). Refresh tokens rotate and an old one stops working at once.
 
+- **Cutting an app off.** Suspending a person, deprovisioning them through SCIM and "Sign out everywhere" all delete their app tokens and approvals (`revokeAppAccess`). `/api/mcp` also re-checks the suspension on every call.
+- **Abuse limits.** `/oauth2/authorize`, `/oauth2/public-client` and `/oauth2/token` have tighter rate limits than the rest of the API, because they can make the Worker fetch an app's address. The consent page shows the address the app is served from next to its self-chosen name.
+
 Not built: DPoP-bound tokens, the device-code grant, write tools.
