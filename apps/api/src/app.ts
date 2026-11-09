@@ -652,7 +652,8 @@ export function createApp(options: AppOptions = {}) {
           recordAudit(c.var.db, {
             type: disabling ? 'ai_app_disabled' : 'ai_app_enabled',
             outcome: 'success',
-            userId: null,
+            // Kept under the staff member's own id: events about nobody are pruned after 30 days.
+            userId: c.var.userId,
             actorId: c.var.userId,
             ipAddress: c.req.header('cf-connecting-ip') ?? null,
             userAgent: c.req.header('user-agent') ?? null,
