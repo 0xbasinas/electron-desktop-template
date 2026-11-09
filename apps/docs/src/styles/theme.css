@@ -357,3 +357,22 @@ mobile-starlight-toc a {
 .sl-markdown-content tbody tr:last-child td {
   border-bottom: 0;
 }
+
+/* Tables always span the full column, with rounded corners drawn on the corner cells. */
+.sl-markdown-content table {
+  display: table;
+  width: 100%;
+  overflow: visible;
+}
+.sl-markdown-content thead tr:first-child th:first-child {
+  border-top-left-radius: calc(var(--radius) - 1px);
+}
+.sl-markdown-content thead tr:first-child th:last-child {
+  border-top-right-radius: calc(var(--radius) - 1px);
+}
+.sl-markdown-content tbody tr:last-child td:first-child {
+  border-bottom-left-radius: calc(var(--radius) - 1px);
+}
+.sl-markdown-content tbody tr:last-child td:last-child {
+  border-bottom-right-radius: calc(var(--radius) - 1px);
+}
