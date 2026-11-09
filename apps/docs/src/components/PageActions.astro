@@ -91,12 +91,15 @@ const markdownPath = `${base}/${Astro.props.slug}.md`
   }
   .pa-copy,
   .pa-menu > summary {
+    box-sizing: border-box;
+    height: 2.25rem;
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;
-    padding: 0.4rem 0.75rem;
+    padding: 0 0.85rem;
     color: var(--foreground);
     background: transparent;
+    line-height: 1;
     border: 0;
     cursor: pointer;
     font: inherit;
@@ -110,7 +113,8 @@ const markdownPath = `${base}/${Astro.props.slug}.md`
   }
   .pa-menu > summary {
     list-style: none;
-    padding-inline: 0.55rem;
+    padding-inline: 0.6rem;
+    justify-content: center;
     border-inline-start: 1px solid var(--border);
     border-radius: 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0;
   }

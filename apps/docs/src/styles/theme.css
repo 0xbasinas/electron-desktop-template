@@ -37,9 +37,13 @@
 }
 
 /* Header and sidebar: quiet, with the app's thin borders. */
-.header {
+header.header {
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(8px);
+}
+/* The inner row of the header must not draw a second line. */
+header.header .header {
+  border-bottom: 0;
 }
 .sidebar-pane {
   border-inline-end: 1px solid var(--border);
