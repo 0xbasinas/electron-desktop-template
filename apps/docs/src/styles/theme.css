@@ -996,3 +996,8 @@ mobile-starlight-toc .dropdown a {
     inset-inline-start: calc(var(--sl-content-inline-start, 0px) + 0.75rem);
   }
 }
+
+/* No sideways jump between pages: keep room for the page scrollbar even on short pages that do not need one. */
+html {
+  scrollbar-gutter: stable;
+}
