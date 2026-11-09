@@ -1,0 +1,11 @@
+---
+// The usual page title, then the page actions menu (see PageActions.astro).
+import Default from '@astrojs/starlight/components/PageTitle.astro'
+import PageActions from './PageActions.astro'
+
+const { id, entry } = Astro.locals.starlightRoute
+const hasMarkdown = id !== 'index' && entry.data.template !== 'splash'
+---
+
+<Default><slot /></Default>
+{hasMarkdown && <PageActions slug={id} />}

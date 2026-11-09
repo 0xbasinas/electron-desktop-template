@@ -1,0 +1,11 @@
+---
+// The navigation, then "On this page" under it, so the table of contents lives on the left with the rest of the
+// navigation (the right-hand column is turned off in PageSidebar.astro and theme.css).
+import Default from '@astrojs/starlight/components/Sidebar.astro'
+import TableOfContents from '@astrojs/starlight/components/TableOfContents.astro'
+
+const { toc } = Astro.locals.starlightRoute
+---
+
+<Default><slot /></Default>
+{toc && <div class="left-toc sl-hidden lg:sl-block"><TableOfContents /></div>}

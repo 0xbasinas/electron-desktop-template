@@ -18,7 +18,11 @@ export default defineConfig({
       customCss: ['./src/styles/global.css', './src/styles/theme.css'],
       components: {
         Footer: './src/components/Footer.astro',
-        MarkdownContent: './src/components/MarkdownContent.astro'
+        MarkdownContent: './src/components/MarkdownContent.astro',
+        PageTitle: './src/components/PageTitle.astro',
+        // "On this page" lives in the left sidebar; the right column is left empty.
+        Sidebar: './src/components/Sidebar.astro',
+        PageSidebar: './src/components/PageSidebar.astro'
       },
       // Starlight marks the theme with data-theme; the web app's theme file uses a "dark" class. Keep them in step.
       head: [

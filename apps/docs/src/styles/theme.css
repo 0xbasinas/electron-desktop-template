@@ -20,11 +20,13 @@
   --sl-color-hairline-light: var(--border);
   --sl-color-hairline-shade: var(--border);
 
-  /* Neutral by default, like the app; with data-accent set, the accent colour. */
-  --sl-color-accent: var(--primary);
-  --sl-color-accent-low: var(--secondary);
-  --sl-color-accent-high: var(--foreground);
-  --sl-color-text-accent: var(--foreground);
+  /* A periwinkle blue for the current page, links and buttons; everything else stays on the app's neutral tokens. */
+  --docs-blue: oklch(0.52 0.2 268);
+  --docs-blue-soft: oklch(0.94 0.04 268);
+  --sl-color-accent: var(--docs-blue);
+  --sl-color-accent-low: var(--docs-blue-soft);
+  --sl-color-accent-high: var(--docs-blue);
+  --sl-color-text-accent: var(--docs-blue);
   --sl-color-text: var(--sl-color-gray-2);
   --sl-color-bg-inline-code: var(--secondary);
   --sl-color-bg-nav: var(--background);
@@ -47,14 +49,87 @@
   font-weight: 600;
 }
 
-/* The current page is a soft pill (the secondary background in the neutral look). */
+/* Dark theme: a lighter periwinkle so the blue reads on the dark background. */
+:root[data-theme='dark'] {
+  --docs-blue: oklch(0.82 0.09 268);
+  --docs-blue-soft: oklch(0.3 0.06 268);
+}
+
+/* Sidebar: bold group headings, roomy items, the current page in blue on a soft periwinkle pill. */
+.sidebar-content {
+  gap: 1.25rem;
+}
+.sidebar-content details > summary,
+.sidebar-content .large {
+  font-size: var(--sl-text-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+.sidebar-content details li,
+.sidebar-content li {
+  margin-inline-start: 0 !important;
+  border-inline-start: 0 !important;
+  padding-inline-start: 0 !important;
+}
+.sidebar-content ul ul {
+  margin-inline-start: 0;
+  padding-inline-start: 0;
+}
 .sidebar-content a {
-  border-radius: calc(var(--radius) - 4px);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 0.5rem 0.75rem;
+  font-size: var(--sl-text-base);
+  color: var(--sl-color-gray-3);
+}
+.sidebar-content a:hover {
+  color: var(--foreground);
+  background: var(--secondary);
 }
 .sidebar-content a[aria-current='page'] {
-  background: var(--secondary);
-  color: var(--foreground);
+  background: var(--docs-blue-soft);
+  color: var(--docs-blue);
   font-weight: 500;
+}
+.sidebar-content .sl-badge {
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  padding-inline: 0.5rem;
+}
+
+/* "On this page" under the navigation (see src/components/Sidebar.astro); the right-hand column is gone. */
+.right-sidebar-container {
+  display: none;
+}
+.left-toc {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+.left-toc starlight-toc nav > h2 {
+  margin: 0 0 0.5rem 0.75rem;
+  font-size: var(--sl-text-base);
+  font-weight: 600;
+  color: var(--foreground);
+}
+.left-toc a {
+  text-decoration: none;
+  padding: 0.4rem 0.75rem;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+}
+.left-toc a:hover {
+  color: var(--foreground);
+}
+.left-toc a[aria-current='true'] {
+  color: var(--docs-blue);
+  font-weight: 500;
+}
+@media (min-width: 72rem) {
+  .main-pane {
+    --sl-content-width: 50rem;
+  }
 }
 
 /* Content */
@@ -106,9 +181,9 @@
   font-weight: 500;
 }
 .sl-link-button.primary {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--docs-blue);
+  border-color: var(--docs-blue);
+  color: var(--background);
 }
 .sl-link-button.secondary,
 .sl-link-button.minimal {

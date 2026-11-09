@@ -1,0 +1,160 @@
+---
+// "Copy page" menu under the page title: copy the page as Markdown, open the Markdown, or ask an AI assistant about
+// it. Our own version of what the starlight-page-actions plugin offers, built on the .md routes in
+// src/pages/[...slug].md.ts. Nothing is sent anywhere until a person picks an assistant, and then only the page's address.
+interface Props {
+  slug: string
+}
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '')
+const markdownPath = `${base}/${Astro.props.slug}.md`
+---
+
+<div class="page-actions" data-markdown={markdownPath}>
+  <button type="button" class="pa-copy" data-copy>
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 0 1 2-2h9"></path></svg>
+    <span data-label>Copy page</span>
+  </button>
+  <details class="pa-menu">
+    <summary aria-label="More page actions">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+    </summary>
+    <div class="pa-list" role="menu">
+      <button type="button" role="menuitem" data-copy>
+        <strong>Copy as Markdown</strong><span>Paste the page into any tool</span>
+      </button>
+      <a role="menuitem" href={markdownPath} target="_blank" rel="noopener">
+        <strong>View as Markdown</strong><span>Open the plain text version</span>
+      </a>
+      <a role="menuitem" data-ai="https://chatgpt.com/?q=" href="https://chatgpt.com" target="_blank" rel="noopener noreferrer">
+        <strong>Open in ChatGPT</strong><span>Ask questions about this page</span>
+      </a>
+      <a role="menuitem" data-ai="https://claude.ai/new?q=" href="https://claude.ai/new" target="_blank" rel="noopener noreferrer">
+        <strong>Open in Claude</strong><span>Ask questions about this page</span>
+      </a>
+    </div>
+  </details>
+</div>
+
+<script>
+  const root = document.querySelector<HTMLElement>('.page-actions')
+  const menu = root?.querySelector<HTMLDetailsElement>('.pa-menu')
+  const label = root?.querySelector<HTMLElement>('[data-label]')
+
+  if (root && menu && label) {
+    const path = root.dataset['markdown'] ?? ''
+    const address = (): string => new URL(path, location.href).href
+
+    // The assistants get the page's address and a short request; they fetch the Markdown themselves.
+    for (const link of root.querySelectorAll<HTMLAnchorElement>('[data-ai]')) {
+      const prompt = `Read ${address()} so I can ask questions about it.`
+      link.href = `${link.dataset['ai'] ?? ''}${encodeURIComponent(prompt)}`
+    }
+
+    async function copy(): Promise<void> {
+      try {
+        const text = await (await fetch(path)).text()
+        await navigator.clipboard.writeText(text)
+        label!.textContent = 'Copied'
+      } catch {
+        label!.textContent = 'Could not copy'
+      }
+      menu!.open = false
+      setTimeout(() => (label!.textContent = 'Copy page'), 1800)
+    }
+
+    for (const button of root.querySelectorAll('[data-copy]')) button.addEventListener('click', () => void copy())
+
+    // Close the menu on a click elsewhere, on Escape, or after choosing a link.
+    document.addEventListener('click', (event) => {
+      if (menu.open && !menu.contains(event.target as Node)) menu.open = false
+    })
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') menu.open = false
+    })
+    menu.addEventListener('click', (event) => {
+      if ((event.target as Element).closest('a')) menu.open = false
+    })
+  }
+</script>
+
+<style>
+  .page-actions {
+    position: relative;
+    display: inline-flex;
+    align-items: stretch;
+    margin-block: 0.25rem 0.5rem;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--card);
+    font-size: var(--sl-text-sm);
+  }
+  .pa-copy,
+  .pa-menu > summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.4rem 0.75rem;
+    color: var(--foreground);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    font: inherit;
+  }
+  .pa-copy:hover,
+  .pa-menu > summary:hover {
+    background: var(--secondary);
+  }
+  .pa-copy {
+    border-radius: calc(var(--radius) - 2px) 0 0 calc(var(--radius) - 2px);
+  }
+  .pa-menu > summary {
+    list-style: none;
+    padding-inline: 0.55rem;
+    border-inline-start: 1px solid var(--border);
+    border-radius: 0 calc(var(--radius) - 2px) calc(var(--radius) - 2px) 0;
+  }
+  .pa-menu > summary::-webkit-details-marker {
+    display: none;
+  }
+  .pa-list {
+    position: absolute;
+    inset-inline-start: 0;
+    top: calc(100% + 0.4rem);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    min-width: 17rem;
+    padding: 0.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--background);
+    box-shadow: 0 10px 30px color-mix(in oklab, black 35%, transparent);
+  }
+  .pa-list > button,
+  .pa-list > a {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    padding: 0.5rem 0.65rem;
+    border: 0;
+    border-radius: calc(var(--radius) - 4px);
+    background: transparent;
+    color: var(--foreground);
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+    font: inherit;
+  }
+  .pa-list > button:hover,
+  .pa-list > a:hover {
+    background: var(--secondary);
+  }
+  .pa-list strong {
+    font-weight: 600;
+  }
+  .pa-list span {
+    color: var(--muted-foreground);
+    font-size: var(--sl-text-xs);
+  }
+</style>
