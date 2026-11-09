@@ -599,14 +599,22 @@ site-search kbd {
   height: 1.1rem;
 }
 
-/* Heading anchor icon: small, grey, no underline. */
+/* Heading anchor icon: small, grey, no underline. Its size and the space kept for it must stay in step, or it overlaps the title. */
+.sl-markdown-content {
+  --sl-anchor-icon-size: 0.8em;
+  --sl-anchor-icon-space: 1.1em;
+}
 .sl-markdown-content .sl-anchor-link,
 .sl-markdown-content .sl-anchor-link:hover {
   border-bottom: 0 !important;
   color: var(--muted-foreground);
   font-weight: 400;
 }
-.sl-markdown-content .sl-anchor-link svg {
-  width: 0.9em;
-  height: 0.9em;
+
+/* The anchor icon sits after the title with a small gap, instead of over the end of it. */
+.sl-markdown-content .sl-heading-wrapper > :first-child:not([hidden]) {
+  padding-inline-end: 0;
+}
+.sl-markdown-content .sl-anchor-link {
+  margin-inline-start: 0.4em;
 }

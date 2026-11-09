@@ -40,7 +40,6 @@ export default defineConfig({
         styleOverrides: { borderRadius: '0.625rem', borderColor: 'var(--sl-color-gray-5)' }
       },
       sidebar: [
-        { label: 'Start here', items: [{ slug: 'index' }] },
         {
           label: 'Guides',
           items: [{ slug: 'guides/setup-cloud' }, { slug: 'guides/template-updates' }]
