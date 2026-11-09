@@ -1,4 +1,4 @@
-import type { JSX } from 'react'
+import { Suspense, type JSX } from 'react'
 import { cn } from '@repo/ui'
 import { Link, NavLink, Outlet } from 'react-router'
 import { SITE_NAME } from '../config'
@@ -12,8 +12,28 @@ const link = ({ isActive }: { isActive: boolean }): string =>
 
 export function Layout(): JSX.Element {
   const { data: session } = authClient.useSession()
+  const impersonating = Boolean(
+    (session?.session as { impersonatedBy?: string | null } | undefined)?.impersonatedBy
+  )
   return (
     <div className="flex min-h-screen flex-col">
+      {impersonating && (
+        <div
+          role="status"
+          className="flex items-center justify-center gap-3 bg-muted px-4 py-2 text-sm"
+        >
+          You are signed in as {session?.user.email} to help them.
+          <button
+            type="button"
+            className="underline"
+            onClick={() =>
+              void authClient.admin.stopImpersonating().then(() => window.location.assign('/admin'))
+            }
+          >
+            Stop
+          </button>
+        </div>
+      )}
       <header className="border-b border-border">
         <nav className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
           <NavLink to="/" className="font-semibold" end>
@@ -34,6 +54,11 @@ export function Layout(): JSX.Element {
             ) && (
               <NavLink to="/admin" className={link}>
                 Admin
+              </NavLink>
+            )}
+            {session && (
+              <NavLink to="/teams" className={link}>
+                Teams
               </NavLink>
             )}
             {session && (
@@ -58,7 +83,9 @@ export function Layout(): JSX.Element {
         </nav>
       </header>
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-12">
-        <Outlet />
+        <Suspense fallback={null}>
+          <Outlet />
+        </Suspense>
       </main>
       <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
         {SITE_NAME} ·{' '}

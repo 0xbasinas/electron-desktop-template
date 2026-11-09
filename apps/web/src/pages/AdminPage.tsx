@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent, type JSX } from 'react'
 import { Button } from '@repo/ui'
+import { securityEventsSchema, type SecurityEvent } from '@repo/shared'
 import { Navigate } from 'react-router'
+import { AiAppsAdminSection } from '../components/AiAppsAdminSection'
+import { SsoAdminSection } from '../components/SsoAdminSection'
 import { authClient } from '../lib/auth'
 
 interface Person {
@@ -26,6 +29,8 @@ export function AdminPage(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   const [reload, setReload] = useState(0)
+  const [activityOf, setActivityOf] = useState<Person | null>(null)
+  const [activity, setActivity] = useState<SecurityEvent[] | null>(null)
 
   useEffect(() => {
     if (!staff) return
@@ -61,6 +66,34 @@ export function AdminPage(): JSX.Element {
       : await authClient.admin.banUser({ userId: person.id, banReason: 'Suspended by staff' })
     if (failure) setError('That did not work.')
     else setReload((n) => n + 1)
+  }
+
+  async function showActivity(person: Person): Promise<void> {
+    setActivityOf(person)
+    setActivity(null)
+    const response = await fetch(`/api/admin/audit/${encodeURIComponent(person.id)}`, {
+      credentials: 'same-origin'
+    })
+    if (!response.ok) {
+      setError('Could not load that activity.')
+      return
+    }
+    setActivity(securityEventsSchema.parse(await response.json()))
+  }
+
+  async function changeRole(person: Person, next: string): Promise<void> {
+    const { error: failure } = await authClient.admin.setRole({
+      userId: person.id,
+      role: next as 'user' | 'admin'
+    })
+    if (failure) setError('That did not work.')
+    else setReload((n) => n + 1)
+  }
+
+  async function signInAs(person: Person): Promise<void> {
+    const { error: failure } = await authClient.admin.impersonateUser({ userId: person.id })
+    if (failure) setError('That did not work.')
+    else window.location.assign('/account')
   }
 
   function submit(event: FormEvent): void {
@@ -102,14 +135,41 @@ export function AdminPage(): JSX.Element {
           {people.map((p) => (
             <tr key={p.id} className="border-t border-border">
               <td className="py-2">{p.email}</td>
-              <td>{p.role ?? 'user'}</td>
-              <td>{p.banned ? 'Suspended' : 'Active'}</td>
+              <td>
+                {role === 'admin' && p.id !== session?.user.id ? (
+                  <select
+                    aria-label={`Role of ${p.email}`}
+                    value={p.role ?? 'user'}
+                    onChange={(e) => void changeRole(p, e.target.value)}
+                    className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+                  >
+                    <option value="user">user</option>
+                    <option value="support">support</option>
+                    <option value="admin">admin</option>
+                  </select>
+                ) : (
+                  (p.role ?? 'user')
+                )}
+              </td>
+              <td>
+                {p.banned ? 'Suspended' : 'Active'}{' '}
+                <Button variant="outline" size="sm" onClick={() => void showActivity(p)}>
+                  Activity
+                </Button>
+              </td>
               {role === 'admin' && (
-                <td className="text-right">
+                <td className="space-x-2 text-right">
                   {p.id !== session?.user.id && (
-                    <Button variant="outline" size="sm" onClick={() => void toggleBan(p)}>
-                      {p.banned ? 'Restore' : 'Suspend'}
-                    </Button>
+                    <>
+                      {!p.banned && p.role !== 'admin' && (
+                        <Button variant="outline" size="sm" onClick={() => void signInAs(p)}>
+                          Sign in as
+                        </Button>
+                      )}
+                      <Button variant="outline" size="sm" onClick={() => void toggleBan(p)}>
+                        {p.banned ? 'Restore' : 'Suspend'}
+                      </Button>
+                    </>
                   )}
                 </td>
               )}
@@ -117,6 +177,24 @@ export function AdminPage(): JSX.Element {
           ))}
         </tbody>
       </table>
+      {activityOf && (
+        <section aria-label="Activity" className="space-y-1 text-sm">
+          <h2 className="font-semibold">Activity of {activityOf.email}</h2>
+          {activity?.length === 0 && <p className="text-muted-foreground">Nothing recorded.</p>}
+          <ul className="divide-y divide-border rounded-lg border border-border">
+            {activity?.map((e) => (
+              <li key={`${e.at}-${e.type}`} className="px-3 py-2">
+                {e.type.replaceAll('_', ' ')}
+                {e.outcome === 'failure' ? ' (failed)' : ''}
+                <span className="block text-xs text-muted-foreground">
+                  {new Date(e.at).toLocaleString()}
+                  {e.ipAddress ? ` · ${e.ipAddress}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <div className="flex items-center gap-3 text-sm text-muted-foreground">
         <Button variant="outline" size="sm" disabled={page === 0} onClick={() => setPage(page - 1)}>
           Previous
@@ -133,6 +211,8 @@ export function AdminPage(): JSX.Element {
           Next
         </Button>
       </div>
+      {role === 'admin' && <SsoAdminSection />}
+      {role === 'admin' && <AiAppsAdminSection />}
     </div>
   )
 }

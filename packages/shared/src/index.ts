@@ -1,10 +1,12 @@
 export {
   accountExportSchema,
   accountSchema,
+  aiAppsSchema,
   deleteAccountInputSchema,
-  emailSchema
+  emailSchema,
+  securityEventsSchema
 } from './schemas'
-export type { Account, AccountExport } from './schemas'
+export type { Account, AccountExport, AiApp, SecurityEvent } from './schemas'
 export {
   FEEDBACK_DIAGNOSTICS_MAX,
   FEEDBACK_KINDS,

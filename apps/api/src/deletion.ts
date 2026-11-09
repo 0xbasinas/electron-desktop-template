@@ -1,9 +1,12 @@
+import { handOverProvidersStatement, soloTeamsDeletion } from './teams'
 import { deletionDate } from '@repo/shared'
 import { and, eq, lte } from 'drizzle-orm'
 import type { Db } from './db'
 import { schema } from './db'
 import { closeRequests, openRequest } from './dataRequests'
 import type { EmailMessage } from './email'
+import { tombstoneStatements } from './tombstones'
+import { revokeAppAccessStatements } from './oauthPrune'
 
 // Deleting an account is a request first: the account stays for the cooling-off period (see DELETION_COOLING_OFF_DAYS),
 // the person gets an email with a cancel link, and a daily job removes the accounts whose time has come.
@@ -98,8 +101,15 @@ export async function deleteDueAccounts(
     .where(lte(schema.accountDeletion.scheduledFor, now))
     .limit(limit)
   for (const { userId, email } of due) {
+    const blocks = await tombstoneStatements(db, userId, now)
     await db.batch([
       db.delete(schema.verification).where(eq(schema.verification.identifier, email)),
+      ...blocks,
+      ...revokeAppAccessStatements(db, userId),
+      // A team's company sign-in outlives the person who registered it.
+      handOverProvidersStatement(db, userId),
+      // Teams only this person belongs to would be left with nobody to reach them.
+      soloTeamsDeletion(db, userId),
       // API keys point at the person without a foreign key, so they are removed here.
       db.delete(schema.apikey).where(eq(schema.apikey.referenceId, userId)),
       db.delete(schema.user).where(and(eq(schema.user.id, userId)))

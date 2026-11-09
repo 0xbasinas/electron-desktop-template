@@ -112,6 +112,8 @@ only third-party runtime modules go in `dependencies` (electron-builder packages
   `pnpm --filter @repo/api auth:schema`. Migrations run before the new code deploys, so keep them backward compatible.
 - Per-person data that must follow them between devices goes through `/api/preferences` (last write wins, local copy first, best-effort sync):
   see `packages/shared/src/preferences.ts` and the theme in `apps/web/src/lib/theme.ts` and `apps/desktop/src/main/preferencesSync.ts`.
+- Directory sync (SCIM) is our own code on `db.batch()` (docs/api.md), not Better Auth's plugin, which needs transactions D1 lacks. Never enable the adapter's `transaction` option.
+- AI apps (MCP) use Better Auth's `mcp()` plugin as the OAuth server plus CIMD client ids (docs/api.md). Never add `oauthProvider()` beside it, never turn on client registration, and keep `/api/mcp` tools read-only and scoped to the token's person.
 - Anything you store per person needs `ON DELETE CASCADE` on the user and a place in the account export (`apps/api/src/app.ts`).
 - `apps/web/public/.well-known/security.txt` must be renewed before its `Expires` date (it is valid for at most a year, RFC 9116); the list on `/sub-processors` is `SUBPROCESSORS` in `apps/web/src/config.ts`: edit both to match the accounts you really use.
 - Web and API deploy from `.github/workflows/deploy-web.yml` (off until `CLOUDFLARE_DEPLOY=true`); it never releases the desktop app.
