@@ -13,7 +13,8 @@ import { APIError, createAuthMiddleware, getSessionFromCtx } from 'better-auth/a
 import { admin, captcha, jwt, magicLink, organization } from 'better-auth/plugins'
 import { ac, roles } from './permissions'
 import { fetchClientMetadataResource } from './cimdFetch'
-import { withEncryptedProviderSecrets } from './secretStore'
+import { checkPrivateKey } from './privateKey'
+import { openSecret, withEncryptedProviderSecrets } from './secretStore'
 import { eventForCall, recordAudit } from './audit'
 import type { Db } from './db'
 import { schema } from './db'
@@ -213,6 +214,19 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
                 message: error instanceof DiscoveryError ? error.message : `${what} is not valid.`
               })
             }
+          }
+        }
+        // Signing in to the company's token endpoint with a private key instead of a shared secret: the pasted key (it
+        // travels in the `clientSecret` field, which is stored encrypted) must be a real PKCS#8 key for the chosen method.
+        if (ctx.path === '/sso/register' || ctx.path === '/sso/update-provider') {
+          const oidc = (ctx.body as { oidcConfig?: Record<string, unknown> } | undefined)
+            ?.oidcConfig
+          if (oidc?.tokenEndpointAuthentication === 'private_key_jwt') {
+            const problem =
+              oidc.clientSecret === undefined && ctx.path === '/sso/update-provider'
+                ? null
+                : await checkPrivateKey(oidc.clientSecret, oidc.privateKeyAlgorithm ?? 'RS256')
+            if (problem) throw new APIError('BAD_REQUEST', { message: problem })
           }
         }
         // A provider may not be told to overwrite the name or address of people who sign in with it: the company's
@@ -540,6 +554,24 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         // A person who signs in through a team's provider joins that team as a plain member. A role is never taken
         // from the company's group claims: that would let whoever manages the group run the team's sign-in controls.
         organizationProvisioning: { disabled: false, defaultRole: 'member' },
+        // The key for a provider that signs in with a private key: read from its (encrypted) row at sign-in time only.
+        resolvePrivateKey: async ({ providerId }) => {
+          const [row] = await db
+            .select({ oidcConfig: schema.ssoProvider.oidcConfig })
+            .from(schema.ssoProvider)
+            .where(eq(schema.ssoProvider.providerId, providerId))
+          const config = JSON.parse(row?.oidcConfig ?? '{}') as {
+            clientSecret?: string
+            privateKeyId?: string
+            privateKeyAlgorithm?: string
+          }
+          if (!config.clientSecret) return {}
+          return {
+            privateKeyPem: await openSecret(env.BETTER_AUTH_SECRET, config.clientSecret),
+            ...(config.privateKeyId ? { kid: config.privateKeyId } : {}),
+            algorithm: config.privateKeyAlgorithm ?? 'RS256'
+          }
+        },
         provisionUser: async ({ user }) => {
           waitUntil(
             recordAudit(db, {

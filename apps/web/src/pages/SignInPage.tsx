@@ -108,7 +108,13 @@ export function SignInPage(): JSX.Element {
     setError(null)
     const callbackURL = desktop ? '/auth/desktop' : next
     const { error: failure } = await authClient.signIn.sso(
-      team ? { organizationSlug: team, callbackURL } : { email: parsed.data!, callbackURL }
+      team
+        ? {
+            organizationSlug: team,
+            callbackURL,
+            ...(parsed.success ? { loginHint: parsed.data } : {})
+          }
+        : { email: parsed.data!, callbackURL, loginHint: parsed.data! }
     )
     if (failure) setError('Your company has not set up single sign-on here. Use the email link.')
   }

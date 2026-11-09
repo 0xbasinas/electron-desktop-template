@@ -9,6 +9,8 @@ interface Provider {
   domainVerified?: boolean
 }
 
+type Method = 'auto' | 'client_secret_basic' | 'client_secret_post' | 'private_key_jwt'
+
 interface Pending {
   providerId: string
   domain: string
@@ -25,6 +27,14 @@ export function SsoAdminSection({ organizationId }: { organizationId?: string })
   const [domain, setDomain] = useState('')
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
+  // Advanced: how our server proves itself to the company, which extra permissions it asks for, and claim names.
+  const [method, setMethod] = useState<Method>('auto')
+  const [privateKey, setPrivateKey] = useState('')
+  const [keyAlgorithm, setKeyAlgorithm] = useState('RS256')
+  const [keyId, setKeyId] = useState('')
+  const [extraScopes, setExtraScopes] = useState('')
+  const [emailClaim, setEmailClaim] = useState('')
+  const [nameClaim, setNameClaim] = useState('')
   const [pending, setPending] = useState<Pending | null>(null)
   const [providers, setProviders] = useState<Provider[]>([])
   const [message, setMessage] = useState<string | null>(null)
@@ -67,11 +77,24 @@ export function SsoAdminSection({ organizationId }: { organizationId?: string })
       userInfoEndpoint?: string
       tokenEndpointAuthMethods: string[]
     }
-    const method = found.tokenEndpointAuthMethods.includes('client_secret_basic')
-      ? 'client_secret_basic'
-      : found.tokenEndpointAuthMethods.includes('client_secret_post')
-        ? 'client_secret_post'
-        : undefined
+    const chosen =
+      method !== 'auto'
+        ? method
+        : found.tokenEndpointAuthMethods.includes('client_secret_basic')
+          ? 'client_secret_basic'
+          : found.tokenEndpointAuthMethods.includes('client_secret_post')
+            ? 'client_secret_post'
+            : undefined
+    // Permission names are plain tokens; anything else would just fail at the company, so say so here.
+    const extra = extraScopes.split(/[\s,]+/).filter(Boolean)
+    if (extra.some((scope) => !/^[\w.:/-]{1,100}$/.test(scope))) {
+      setMessage('Extra permissions can only contain letters, numbers and . : / _ -')
+      return
+    }
+    if (chosen === 'private_key_jwt' && !privateKey.trim()) {
+      setMessage('Paste the private key (PKCS#8, starts with -----BEGIN PRIVATE KEY-----).')
+      return
+    }
     const { data, error } = await authClient.sso.register({
       providerId: providerId.trim(),
       issuer: found.issuer,
@@ -79,14 +102,34 @@ export function SsoAdminSection({ organizationId }: { organizationId?: string })
       ...(organizationId ? { organizationId } : {}),
       oidcConfig: {
         clientId: clientId.trim(),
-        clientSecret,
-        scopes: ['openid', 'email', 'profile'],
+        // A private key travels in the secret field and is stored encrypted, like a client secret.
+        clientSecret: chosen === 'private_key_jwt' ? privateKey.trim() : clientSecret,
+        scopes: [
+          'openid',
+          'email',
+          'profile',
+          ...extra.filter((scope) => !['openid', 'email', 'profile'].includes(scope))
+        ],
         skipDiscovery: true,
         authorizationEndpoint: found.authorizationEndpoint,
         tokenEndpoint: found.tokenEndpoint,
         jwksEndpoint: found.jwksEndpoint,
         ...(found.userInfoEndpoint ? { userInfoEndpoint: found.userInfoEndpoint } : {}),
-        ...(method ? { tokenEndpointAuthentication: method } : {})
+        ...(chosen ? { tokenEndpointAuthentication: chosen } : {}),
+        ...(chosen === 'private_key_jwt'
+          ? {
+              privateKeyAlgorithm: keyAlgorithm,
+              ...(keyId.trim() ? { privateKeyId: keyId.trim() } : {})
+            }
+          : {}),
+        ...(emailClaim.trim() || nameClaim.trim()
+          ? {
+              mapping: {
+                ...(emailClaim.trim() ? { email: emailClaim.trim() } : {}),
+                ...(nameClaim.trim() ? { name: nameClaim.trim() } : {})
+              }
+            }
+          : {})
       }
     })
     if (error || !data) {
@@ -94,6 +137,7 @@ export function SsoAdminSection({ organizationId }: { organizationId?: string })
       return
     }
     setClientSecret('')
+    setPrivateKey('')
     setPending({
       providerId: providerId.trim(),
       domain: domain.trim().toLowerCase(),
@@ -197,15 +241,88 @@ export function SsoAdminSection({ organizationId }: { organizationId?: string })
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           />
         ))}
-        <input
-          aria-label="Client secret"
-          placeholder="Client secret"
-          type="password"
-          autoComplete="off"
-          value={clientSecret}
-          onChange={(e) => setClientSecret(e.target.value)}
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-        />
+        {method !== 'private_key_jwt' && (
+          <input
+            aria-label="Client secret"
+            placeholder="Client secret"
+            type="password"
+            autoComplete="off"
+            value={clientSecret}
+            onChange={(e) => setClientSecret(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          />
+        )}
+        <details className="rounded-md border border-border p-3 text-sm">
+          <summary className="cursor-pointer text-muted-foreground">Advanced</summary>
+          <div className="mt-3 grid gap-2">
+            <label className="grid gap-1">
+              How we prove who we are to the company
+              <select
+                aria-label="Sign-in method"
+                value={method}
+                onChange={(e) => setMethod(e.target.value as Method)}
+                className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+              >
+                <option value="auto">Automatic (what the company supports)</option>
+                <option value="client_secret_basic">Client secret, in a header</option>
+                <option value="client_secret_post">Client secret, in the request</option>
+                <option value="private_key_jwt">Private key (no shared secret)</option>
+              </select>
+            </label>
+            {method === 'private_key_jwt' && (
+              <>
+                <textarea
+                  aria-label="Private key"
+                  placeholder="-----BEGIN PRIVATE KEY-----"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={privateKey}
+                  onChange={(e) => setPrivateKey(e.target.value)}
+                  rows={4}
+                  className="rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                />
+                <select
+                  aria-label="Signing method"
+                  value={keyAlgorithm}
+                  onChange={(e) => setKeyAlgorithm(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-2 text-sm"
+                >
+                  <option value="RS256">RS256 (RSA)</option>
+                  <option value="PS256">PS256 (RSA-PSS)</option>
+                  <option value="ES256">ES256 (elliptic curve P-256)</option>
+                </select>
+                <input
+                  aria-label="Key ID"
+                  placeholder="Key ID (the company knows the public key by it)"
+                  value={keyId}
+                  onChange={(e) => setKeyId(e.target.value)}
+                  className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+                />
+              </>
+            )}
+            <input
+              aria-label="Extra permissions"
+              placeholder="Extra permissions to ask for (openid, email and profile are always asked)"
+              value={extraScopes}
+              onChange={(e) => setExtraScopes(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+            <input
+              aria-label="Email claim"
+              placeholder="Name of the email field, if not email"
+              value={emailClaim}
+              onChange={(e) => setEmailClaim(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+            <input
+              aria-label="Name claim"
+              placeholder="Name of the name field, if not name"
+              value={nameClaim}
+              onChange={(e) => setNameClaim(e.target.value)}
+              className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+            />
+          </div>
+        </details>
         <Button type="submit" variant="outline">
           Add provider
         </Button>

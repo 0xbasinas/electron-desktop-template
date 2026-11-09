@@ -780,6 +780,21 @@ describe('a team sign-in page', () => {
     expect(auth.signInSso).toHaveBeenCalledWith({ organizationSlug: 'acme', callbackURL: '/app' })
   })
 
+  it('passes the address in the link on as a login hint', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ name: 'Acme Corp' }))
+    )
+    auth.signInSso.mockReset().mockResolvedValue({ data: {}, error: null })
+    at('/t/acme/sign-in?login_hint=ada@acme.example')
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue with Acme Corp' }))
+    expect(auth.signInSso).toHaveBeenCalledWith({
+      organizationSlug: 'acme',
+      callbackURL: '/app',
+      loginHint: 'ada@acme.example'
+    })
+  })
+
   it('sends a team without a company sign-in to the ordinary sign-in page', async () => {
     vi.stubGlobal(
       'fetch',
@@ -1022,9 +1037,11 @@ describe('company sign-in', () => {
     expect(auth.signInSso).not.toHaveBeenCalled()
     await userEvent.type(screen.getByLabelText('Email'), 'ada@acme.example')
     await userEvent.click(screen.getByRole('button', { name: 'Sign in with your company' }))
+    // The typed address also goes along as a hint, so the company's login can fill it in.
     expect(auth.signInSso).toHaveBeenCalledWith({
       email: 'ada@acme.example',
-      callbackURL: '/app'
+      callbackURL: '/app',
+      loginHint: 'ada@acme.example'
     })
   })
 

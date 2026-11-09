@@ -2123,6 +2123,7 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
 
   /** A pretend identity provider: signs id tokens with its own key and publishes the public half. */
   const tokenCalls: (string | null)[] = []
+  const tokenBodies: string[] = []
   async function fakeIdp(claims: () => Record<string, unknown>): Promise<void> {
     const pair = (await crypto.subtle.generateKey(
       {
@@ -2146,6 +2147,7 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
       if (url === `${IDP}/jwks`) return Response.json({ keys: [jwk] })
       if (url === `${IDP}/token`) {
         tokenCalls.push(new Headers(init?.headers).get('authorization'))
+        tokenBodies.push(String(init?.body ?? ''))
         const head = b64(JSON.stringify({ alg: 'RS256', kid: 'k1', typ: 'JWT' }))
         const now = Math.floor(Date.now() / 1000)
         const body = b64(
@@ -2288,6 +2290,93 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
     const { path, cookie } = await startLogin(s, id)
     return s.call(path, { headers: { cookie } })
   }
+
+  it('signs in to the company with a private key instead of a shared secret, kept encrypted', async () => {
+    await fakeIdp(() => ({ sub: 'pk-sub', email: 'ada@pk-co.example', email_verified: true }))
+    const pair = (await crypto.subtle.generateKey(
+      {
+        name: 'RSASSA-PKCS1-v1_5',
+        modulusLength: 2048,
+        publicExponent: new Uint8Array([1, 0, 1]),
+        hash: 'SHA-256'
+      },
+      true,
+      ['sign', 'verify']
+    )) as CryptoKeyPair
+    const der = new Uint8Array(
+      (await crypto.subtle.exportKey('pkcs8', pair.privateKey)) as ArrayBuffer
+    )
+    let raw = ''
+    for (const b of der) raw += String.fromCharCode(b)
+    const pem = [
+      '-----BEGIN PRIVATE KEY-----',
+      ...btoa(raw).match(/.{1,64}/g)!,
+      '-----END PRIVATE KEY-----'
+    ].join(String.fromCharCode(10))
+
+    const s = setup()
+    await signIn(s, 'boss-oidc@example.com')
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?")
+      .bind('boss-oidc@example.com')
+      .run()
+    const admin = await signIn(s, 'boss-oidc@example.com')
+    const register = (privateKey: string): Promise<Response> =>
+      s.call('/api/auth/sso/register', {
+        method: 'POST',
+        headers: { cookie: admin, ...json },
+        body: JSON.stringify({
+          providerId: 'pk-co',
+          issuer: IDP,
+          domain: 'pk-co.example',
+          oidcConfig: {
+            clientId: 'client',
+            clientSecret: privateKey,
+            tokenEndpointAuthentication: 'private_key_jwt',
+            privateKeyAlgorithm: 'RS256',
+            privateKeyId: 'our-key-1',
+            authorizationEndpoint: `${IDP}/authorize`,
+            tokenEndpoint: `${IDP}/token`,
+            jwksEndpoint: `${IDP}/jwks`,
+            discoveryEndpoint: `${IDP}/.well-known/openid-configuration`,
+            skipDiscovery: true,
+            scopes: ['openid', 'email', 'profile']
+          }
+        })
+      })
+    // Not a key: refused before anything is stored.
+    expect((await register('not a key')).status).toBe(400)
+    expect(await linksOf('pk-co')).toBe(0)
+    expect((await register(pem)).status).toBe(200)
+    await bindings.DB.prepare('UPDATE sso_provider SET domain_verified = 1 WHERE provider_id = ?')
+      .bind('pk-co')
+      .run()
+
+    // At rest the key is encrypted, like a client secret.
+    const stored = await bindings.DB.prepare(
+      "SELECT oidc_config AS c FROM sso_provider WHERE provider_id = 'pk-co'"
+    ).first<{ c: string }>()
+    expect(stored!.c).not.toContain('BEGIN PRIVATE KEY')
+    expect(stored!.c).toContain('enc:v1:')
+
+    tokenBodies.length = 0
+    const done = await loginAs(s, 'pk-co')
+    expect(done.status).toBe(302)
+    expect(tokenBodies.length).toBe(1)
+    const sent = new URLSearchParams(tokenBodies[0])
+    expect(sent.get('client_assertion_type')).toBe(
+      'urn:ietf:params:oauth:client-assertion-type:jwt-bearer'
+    )
+    // A signed statement, never a secret.
+    const assertion = sent.get('client_assertion')!
+    expect(assertion.split('.')).toHaveLength(3)
+    expect(sent.get('client_secret')).toBeNull()
+    expect(
+      JSON.parse(atob(assertion.split('.')[0]!.replaceAll('-', '+').replaceAll('_', '/')))
+    ).toMatchObject({
+      alg: 'RS256',
+      kid: 'our-key-1'
+    })
+  })
 
   it('links company sign-in to a person the directory lists as active, and unlinks them when switched off', async () => {
     await fakeIdp(() => ({

@@ -1,6 +1,7 @@
 import { useEffect, useState, type JSX } from 'react'
 import { Button } from '@repo/ui'
 import { Link, Navigate, useParams, useSearchParams } from 'react-router'
+import { emailSchema } from '@repo/shared'
 import { authClient } from '../lib/auth'
 
 /**
@@ -16,6 +17,8 @@ export function TeamSignInPage(): JSX.Element {
   const wanted = params.get('next') ?? ''
   // A path on this site only.
   const next = /^\/(?![/\\])/.test(wanted) ? wanted : '/app'
+  // A link may carry the person's address (?login_hint=ada@acme.com) so the company's login can fill it in.
+  const hint = emailSchema.safeParse(params.get('login_hint') ?? '')
 
   useEffect(() => {
     let cancelled = false
@@ -47,7 +50,8 @@ export function TeamSignInPage(): JSX.Element {
     setError(null)
     const { error: failure } = await authClient.signIn.sso({
       organizationSlug: slug,
-      callbackURL: next
+      callbackURL: next,
+      ...(hint.success ? { loginHint: hint.data } : {})
     })
     if (failure)
       setError('Your company sign-in did not start. Try again, or use the email link instead.')
