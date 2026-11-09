@@ -92,39 +92,6 @@
   padding-inline: 0.5rem;
 }
 
-/* "On this page" under the navigation (see src/components/Sidebar.astro); the right-hand column is gone. */
-.right-sidebar-container {
-  display: none;
-}
-.left-toc {
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid var(--border);
-}
-.left-toc starlight-toc nav > h2 {
-  margin: 0 0 0.5rem 0.75rem;
-  font-size: var(--sl-text-base);
-  font-weight: 600;
-  color: var(--foreground);
-}
-.left-toc a {
-  text-decoration: none;
-  padding: 0.4rem 0.75rem;
-  font-size: var(--sl-text-sm);
-  color: var(--sl-color-gray-3);
-}
-.left-toc a:hover {
-  color: var(--foreground);
-}
-.left-toc a[aria-current='true'] {
-  color: var(--docs-active);
-  font-weight: 500;
-}
-/* No mobile table of contents bar, so no gap for it above the page; a wider reading column now the right one is gone. */
-:root {
-  --sl-mobile-toc-height: 0rem;
-  --sl-content-width: 56rem;
-}
 /* File names and other short code in tables stay on one line instead of breaking at the hyphen. */
 .sl-markdown-content :is(td, th) code {
   white-space: nowrap;
@@ -244,4 +211,72 @@ site-search button {
 .mermaid-error {
   color: var(--destructive);
   font-size: var(--sl-text-sm);
+}
+
+/* Code blocks (Expressive Code): the card colour and thin border used everywhere else, no tinted frames. */
+.expressive-code {
+  --ec-brdCol: var(--border);
+  --ec-codeBg: var(--card);
+  --ec-frm-edBg: var(--card);
+  --ec-frm-edTabBarBg: var(--secondary);
+  --ec-frm-edActTabBg: var(--card);
+  --ec-frm-edActTabIndTopCol: transparent;
+  --ec-frm-edActTabIndBtmCol: var(--foreground);
+  --ec-frm-edTabsMargInlStart: 0;
+  --ec-frm-trmBg: var(--card);
+  --ec-frm-trmTtbBg: var(--secondary);
+  --ec-frm-trmTtbBrdBtmCol: var(--border);
+  --ec-frm-trmTtbDotsFg: var(--muted-foreground);
+  --ec-frm-trmTtbDotsOpa: 0.5;
+  --ec-frm-shdCol: transparent;
+  --ec-uiSelBg: var(--secondary);
+}
+.expressive-code .frame pre,
+.expressive-code .frame .header {
+  border-color: var(--border);
+}
+.expressive-code .copy button {
+  border-color: var(--border);
+  background: var(--secondary);
+}
+
+/* Asides (note, tip, caution, danger): all plain grey boxes with a dark edge instead of four colours. */
+.starlight-aside {
+  --sl-color-asides-text-accent: var(--foreground);
+  color: var(--foreground);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--muted-foreground);
+  border-radius: var(--radius);
+}
+.starlight-aside__title {
+  color: var(--foreground);
+}
+
+/* Steps, tabs, file trees, badges and the table of contents: grey and white only. */
+.sl-steps > li::before {
+  background: var(--secondary);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+.sl-steps > li::after {
+  background: var(--border);
+}
+starlight-tabs [role='tab'][aria-selected='true'] {
+  color: var(--foreground);
+  border-color: var(--foreground);
+}
+.sl-badge {
+  background: var(--secondary);
+  border-color: var(--border);
+  color: var(--foreground);
+}
+starlight-toc nav > h2,
+mobile-starlight-toc summary {
+  font-weight: 600;
+  color: var(--foreground);
+}
+starlight-toc a[aria-current='true'] {
+  color: var(--foreground);
+  font-weight: 600;
 }
