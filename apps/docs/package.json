@@ -1,0 +1,23 @@
+{
+  "name": "@repo/docs",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Documentation site (Astro Starlight) built from the Markdown in /docs",
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-docs.mjs",
+    "dev": "pnpm sync && astro dev",
+    "build": "pnpm sync && astro build",
+    "preview": "astro preview",
+    "typecheck": "pnpm sync && astro check",
+    "test": "node --test \"scripts/*.test.mjs\""
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.42.10",
+    "astro": "^7.4.7"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.12",
+    "typescript": "catalog:"
+  }
+}
