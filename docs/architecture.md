@@ -49,21 +49,30 @@ There are two directions, and both go through the preload script.
 
 **Renderer asks, main answers** (request/response):
 
-```
-Toggle click → window.api.updateSettings({ updateChannel: 'beta' })
-  → preload: ipcRenderer.invoke(IPC.settingsUpdate, patch)
-  → main:    handle(IPC.settingsUpdate, ...) checks the sender, validates the patch, saves it,
-             and settingsEffects re-checks for updates and tells every window
-  → the returned Settings object resolves the promise in the renderer
+```mermaid
+sequenceDiagram
+  participant R as Renderer (React)
+  participant P as Preload
+  participant M as Main
+  R->>P: window.api.updateSettings({ updateChannel: 'beta' })
+  P->>M: ipcRenderer.invoke(IPC.settingsUpdate, patch)
+  Note over M: handle() checks the sender, validates the patch, saves it.<br/>settingsEffects re-checks for updates and tells every window
+  M-->>P: the new Settings object
+  P-->>R: the promise resolves
 ```
 
 **Main pushes, renderer listens** (events):
 
-```
-autoUpdater 'download-progress'
-  → main:     webContents.send(IPC.updaterEvent, { type: 'progress', percent })
-  → preload:  window.api.onUpdaterEvent(cb) subscribed with ipcRenderer.on
-  → renderer: React state updates and the UI shows the percentage
+```mermaid
+sequenceDiagram
+  participant U as autoUpdater
+  participant M as Main
+  participant P as Preload
+  participant R as Renderer (React)
+  U->>M: 'download-progress'
+  M->>P: webContents.send(IPC.updaterEvent, { type: 'progress', percent })
+  P->>R: window.api.onUpdaterEvent(cb), subscribed with ipcRenderer.on
+  Note over R: React state updates and the UI shows the percentage
 ```
 
 Deep links and opened files use the same push pattern. If a link arrives before the window has

@@ -459,3 +459,51 @@ footer a:hover {
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }
+
+/* Home page: everything a step smaller. */
+[data-has-hero] .hero {
+  padding-block: 2rem 1rem;
+}
+[data-has-hero] .hero h1 {
+  font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+}
+[data-has-hero] .hero .tagline {
+  font-size: var(--sl-text-base);
+  max-width: 34rem;
+}
+.sl-link-button {
+  padding: 0.5rem 1.1rem;
+  font-size: var(--sl-text-sm);
+}
+.card {
+  padding: 1rem 1.1rem;
+  border-radius: calc(var(--radius) - 2px);
+}
+.card .title {
+  font-size: var(--sl-text-base);
+  gap: 0.6rem;
+}
+.card .icon {
+  font-size: var(--sl-text-base);
+  padding: 0.3rem;
+}
+.card .body {
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+  margin-top: 0.5rem;
+}
+.card-grid {
+  gap: 0.75rem;
+}
+[data-has-hero] .sl-markdown-content h2 {
+  font-size: 1.25rem;
+}
+.sl-link-card {
+  padding: 0.6rem 0.9rem;
+}
+.sl-link-card .title {
+  font-size: var(--sl-text-sm);
+}
+.sl-link-card .description {
+  font-size: var(--sl-text-xs);
+}

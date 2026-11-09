@@ -5,17 +5,17 @@
 The same Worker also serves the built web app (`apps/web/dist`), so the site and the API share one origin: the session
 cookie is first-party and there is no CORS to configure.
 
-```
-apps/api/src/index.ts      The Worker (default export) and the `AppType` used for the typed client
-apps/api/src/app.ts        Routes: /api/health, /api/auth/* (Better Auth), /api/account, /api/preferences
-apps/api/src/auth.ts       Better Auth configuration (magic link, sessions, rate limits)
-apps/api/src/email.ts      EmailSender: Resend in production, the log in development, a fake in tests
-apps/api/src/origin.ts     Blocks cross-site writes
-apps/api/src/db/           Drizzle schema (auth-schema.ts is generated) and the D1 client
-apps/api/drizzle/          SQL migrations, applied to D1 by wrangler
-apps/api/test/             Tests that run inside the real Workers runtime with a real D1
-packages/shared/           zod schemas shared by API, web and desktop
-```
+| File                     | What it does                                                                   |
+| ------------------------ | ------------------------------------------------------------------------------ |
+| `apps/api/src/index.ts`  | The Worker (default export) and the `AppType` used for the typed client        |
+| `apps/api/src/app.ts`    | Routes: /api/health, /api/auth/* (Better Auth), /api/account, /api/preferences |
+| `apps/api/src/auth.ts`   | Better Auth configuration (magic link, sessions, rate limits)                  |
+| `apps/api/src/email.ts`  | EmailSender: Resend in production, the log in development, a fake in tests     |
+| `apps/api/src/origin.ts` | Blocks cross-site writes                                                       |
+| `apps/api/src/db/`       | Drizzle schema (auth-schema.ts is generated) and the D1 client                 |
+| `apps/api/drizzle/`      | SQL migrations, applied to D1 by wrangler                                      |
+| `apps/api/test/`         | Tests that run inside the real Workers runtime with a real D1                  |
+| `packages/shared/`       | zod schemas shared by API, web and desktop                                     |
 
 ## Run it locally
 
