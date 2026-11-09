@@ -765,6 +765,31 @@ describe('devices', () => {
   })
 })
 
+describe('a team sign-in page', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("offers the company's login for a team that has one, and starts it with the team slug", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ name: 'Acme Corp' }))
+    )
+    auth.signInSso.mockReset().mockResolvedValue({ data: {}, error: null })
+    at('/t/acme/sign-in')
+    expect(await screen.findByRole('heading', { name: 'Sign in to Acme Corp' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with Acme Corp' }))
+    expect(auth.signInSso).toHaveBeenCalledWith({ organizationSlug: 'acme', callbackURL: '/app' })
+  })
+
+  it('sends a team without a company sign-in to the ordinary sign-in page', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 404 }))
+    )
+    at('/t/nobody/sign-in')
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+})
+
 describe('admin page', () => {
   const people = {
     data: {
@@ -1075,16 +1100,18 @@ describe('admin: one person activity', () => {
     })
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        Response.json([
-          {
-            at: '2026-11-01T10:00:00Z',
-            type: 'user_sign_in_failed',
-            outcome: 'failure',
-            label: null,
-            ipAddress: '1.2.3.4'
-          }
-        ])
+      vi.fn(async (url: string) =>
+        url === '/api/admin/ai-apps'
+          ? Response.json([])
+          : Response.json([
+              {
+                at: '2026-11-01T10:00:00Z',
+                type: 'user_sign_in_failed',
+                outcome: 'failure',
+                label: null,
+                ipAddress: '1.2.3.4'
+              }
+            ])
       )
     )
     at('/admin')

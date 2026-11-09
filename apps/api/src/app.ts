@@ -787,6 +787,26 @@ export function createApp(options: AppOptions = {}) {
         c.header('cache-control', 'private, max-age=60')
         return c.json({ flags: evaluateFlags(rules, channel, id) })
       })
+      // The page /t/<slug>/sign-in: a team's own company sign-in. Public, and it says nothing beyond the team's name,
+      // and only for a team that has a company sign-in whose domain was proven (anyone else gets the same 404, so the
+      // address cannot be used to find out which teams exist).
+      .get('/team-sign-in/:slug', async (c) => {
+        const slug = c.req.param('slug').toLowerCase()
+        if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug))
+          throw new HTTPException(404, { message: 'Not found' })
+        const [team] = await c.var.db
+          .select({ name: schema.organization.name })
+          .from(schema.organization)
+          .innerJoin(
+            schema.ssoProvider,
+            eq(schema.ssoProvider.organizationId, schema.organization.id)
+          )
+          .where(and(eq(schema.organization.slug, slug), eq(schema.ssoProvider.domainVerified, true)))
+          .limit(1)
+        if (!team) throw new HTTPException(404, { message: 'Not found' })
+        c.header('cache-control', 'private, max-age=60')
+        return c.json({ name: team.name })
+      })
       // Fill in a company's sign-in settings from its issuer address. For staff and for owners and admins of a team.
       .get('/sso-discover', requireSession(true), async (c) => {
         const [staff] = await c.var.db

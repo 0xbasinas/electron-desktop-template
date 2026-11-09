@@ -1741,6 +1741,117 @@ describe('single sign-on (OpenID Connect)', () => {
     expect(await made.json()).toMatchObject({ providerId: 'acme', domainVerified: false })
   })
 
+  const adminFor = async (s: ReturnType<typeof setup>, email: string): Promise<string> => {
+    await signIn(s, email)
+    await bindings.DB.prepare("UPDATE user SET role = 'admin' WHERE email = ?").bind(email).run()
+    return signIn(s, email)
+  }
+  const update = (
+    s: ReturnType<typeof setup>,
+    cookie: string,
+    providerId: string,
+    body: Record<string, unknown>
+  ): Promise<Response> =>
+    s.call('/api/auth/sso/update-provider', {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify({ providerId, ...body })
+    })
+
+  it('freezes who a provider is and its domain while people sign in through it, but lets the secret change', async () => {
+    const s = setup()
+    const admin = await adminFor(s, 'boss-update@example.com')
+    await register(s, admin, provider('upd-co'))
+
+    // Nobody linked yet: everything may change.
+    expect((await update(s, admin, 'upd-co', { domain: 'moved.example' })).status).toBe(200)
+    expect((await update(s, admin, 'upd-co', { domain: 'acme.example' })).status).toBe(200)
+
+    // Someone signs in through it (a linked account).
+    const person = await signIn(s, 'linked-person@example.com')
+    expect(person).toBeTruthy()
+    await bindings.DB.prepare(
+      "INSERT INTO account (id, account_id, provider_id, user_id, created_at, updated_at) SELECT ?, 'sub-1', 'upd-co', id, 0, 0 FROM user WHERE email = ?"
+    )
+      .bind(crypto.randomUUID(), 'linked-person@example.com')
+      .run()
+
+    // The plugin refuses to move the issuer, client id and endpoints ...
+    expect((await update(s, admin, 'upd-co', { issuer: 'https://evil.example' })).status).toBe(409)
+    expect(
+      (await update(s, admin, 'upd-co', { oidcConfig: { clientId: 'another' } })).status
+    ).toBe(409)
+    // ... and we refuse the domain; both mean delete and add again.
+    const moved = await update(s, admin, 'upd-co', { domain: 'moved.example' })
+    expect(moved.status).toBe(409)
+    expect(await moved.text()).toContain('Delete it and add it again')
+    // Writing the same domain again, rotating the secret and changing scopes are fine.
+    expect((await update(s, admin, 'upd-co', { domain: 'ACME.example' })).status).toBe(200)
+    expect(
+      (
+        await update(s, admin, 'upd-co', {
+          oidcConfig: { clientSecret: 'rotated', scopes: ['openid', 'email'] }
+        })
+      ).status
+    ).toBe(200)
+    // The new secret is stored encrypted like the first one.
+    const stored = await bindings.DB.prepare(
+      'SELECT oidc_config FROM sso_provider WHERE provider_id = ?'
+    )
+      .bind('upd-co')
+      .first<{ oidc_config: string }>()
+    expect(stored!.oidc_config).toContain('enc:v1:')
+    expect(stored!.oidc_config).not.toContain('rotated')
+    await bindings.DB.prepare('DELETE FROM account WHERE provider_id = ?').bind('upd-co').run()
+  })
+
+  it('does not let a provider overwrite the details of people who sign in with it', async () => {
+    const s = setup()
+    const admin = await adminFor(s, 'boss-override@example.com')
+    const body = JSON.parse(provider('override-co')) as { oidcConfig: Record<string, unknown> }
+    body.oidcConfig.overrideUserInfo = true
+    expect((await register(s, admin, JSON.stringify(body))).status).toBe(400)
+    await register(s, admin, provider('override-ok'))
+    expect(
+      (await update(s, admin, 'override-ok', { oidcConfig: { overrideUserInfo: true } })).status
+    ).toBe(400)
+  })
+
+  it('refuses endpoints on a private or internal host without any trusted-origins setting', async () => {
+    const s = setup()
+    const admin = await adminFor(s, 'boss-private@example.com')
+    for (const host of ['https://10.0.0.5', 'https://localhost', 'http://idp.example.com']) {
+      const body = JSON.parse(provider('private-co')) as { oidcConfig: Record<string, unknown> }
+      body.oidcConfig.tokenEndpoint = `${host}/token`
+      body.oidcConfig.authorizationEndpoint = `${host}/authorize`
+      expect((await register(s, admin, JSON.stringify(body))).status).toBe(400)
+    }
+  })
+
+  it('serves a team company-sign-in page only for a team with a proven provider', async () => {
+    const s = setup()
+    const owner = await signIn(s, 'team-page-owner@example.com')
+    const made = await s.call('/api/auth/organization/create', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ name: 'Page Corp', slug: 'page-corp' })
+    })
+    const team = (await made.json()) as { id: string }
+    // No provider yet: indistinguishable from a team that does not exist.
+    expect((await s.call('/api/team-sign-in/page-corp')).status).toBe(404)
+    expect((await s.call('/api/team-sign-in/no-such-team')).status).toBe(404)
+    expect((await s.call('/api/team-sign-in/Bad%20Slug!')).status).toBe(404)
+    await register(s, owner, provider('page-co', { organizationId: team.id }))
+    // A provider whose domain is still unproven does not count.
+    expect((await s.call('/api/team-sign-in/page-corp')).status).toBe(404)
+    await bindings.DB.prepare('UPDATE sso_provider SET domain_verified = 1 WHERE provider_id = ?')
+      .bind('page-co')
+      .run()
+    const page = await s.call('/api/team-sign-in/page-corp')
+    expect(page.status).toBe(200)
+    expect(await page.json()).toEqual({ name: 'Page Corp' })
+  })
+
   it('lets a team owner add a provider for the team, but not a plain member or a stranger', async () => {
     const s = setup()
     const owner = await signIn(s, 'team-owner-sso@example.com')
