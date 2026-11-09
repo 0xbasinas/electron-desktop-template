@@ -626,3 +626,34 @@ site-search kbd {
 .sl-markdown-content .sl-anchor-icon > svg {
   width: 0.6em;
 }
+
+/* Link cards: the whole card is the link. No line under the title, just a soft hover on the card. */
+.sl-markdown-content .sl-link-card a,
+.sl-markdown-content .sl-link-card a:hover {
+  border-bottom: 0 !important;
+  text-decoration: none !important;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.sl-link-card {
+  transition:
+    background-color 0.15s,
+    border-color 0.15s;
+}
+.sl-link-card:hover {
+  background: var(--secondary);
+  border-color: var(--muted-foreground);
+}
+.sl-link-card a:focus-visible {
+  outline: none;
+}
+.sl-link-card:has(a:focus-visible) {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.sl-link-card .icon {
+  color: var(--muted-foreground);
+}
+.sl-link-card:hover .icon {
+  color: var(--foreground);
+}
