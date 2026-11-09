@@ -286,3 +286,54 @@ starlight-toc a[aria-current='true'] {
 .sl-markdown-content :is(td, th) code {
   white-space: nowrap;
 }
+
+/* Spacing: buttons keep their padding in every variant, and the page actions sit clear of the title. */
+.sl-link-button {
+  padding: 0.7rem 1.4rem;
+  line-height: 1.2;
+}
+.sl-link-button.minimal {
+  padding-inline: 1.4rem;
+}
+#_top + .page-actions,
+h1#_top ~ .page-actions {
+  margin-top: 1.25rem;
+}
+
+/* Smaller type: the sidebar and headings were too large. */
+.sidebar-content {
+  gap: 0.75rem;
+}
+.sidebar-content details > summary,
+.sidebar-content .large {
+  font-size: var(--sl-text-sm);
+}
+.sidebar-content a {
+  font-size: var(--sl-text-sm);
+  padding: 0.35rem 0.75rem;
+  line-height: 1.4;
+}
+.sidebar-content ul {
+  gap: 0.1rem;
+}
+.sl-markdown-content h1,
+.content-panel h1 {
+  font-size: 1.875rem;
+  line-height: 1.2;
+}
+.sl-markdown-content h2 {
+  font-size: 1.375rem;
+}
+.sl-markdown-content h3 {
+  font-size: 1.125rem;
+}
+.sl-markdown-content h4 {
+  font-size: 1rem;
+}
+starlight-toc a,
+mobile-starlight-toc a {
+  font-size: var(--sl-text-xs);
+}
+[data-has-hero] .hero h1 {
+  font-size: clamp(2.25rem, 6vw, 3.25rem);
+}
