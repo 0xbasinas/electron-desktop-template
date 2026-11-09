@@ -802,3 +802,19 @@ site-search dialog::backdrop {
   align-items: center;
   justify-content: center;
 }
+
+/* Light theme: the card colour is white like the page, so code blocks and asides get a light grey fill to stand out. */
+:root[data-theme='light'] .expressive-code {
+  --ec-codeBg: var(--secondary);
+  --ec-frm-edBg: var(--secondary);
+  --ec-frm-trmBg: var(--secondary);
+  --ec-frm-trmTtbBg: var(--muted);
+  --ec-frm-edTabBarBg: var(--muted);
+  --ec-frm-edActTabBg: var(--secondary);
+  --ec-brdWd: 1px;
+}
+:root[data-theme='light'] .starlight-aside,
+:root[data-theme='light'] .page-actions,
+:root[data-theme='light'] .sl-link-card {
+  background: var(--secondary);
+}
