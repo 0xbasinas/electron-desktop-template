@@ -598,3 +598,15 @@ site-search kbd {
   width: 1.1rem;
   height: 1.1rem;
 }
+
+/* Heading anchor icon: small, grey, no underline. */
+.sl-markdown-content .sl-anchor-link,
+.sl-markdown-content .sl-anchor-link:hover {
+  border-bottom: 0 !important;
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+.sl-markdown-content .sl-anchor-link svg {
+  width: 0.9em;
+  height: 0.9em;
+}

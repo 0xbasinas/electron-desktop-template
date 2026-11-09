@@ -1,6 +1,7 @@
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import tailwindcss from '@tailwindcss/vite'
+import { monoDark, monoLight } from './mono-themes.mjs'
 
 const REPO = 'https://github.com/0xbasinas/electron-desktop-template'
 
@@ -35,7 +36,7 @@ export default defineConfig({
       lastUpdated: false,
       tableOfContents: { minHeadingLevel: 2, maxHeadingLevel: 3 },
       expressiveCode: {
-        themes: ['github-dark', 'github-light'],
+        themes: [monoDark, monoLight],
         styleOverrides: { borderRadius: '0.625rem', borderColor: 'var(--sl-color-gray-5)' }
       },
       sidebar: [
