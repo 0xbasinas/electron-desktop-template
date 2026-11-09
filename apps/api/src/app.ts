@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import * as Sentry from '@sentry/cloudflare'
 import {
@@ -30,6 +31,7 @@ import { createMcpProtectedRequestHandler } from '@better-auth/mcp'
 import { createDpopReplayStore } from 'better-auth/oauth2'
 import { createAuth, DEFAULT_APP_NAME, MCP_READ_SCOPE, mcpResource, type Auth } from './auth'
 import { handleMcp } from './mcpServer'
+import { isAiAppDisabled, listAiApps, setAiAppDisabledStatements } from './aiApps'
 import { cachedJwks } from './jwksCache'
 import {
   cancelDeletion,
@@ -106,6 +108,16 @@ const requireSession =
     c.set('sessionId', session.session.id)
     await next()
   }
+
+/** Only the `admin` role (not `support`). Run after requireSession; reads the role from the database, not the cookie. */
+const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const [me] = await c.var.db
+    .select({ role: schema.user.role })
+    .from(schema.user)
+    .where(eq(schema.user.id, c.var.userId))
+  if (me?.role !== 'admin') throw new HTTPException(403, { message: 'Not allowed' })
+  await next()
+}
 
 const toAccount = (
   row: typeof schema.user.$inferSelect,
@@ -616,6 +628,40 @@ export function createApp(options: AppOptions = {}) {
         if (!allowed.success) throw new HTTPException(403, { message: 'Not allowed' })
         return c.json(await recentAudit(c.var.db, c.req.param('userId')))
       })
+      // Staff (admin role only): the AI apps that have asked for access, and a switch to turn one off or on. Better Auth's
+      // own update-client route cannot set `disabled` from outside the server, so this is ours.
+      .get('/admin/ai-apps', requireSession(true), requireAdmin, async (c) =>
+        c.json(await listAiApps(c.var.db))
+      )
+      .post('/admin/ai-apps/:action', requireSession(true), requireAdmin, async (c) => {
+        const action = c.req.param('action')
+        if (action !== 'disable' && action !== 'enable')
+          throw new HTTPException(404, { message: 'Not found' })
+        const body = z.object({ clientId: z.string().min(1).max(2048) }).safeParse(
+          await c.req.json().catch(() => null)
+        )
+        if (!body.success) throw new HTTPException(400, { message: 'Choose an app' })
+        const disabling = action === 'disable'
+        const [known] = await c.var.db
+          .select({ id: schema.oauthClient.id })
+          .from(schema.oauthClient)
+          .where(eq(schema.oauthClient.clientId, body.data.clientId))
+        if (!known) throw new HTTPException(404, { message: 'No such app' })
+        await c.var.db.batch(setAiAppDisabledStatements(c.var.db, body.data.clientId, disabling))
+        c.executionCtx.waitUntil(
+          recordAudit(c.var.db, {
+            type: disabling ? 'ai_app_disabled' : 'ai_app_enabled',
+            outcome: 'success',
+            userId: null,
+            actorId: c.var.userId,
+            ipAddress: c.req.header('cf-connecting-ip') ?? null,
+            userAgent: c.req.header('user-agent') ?? null,
+            subject: body.data.clientId.slice(0, 200),
+            now: Date.now()
+          }).catch((error: unknown) => console.error('Could not record the app change', error))
+        )
+        return c.json({ ok: true })
+      })
       // The simplest call a script can make with an API key (header x-api-key): who owns this key.
       .get('/v1/me', async (c) => {
         const key = c.req.header('x-api-key')
@@ -655,6 +701,9 @@ export function createApp(options: AppOptions = {}) {
             const suspended =
               owner?.banned && (!owner.banExpires || owner.banExpires.getTime() > Date.now())
             if (!owner || suspended)
+              return Response.json({ error: 'invalid_token' }, { status: 401 })
+            // Staff can switch an app off; its tokens stop working at once, not when they expire.
+            if (await isAiAppDisabled(c.var.db, String(claims.azp)))
               return Response.json({ error: 'invalid_token' }, { status: 401 })
             return handleMcp(
               request,

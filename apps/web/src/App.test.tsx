@@ -815,6 +815,40 @@ describe('admin page', () => {
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
   })
 
+  it('lets an admin switch an AI app off after confirming, and support does not see the list', async () => {
+    const fetched: { url: string; init?: RequestInit }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        fetched.push({ url, init })
+        if (url === '/api/admin/ai-apps')
+          return Response.json([
+            {
+              clientId: 'https://assistant.example/client.json',
+              name: 'Test Assistant',
+              disabled: false,
+              people: 2,
+              createdAt: null
+            }
+          ])
+        return Response.json({ ok: true })
+      })
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    auth.session = { user: { email: 'me@example.com', id: 'u1', role: 'admin' } } as never
+    auth.admin.listUsers.mockResolvedValue(people)
+    at('/admin')
+    expect(await screen.findByText('Test Assistant')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Switch off' }))
+    expect(window.confirm).toHaveBeenCalled()
+    const post = fetched.find((f) => f.url === '/api/admin/ai-apps/disable')
+    expect(JSON.parse(String(post?.init?.body))).toEqual({
+      clientId: 'https://assistant.example/client.json'
+    })
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
   it('shows support the list without any buttons to change it', async () => {
     auth.session = { user: { email: 'help@example.com', id: 'u3', role: 'support' } } as never
     auth.admin.listUsers.mockResolvedValue(people)

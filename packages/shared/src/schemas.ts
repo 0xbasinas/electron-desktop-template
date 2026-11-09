@@ -31,6 +31,18 @@ export const securityEventSchema = z.object({
 export const securityEventsSchema = z.array(securityEventSchema)
 export type SecurityEvent = z.infer<typeof securityEventSchema>
 
+/** An AI app (OAuth client) as staff see it in the admin page. */
+export const aiAppsSchema = z.array(
+  z.object({
+    clientId: z.string(),
+    name: z.string().nullable(),
+    disabled: z.boolean(),
+    people: z.number(),
+    createdAt: z.string().nullable()
+  })
+)
+export type AiApp = z.infer<typeof aiAppsSchema>[number]
+
 /** Everything we hold about a person (the "download my data" file). No tokens or secrets are included. */
 export const accountExportSchema = z.object({
   exportedAt: z.string(),

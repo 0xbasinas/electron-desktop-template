@@ -3247,6 +3247,146 @@ describe('AI apps (MCP): OAuth sign-in and the /api/mcp endpoint', () => {
     expect(left!.n).toBe(0)
   })
 
+  async function staffCookieFor(
+    s: ReturnType<typeof setup>,
+    email: string,
+    role: 'admin' | 'support'
+  ): Promise<string> {
+    await signIn(s, email)
+    await bindings.DB.prepare('UPDATE user SET role = ? WHERE email = ?').bind(role, email).run()
+    return signIn(s, email)
+  }
+
+  it('lets an admin list and switch off an AI app, and nobody else', async () => {
+    publishClient()
+    const s = setup()
+    const person = await signIn(s, 'mcp-adm-person@example.com')
+    const tokens = await getTokens(s, person)
+    expect((await call(s, tokens.access_token, 'tools/list')).status).toBe(200)
+
+    // Not staff, and support (read-only staff) are refused.
+    expect((await s.call('/api/admin/ai-apps', { headers: { cookie: person } })).status).toBe(403)
+    const support = await staffCookieFor(s, 'mcp-adm-support@example.com', 'support')
+    expect((await s.call('/api/admin/ai-apps', { headers: { cookie: support } })).status).toBe(403)
+    const refusedSwitch = await s.call('/api/admin/ai-apps/disable', {
+      method: 'POST',
+      headers: { cookie: support, ...json },
+      body: JSON.stringify({ clientId: CLIENT_ID })
+    })
+    expect(refusedSwitch.status).toBe(403)
+    expect((await s.call('/api/admin/ai-apps')).status).toBe(401)
+
+    const admin = await staffCookieFor(s, 'mcp-adm-boss@example.com', 'admin')
+    const listed = (await (
+      await s.call('/api/admin/ai-apps', { headers: { cookie: admin } })
+    ).json()) as { clientId: string; name: string; disabled: boolean; people: number }[]
+    const mine = listed.find((a) => a.clientId === CLIENT_ID)
+    expect(mine).toMatchObject({ name: 'Test Assistant', disabled: false })
+    expect(mine!.people).toBeGreaterThanOrEqual(1)
+
+    const unknown = await s.call('/api/admin/ai-apps/disable', {
+      method: 'POST',
+      headers: { cookie: admin, ...json },
+      body: JSON.stringify({ clientId: 'https://nobody.example/x.json' })
+    })
+    expect(unknown.status).toBe(404)
+    expect(
+      (
+        await s.call('/api/admin/ai-apps/delete', {
+          method: 'POST',
+          headers: { cookie: admin, ...json },
+          body: JSON.stringify({ clientId: CLIENT_ID })
+        })
+      ).status
+    ).toBe(404)
+
+    const off = await s.call('/api/admin/ai-apps/disable', {
+      method: 'POST',
+      headers: { cookie: admin, ...json },
+      body: JSON.stringify({ clientId: CLIENT_ID })
+    })
+    expect(off.status).toBe(200)
+
+    // The token that worked a moment ago is refused at once, its approvals are gone, and the app cannot start over.
+    expect((await call(s, tokens.access_token, 'tools/list')).status).toBe(401)
+    const left = await bindings.DB.prepare(
+      'SELECT (SELECT COUNT(*) FROM oauth_consent WHERE client_id = ?1) AS consents, (SELECT COUNT(*) FROM oauth_refresh_token WHERE client_id = ?1) AS refresh, (SELECT COUNT(*) FROM oauth_access_token WHERE client_id = ?1) AS access'
+    )
+      .bind(CLIENT_ID)
+      .first<{ consents: number; refresh: number; access: number }>()
+    expect(left).toEqual({ consents: 0, refresh: 0, access: 0 })
+    const again = await authorize(s, person)
+    expect(again.response.headers.get('location') ?? '').not.toContain('/consent')
+    const listedOff = (await (
+      await s.call('/api/admin/ai-apps', { headers: { cookie: admin } })
+    ).json()) as { clientId: string; disabled: boolean }[]
+    expect(listedOff.find((a) => a.clientId === CLIENT_ID)!.disabled).toBe(true)
+
+    // Switching it on lets people approve it again.
+    const on = await s.call('/api/admin/ai-apps/enable', {
+      method: 'POST',
+      headers: { cookie: admin, ...json },
+      body: JSON.stringify({ clientId: CLIENT_ID })
+    })
+    expect(on.status).toBe(200)
+    const back = await authorize(s, person)
+    expect(new URL(back.response.headers.get('location')!, ORIGIN).pathname).toBe('/consent')
+
+    const events = await bindings.DB.prepare(
+      "SELECT type, actor_id FROM audit_event WHERE type IN ('ai_app_disabled', 'ai_app_enabled') ORDER BY at"
+    ).all<{ type: string; actor_id: string | null }>()
+    expect(events.results.map((e) => e.type)).toEqual(['ai_app_disabled', 'ai_app_enabled'])
+    expect(events.results.every((e) => e.actor_id)).toBe(true)
+    await forgetClient()
+  })
+
+  it('keeps the plugin client routes staff-only and nobody can create a client by hand', async () => {
+    const s = setup()
+    const person = await signIn(s, 'mcp-routes-person@example.com')
+    const admin = await staffCookieFor(s, 'mcp-routes-boss@example.com', 'admin')
+    const list = (cookie: string): Promise<Response> =>
+      s.call('/api/auth/oauth2/get-clients', { headers: { cookie } })
+    expect((await list(person)).status).toBeGreaterThanOrEqual(400)
+    expect((await list(admin)).status).toBe(200)
+    for (const cookie of [person, admin]) {
+      const created = await s.call('/api/auth/oauth2/create-client', {
+        method: 'POST',
+        headers: { cookie, ...json },
+        body: JSON.stringify({ redirect_uris: ['https://evil.example/cb'] })
+      })
+      expect(created.status).toBeGreaterThanOrEqual(400)
+    }
+    const registered = await s.call('/api/auth/oauth2/register', {
+      method: 'POST',
+      headers: json,
+      body: JSON.stringify({ redirect_uris: ['https://evil.example/cb'] })
+    })
+    expect(registered.status).toBeGreaterThanOrEqual(400)
+  })
+
+  it('answers the extra plugin endpoints only to a caller that proves who it is, and rate limits them', async () => {
+    const s = setup()
+    const form = { 'content-type': 'application/x-www-form-urlencoded' }
+    const body = new URLSearchParams({ token: 'not-a-token', client_id: CLIENT_ID }).toString()
+    for (const path of ['/api/auth/oauth2/introspect', '/api/auth/oauth2/revoke']) {
+      const r = await s.call(path, { method: 'POST', headers: form, body })
+      // Never a success for a stranger, and never a crash.
+      expect([400, 401, 403, 404]).toContain(r.status)
+    }
+    const logout = await s.call(
+      `/api/auth/oauth2/end-session?client_id=${encodeURIComponent(CLIENT_ID)}`
+    )
+    // Not offered at all: for an unknown app id it would make the Worker fetch that app's address.
+    expect(logout.status).toBe(404)
+
+    let introspectLimited = 0
+    for (let i = 0; i < 24; i++) {
+      const r = await s.call('/api/auth/oauth2/introspect', { method: 'POST', headers: form, body })
+      if (r.status === 429) introspectLimited++
+    }
+    expect(introspectLimited).toBeGreaterThan(0)
+  })
+
   /** An app's stored settings are kept between sign-ins, so a test that changes them removes them afterwards. */
   async function forgetClient(): Promise<void> {
     await bindings.DB.prepare('DELETE FROM oauth_client WHERE client_id = ?').bind(CLIENT_ID).run()

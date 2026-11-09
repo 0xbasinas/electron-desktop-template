@@ -117,7 +117,13 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         '/oauth2/authorize': { window: 60, max: 10 },
         '/oauth2/public-client': { window: 60, max: 20 },
         '/oauth2/token': { window: 60, max: 20 },
-        '/device/code': { window: 60, max: 10 }
+        '/device/code': { window: 60, max: 10 },
+        // The plugin also serves these. They check the caller's client credentials (a database read and, for a signed
+        // token, a signature check each time), so a stranger guessing at them is limited well below the general rule.
+        '/oauth2/introspect': { window: 60, max: 20 },
+        '/oauth2/revoke': { window: 60, max: 20 },
+        '/oauth2/end-session': { window: 60, max: 10 },
+        '/oauth2/register': { window: 60, max: 5 }
       }
     },
     hooks: {
@@ -136,6 +142,10 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
               message: 'Not allowed while viewing as this person.'
             })
         }
+        // RP-initiated logout is not used by any AI app, and for an unknown app id it would make this Worker fetch that
+        // app's address for a stranger (and fail with a 500). Not offered.
+        if (ctx.path === '/oauth2/end-session')
+          throw new APIError('NOT_FOUND', { message: 'Not found' })
         // SAML needs more CPU per sign-in than the free Workers plan allows, so only OpenID Connect is offered.
         if (
           ctx.path === '/sso/register' &&
