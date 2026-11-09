@@ -1,0 +1,77 @@
+---
+// Light / Dark / Auto as three plain buttons instead of a native select, whose open list is drawn by the browser in
+// its own blue. Uses the same storage key and data-theme as Starlight, so its theme script keeps working.
+---
+
+<starlight-theme-toggle role="group" aria-label="Theme">
+  <button type="button" data-theme-value="light">Light</button>
+  <button type="button" data-theme-value="dark">Dark</button>
+  <button type="button" data-theme-value="auto">Auto</button>
+</starlight-theme-toggle>
+
+<script>
+  type Theme = 'auto' | 'dark' | 'light'
+  const key = 'starlight-theme'
+  const parse = (value: unknown): Theme => (value === 'dark' || value === 'light' ? value : 'auto')
+  const load = (): Theme => {
+    try {
+      return parse(localStorage.getItem(key))
+    } catch {
+      return 'auto'
+    }
+  }
+  const system = (): 'light' | 'dark' => (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')
+
+  class ThemeToggle extends HTMLElement {
+    connectedCallback(): void {
+      this.mark(load())
+      for (const button of this.querySelectorAll('button')) {
+        button.addEventListener('click', () => {
+          const theme = parse(button.dataset['themeValue'])
+          try {
+            localStorage.setItem(key, theme === 'auto' ? '' : theme)
+          } catch {
+            // Private mode: the choice lasts until the page is closed.
+          }
+          document.documentElement.dataset['theme'] = theme === 'auto' ? system() : theme
+          this.mark(theme)
+        })
+      }
+      matchMedia('(prefers-color-scheme: light)').addEventListener('change', () => {
+        if (load() === 'auto') document.documentElement.dataset['theme'] = system()
+      })
+    }
+    mark(theme: Theme): void {
+      for (const button of this.querySelectorAll('button')) {
+        button.setAttribute('aria-pressed', String(button.dataset['themeValue'] === theme))
+      }
+    }
+  }
+  customElements.define('starlight-theme-toggle', ThemeToggle)
+</script>
+
+<style>
+  starlight-theme-toggle {
+    display: inline-flex;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: calc(var(--radius) - 2px);
+  }
+  button {
+    padding: 0.25rem 0.6rem;
+    border: 0;
+    border-radius: calc(var(--radius) - 4px);
+    background: transparent;
+    color: var(--muted-foreground);
+    font: inherit;
+    font-size: var(--sl-text-sm);
+    cursor: pointer;
+  }
+  button:hover {
+    color: var(--foreground);
+  }
+  button[aria-pressed='true'] {
+    background: var(--secondary);
+    color: var(--foreground);
+  }
+</style>

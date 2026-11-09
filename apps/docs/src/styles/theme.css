@@ -120,10 +120,14 @@
   color: var(--docs-active);
   font-weight: 500;
 }
-@media (min-width: 72rem) {
-  .main-pane {
-    --sl-content-width: 50rem;
-  }
+/* No mobile table of contents bar, so no gap for it above the page; a wider reading column now the right one is gone. */
+:root {
+  --sl-mobile-toc-height: 0rem;
+  --sl-content-width: 56rem;
+}
+/* File names and other short code in tables stay on one line instead of breaking at the hyphen. */
+.sl-markdown-content :is(td, th) code {
+  white-space: nowrap;
 }
 
 /* Content */

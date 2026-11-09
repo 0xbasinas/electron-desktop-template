@@ -20,6 +20,7 @@ export default defineConfig({
         Footer: './src/components/Footer.astro',
         MarkdownContent: './src/components/MarkdownContent.astro',
         PageTitle: './src/components/PageTitle.astro',
+        ThemeSelect: './src/components/ThemeSelect.astro',
         // "On this page" lives in the left sidebar; the right column is left empty.
         Sidebar: './src/components/Sidebar.astro',
         PageSidebar: './src/components/PageSidebar.astro'
