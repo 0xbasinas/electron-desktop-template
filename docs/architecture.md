@@ -2,18 +2,15 @@
 
 An Electron app runs three kinds of code. Knowing which one you are writing is most of the battle.
 
-```
-┌──────────────────────────── Main process (src/main) ────────────────────────────┐
-│ Node.js with full OS access: windows, files, auto-update, deep links, settings. │
-└───────────────▲──────────────────────────────────────────────┬──────────────────┘
-                │ ipcMain.handle / webContents.send            │
-        ┌───────┴──────────────── Preload (src/preload) ───────▼──────┐
-        │ Runs before the page loads. Exposes a small, typed `window.api`. │
-        └───────▲──────────────────────────────────────────────┬──────┘
-                │ ipcRenderer.invoke / on                      │
-┌───────────────┴───────────── Renderer (src/renderer) ────────▼──────────────────┐
-│ A sandboxed web page (React). No Node access. Talks to main only via window.api. │
-└──────────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+  main["<b>Main process</b> (src/main)<br/>Node.js with full OS access: windows, files, auto-update, deep links, settings"]
+  preload["<b>Preload</b> (src/preload)<br/>Runs before the page loads. Exposes a small, typed window.api"]
+  renderer["<b>Renderer</b> (src/renderer)<br/>A sandboxed web page (React). No Node access. Talks to main only via window.api"]
+  renderer -- "ipcRenderer.invoke / on" --> preload
+  preload -- "ipcMain.handle / webContents.send" --> main
+  main -. "replies and events" .-> preload
+  preload -. "replies and events" .-> renderer
 ```
 
 Shared types and channel names live in `apps/desktop/src/shared/ipc.ts`, which all three import.

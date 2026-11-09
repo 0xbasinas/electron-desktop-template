@@ -20,13 +20,13 @@
   --sl-color-hairline-light: var(--border);
   --sl-color-hairline-shade: var(--border);
 
-  /* A periwinkle blue for the current page, links and buttons; everything else stays on the app's neutral tokens. */
-  --docs-blue: oklch(0.52 0.2 268);
-  --docs-blue-soft: oklch(0.94 0.04 268);
-  --sl-color-accent: var(--docs-blue);
-  --sl-color-accent-low: var(--docs-blue-soft);
-  --sl-color-accent-high: var(--docs-blue);
-  --sl-color-text-accent: var(--docs-blue);
+  /* No accent colour: the current page, links and buttons use the app's plain black, white and grey. */
+  --docs-active: var(--foreground);
+  --docs-active-bg: var(--secondary);
+  --sl-color-accent: var(--docs-active);
+  --sl-color-accent-low: var(--docs-active-bg);
+  --sl-color-accent-high: var(--docs-active);
+  --sl-color-text-accent: var(--docs-active);
   --sl-color-text: var(--sl-color-gray-2);
   --sl-color-bg-inline-code: var(--secondary);
   --sl-color-bg-nav: var(--background);
@@ -47,12 +47,6 @@
 .site-title {
   color: var(--foreground);
   font-weight: 600;
-}
-
-/* Dark theme: a lighter periwinkle so the blue reads on the dark background. */
-:root[data-theme='dark'] {
-  --docs-blue: oklch(0.82 0.09 268);
-  --docs-blue-soft: oklch(0.3 0.06 268);
 }
 
 /* Sidebar: bold group headings, roomy items, the current page in blue on a soft periwinkle pill. */
@@ -86,8 +80,8 @@
   background: var(--secondary);
 }
 .sidebar-content a[aria-current='page'] {
-  background: var(--docs-blue-soft);
-  color: var(--docs-blue);
+  background: var(--docs-active-bg);
+  color: var(--docs-active);
   font-weight: 500;
 }
 .sidebar-content .sl-badge {
@@ -123,7 +117,7 @@
   color: var(--foreground);
 }
 .left-toc a[aria-current='true'] {
-  color: var(--docs-blue);
+  color: var(--docs-active);
   font-weight: 500;
 }
 @media (min-width: 72rem) {
@@ -181,9 +175,9 @@
   font-weight: 500;
 }
 .sl-link-button.primary {
-  background: var(--docs-blue);
-  border-color: var(--docs-blue);
-  color: var(--background);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
 .sl-link-button.secondary,
 .sl-link-button.minimal {
