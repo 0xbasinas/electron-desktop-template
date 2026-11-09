@@ -1778,9 +1778,9 @@ describe('single sign-on (OpenID Connect)', () => {
 
     // The plugin refuses to move the issuer, client id and endpoints ...
     expect((await update(s, admin, 'upd-co', { issuer: 'https://evil.example' })).status).toBe(409)
-    expect(
-      (await update(s, admin, 'upd-co', { oidcConfig: { clientId: 'another' } })).status
-    ).toBe(409)
+    expect((await update(s, admin, 'upd-co', { oidcConfig: { clientId: 'another' } })).status).toBe(
+      409
+    )
     // ... and we refuse the domain; both mean delete and add again.
     const moved = await update(s, admin, 'upd-co', { domain: 'moved.example' })
     expect(moved.status).toBe(409)

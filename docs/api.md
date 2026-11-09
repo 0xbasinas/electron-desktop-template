@@ -365,6 +365,7 @@ A company's directory (Okta, Microsoft Entra, JumpCloud ...) can add, update, sw
 6. Entra sends `active` as the strings `"True"`/`"False"`; both are accepted. If the validator reports a failure on a feature listed as unsupported above (bulk, sort, ETags), it is expected, not a defect.
 
 Both vendors' steps are described from their documentation; they have not been run against real tenants yet (see "Not yet tried against a real directory" below).
+
 - Tested with `src/scim.test.ts` (filters, PATCH, groups) and the "directory sync" block in `test/api.test.ts` (tokens, discovery, expiry and rotation, provisioning, adoption rule, off and on, owner kept, PUT, return of a person, groups, isolation between teams, scopes, rejoin refusal, export, removal). Not yet tried against a real directory: run the Okta or Entra provisioning test against a preview copy first.
 
 ## AI apps (MCP): sign in with OAuth, then call `/api/mcp`

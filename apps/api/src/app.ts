@@ -637,9 +637,9 @@ export function createApp(options: AppOptions = {}) {
         const action = c.req.param('action')
         if (action !== 'disable' && action !== 'enable')
           throw new HTTPException(404, { message: 'Not found' })
-        const body = z.object({ clientId: z.string().min(1).max(2048) }).safeParse(
-          await c.req.json().catch(() => null)
-        )
+        const body = z
+          .object({ clientId: z.string().min(1).max(2048) })
+          .safeParse(await c.req.json().catch(() => null))
         if (!body.success) throw new HTTPException(400, { message: 'Choose an app' })
         const disabling = action === 'disable'
         const [known] = await c.var.db
@@ -801,7 +801,9 @@ export function createApp(options: AppOptions = {}) {
             schema.ssoProvider,
             eq(schema.ssoProvider.organizationId, schema.organization.id)
           )
-          .where(and(eq(schema.organization.slug, slug), eq(schema.ssoProvider.domainVerified, true)))
+          .where(
+            and(eq(schema.organization.slug, slug), eq(schema.ssoProvider.domainVerified, true))
+          )
           .limit(1)
         if (!team) throw new HTTPException(404, { message: 'Not found' })
         c.header('cache-control', 'private, max-age=60')

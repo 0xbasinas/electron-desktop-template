@@ -193,8 +193,7 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         // and an identity provider on a private network is not supported (a Worker cannot reach one anyway).
         if (ctx.path === '/sso/register' || ctx.path === '/sso/update-provider') {
           const body = ctx.body as
-            | { issuer?: string; oidcConfig?: Record<string, unknown> }
-            | undefined
+            { issuer?: string; oidcConfig?: Record<string, unknown> } | undefined
           const addresses: [string, unknown][] = [
             ['The issuer', body?.issuer],
             ...[
@@ -224,7 +223,7 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
             ?.overrideUserInfo === true
         )
           throw new APIError('BAD_REQUEST', {
-            message: 'Replacing a person’s details at each sign-in is not supported.'
+            message: 'Replacing a personï¿½s details at each sign-in is not supported.'
           })
         // The plugin already refuses to change the issuer, client id or endpoints while people are linked through a
         // provider. The domain is the other thing their sign-in is matched on: moving it needs the same care, so it

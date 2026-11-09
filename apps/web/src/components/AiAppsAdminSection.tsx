@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, type JSX } from 'react'
 import { Button } from '@repo/ui'
 import { aiAppsSchema, type AiApp } from '@repo/shared'
 
-
 /** Staff (admin role): the AI apps that have asked for access, with a switch to turn one off or on again. */
 export function AiAppsAdminSection(): JSX.Element {
   const [apps, setApps] = useState<AiApp[] | null>(null)

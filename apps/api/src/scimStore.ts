@@ -193,18 +193,20 @@ async function deactivation(db: Db, conn: Connection, row: UserRow): Promise<Sta
   // cannot sign them back in as that account. (The same rule is checked when a link is made: ssoLinkRefusal.) An
   // owner is never touched, and never removed by a directory: that would leave the team without anyone able to run it.
   if (seat?.role.includes('owner')) return []
-  const unlink = db.delete(schema.account).where(
-    and(
-      eq(schema.account.userId, row.userId),
-      inArray(
-        schema.account.providerId,
-        db
-          .select({ id: schema.ssoProvider.providerId })
-          .from(schema.ssoProvider)
-          .where(eq(schema.ssoProvider.organizationId, conn.organizationId))
+  const unlink = db
+    .delete(schema.account)
+    .where(
+      and(
+        eq(schema.account.userId, row.userId),
+        inArray(
+          schema.account.providerId,
+          db
+            .select({ id: schema.ssoProvider.providerId })
+            .from(schema.ssoProvider)
+            .where(eq(schema.ssoProvider.organizationId, conn.organizationId))
+        )
       )
     )
-  )
   if (!seat) return [unlink]
   const [others] = await db
     .select({ n: count() })
