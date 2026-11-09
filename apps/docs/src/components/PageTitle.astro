@@ -18,6 +18,10 @@ const hasMarkdown = id !== 'index' && entry.data.template !== 'splash'
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
-    flex-wrap: wrap;
+  }
+  /* The title takes the room that is left and wraps; the actions stay on its right. */
+  .title-row > :global(h1) {
+    flex: 1 1 0;
+    min-width: 0;
   }
 </style>
