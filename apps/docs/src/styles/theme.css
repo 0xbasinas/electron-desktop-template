@@ -436,7 +436,7 @@ footer a:hover {
 }
 .expressive-code .copy {
   inset-inline-end: 0.5rem;
-  top: 0.5rem;
+  top: 0.65rem;
 }
 .expressive-code .copy button {
   width: 1.5rem;
@@ -789,4 +789,16 @@ site-search dialog::backdrop {
 #starlight__search .pagefind-ui__result-link:hover,
 #starlight__search .pagefind-ui__result:hover {
   background: var(--secondary);
+}
+
+/* Search: the magnifier, the text and the clear button share one centre line. */
+#starlight__search .pagefind-ui__form::before {
+  top: calc((2.75rem - 14.4px) / 2);
+}
+#starlight__search .pagefind-ui__search-clear {
+  top: 0;
+  height: 2.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
