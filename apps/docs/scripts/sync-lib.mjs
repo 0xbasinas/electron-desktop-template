@@ -38,8 +38,11 @@ export function rewriteLinks(markdown) {
 
 const yaml = (text) => JSON.stringify(text)
 
-/** The finished page: front matter plus the body without its title. */
-export function toPage(name, markdown) {
+/**
+ * The finished page: front matter plus the body without its title. For a saved version, `options` says where the file
+ * lives (editPath), the notice shown above the page (banner, HTML) and that search should skip it (search: false).
+ */
+export function toPage(name, markdown, options = {}) {
   const source = markdown.replaceAll('\r\n', '\n')
   const title = findTitle(source) ?? name
   const description = findDescription(source)
@@ -47,7 +50,9 @@ export function toPage(name, markdown) {
     '---',
     `title: ${yaml(title)}`,
     ...(description ? [`description: ${yaml(description)}`] : []),
-    `editUrl: ${yaml(`https://github.com/0xbasinas/electron-desktop-template/edit/main/docs/${name}.md`)}`,
+    `editUrl: ${yaml(`https://github.com/0xbasinas/electron-desktop-template/edit/main/${options.editPath ?? `docs/${name}.md`}`)}`,
+    ...(options.banner ? [`banner:`, `  content: ${yaml(options.banner)}`] : []),
+    ...(options.search === false ? [`pagefind: false`] : []),
     '---',
     ''
   ].join('\n')

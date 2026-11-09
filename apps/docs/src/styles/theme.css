@@ -657,3 +657,25 @@ site-search kbd {
 .sl-link-card:hover .icon {
   color: var(--foreground);
 }
+
+/* Notice above the pages of an older version (written by scripts/sync-docs.mjs). */
+.sl-banner {
+  background: var(--secondary);
+  color: var(--muted-foreground);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--sl-text-xs);
+  padding: 0.5rem 1rem;
+}
+.sl-banner strong {
+  color: var(--foreground);
+}
+.sl-banner a {
+  color: var(--foreground);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+/* The title area must not clip the version list that opens below the site name. */
+.title-wrapper {
+  overflow: visible;
+}

@@ -10,7 +10,8 @@
     "build": "pnpm sync && astro build",
     "preview": "astro preview",
     "typecheck": "pnpm sync && astro check",
-    "test": "node --test \"scripts/*.test.mjs\""
+    "test": "node --test \"scripts/*.test.mjs\"",
+    "version:create": "node scripts/version-create.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.42.10",

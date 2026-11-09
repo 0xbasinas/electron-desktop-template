@@ -1,7 +1,20 @@
 import { defineConfig } from 'astro/config'
 import starlight from '@astrojs/starlight'
 import tailwindcss from '@tailwindcss/vite'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { monoDark, monoLight } from './mono-themes.mjs'
+import { buildSidebar, pageChecker } from './scripts/versions-lib.mjs'
+
+const sections = JSON.parse(readFileSync(new URL('./sidebar.json', import.meta.url), 'utf8'))
+const versions = JSON.parse(
+  readFileSync(new URL('./versions.json', import.meta.url), 'utf8')
+).versions
+const hasPage = pageChecker(
+  fileURLToPath(new URL('../../docs', import.meta.url)),
+  fileURLToPath(new URL('../../docs-versions', import.meta.url)),
+  versions
+)
 
 const REPO = 'https://github.com/0xbasinas/electron-desktop-template'
 
@@ -21,6 +34,7 @@ export default defineConfig({
         Footer: './src/components/Footer.astro',
         MarkdownContent: './src/components/MarkdownContent.astro',
         PageTitle: './src/components/PageTitle.astro',
+        SiteTitle: './src/components/SiteTitle.astro',
         ThemeSelect: './src/components/ThemeSelect.astro'
       },
       // Starlight marks the theme with data-theme; the web app's theme file uses a "dark" class. Keep them in step.
@@ -39,40 +53,8 @@ export default defineConfig({
         themes: [monoDark, monoLight],
         styleOverrides: { borderRadius: '0.625rem', borderColor: 'var(--sl-color-gray-5)' }
       },
-      sidebar: [
-        {
-          label: 'Guides',
-          items: [{ slug: 'guides/setup-cloud' }, { slug: 'guides/template-updates' }]
-        },
-        {
-          label: 'The desktop app',
-          items: [
-            { slug: 'desktop/architecture' },
-            { slug: 'desktop/window-and-menus' },
-            { slug: 'desktop/app-features' },
-            { slug: 'desktop/security' },
-            { slug: 'desktop/account-sign-in' }
-          ]
-        },
-        {
-          label: 'Releasing',
-          items: [
-            { slug: 'releasing/overview', label: 'Overview' },
-            { slug: 'releasing/rollouts' },
-            { slug: 'releasing/checks-and-security' }
-          ]
-        },
-        {
-          label: 'Website and API',
-          items: [
-            { slug: 'project/monorepo-and-web' },
-            { slug: 'api/overview', label: 'API overview' },
-            { slug: 'api/sign-in' },
-            { slug: 'api/accounts' },
-            { slug: 'api/operations' }
-          ]
-        }
-      ]
+      sidebar: buildSidebar(sections, versions, hasPage),
+      routeMiddleware: './src/routeData.ts'
     })
   ]
 })

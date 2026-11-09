@@ -67,9 +67,9 @@ packages/ui/               @repo/ui: shared React components (Button, cn) and th
 turbo.json                Task graph (build, typecheck, test). pnpm-workspace.yaml holds the workspace globs and the version catalog.
 .github/                  Workflows. publish-stable / publish-beta call _publish.yml after ci.yml passes.
 scripts/                  template-update.mjs (+ template-update-lib.mjs, pure and tested): `pnpm template:update`. setup-cloud.mjs (+ setup-cloud-lib.mjs, pure and tested with `node --test`): one-command Cloudflare/Resend/GitHub setup.
-docs/                     Source of the docs site, in folders: guides/ (setup-cloud, template-updates), desktop/ (architecture, window-and-menus,
+docs/                     Source of the docs site, in folders: guides/ (setup-cloud, template-updates, versioning-the-docs), desktop/ (architecture, window-and-menus,
                           app-features, security, account-sign-in), releasing/ (overview, rollouts, checks-and-security), api/ (overview, sign-in,
-                          accounts, operations), project/ (monorepo-and-web). Each file is one page; the sidebar order is in apps/docs/astro.config.mjs.
+                          accounts, operations), project/ (monorepo-and-web). Each file is one page; the sidebar order is in apps/docs/sidebar.json. Old versions of the docs live in docs-versions/<slug>/ (made with `pnpm --filter @repo/docs version:create <slug>`, listed in apps/docs/versions.json); see docs/guides/versioning-the-docs.md.
 ````
 
 Monorepo rules: shared dependency versions live in the `catalog:` of `pnpm-workspace.yaml` (use `catalog:` in a package, not a
