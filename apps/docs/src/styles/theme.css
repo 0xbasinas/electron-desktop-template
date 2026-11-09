@@ -618,3 +618,11 @@ site-search kbd {
 .sl-markdown-content .sl-anchor-link {
   margin-inline-start: 0.4em;
 }
+
+/* A smaller heading link icon. */
+.sl-markdown-content {
+  --sl-anchor-icon-size: 0.6em;
+}
+.sl-markdown-content .sl-anchor-icon > svg {
+  width: 0.6em;
+}

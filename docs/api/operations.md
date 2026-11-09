@@ -67,3 +67,7 @@ With deploys on (`CLOUDFLARE_DEPLOY=true`), a pull request that changes `apps/we
 - **Who can trigger it:** only pull requests from this repository (not forks, not Dependabot), because the job uses the Cloudflare token. Anyone who can push a branch here can run code with that token, so keep the token limited to this account and the Workers/D1 permissions, and do not give write access to people you do not trust.
 - **Limits:** the free plan keeps up to 100 previews per Worker and deletes the oldest. Preview URLs are public but not indexed (`X-Robots-Tag: noindex`).
 - `pnpm setup:cloud` gives previews their own `BETTER_AUTH_SECRET` (`wrangler preview base-config secret put`), never the production one. Without it sign-in fails in a preview.
+
+## Security contact file (security.txt)
+
+`apps/web/public/.well-known/security.txt` tells people where to report a vulnerability (RFC 9116). It needs a `Contact` and an `Expires` date, and `Expires` may be at most a year away, so renew it before the date passes: edit the date in that file and merge the change. A test (`apps/web/src/securityTxt.test.ts`) checks that both fields are there and the date is valid (it does not fail when the date has passed, so put a reminder in your calendar). The list on the `/sub-processors` page is `SUBPROCESSORS` in `apps/web/src/config.ts`; keep it in step with the accounts you really use.
