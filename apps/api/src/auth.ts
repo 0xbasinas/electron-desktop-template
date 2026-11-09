@@ -27,7 +27,8 @@ import {
 import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
-import { isDeprovisioned } from './scimStore'
+import { isDeprovisioned, ssoLinkRefusal } from './scimStore'
+import { DiscoveryError, publicHttps } from './ssoDiscovery'
 import { revokeAppAccessStatements } from './oauthPrune'
 import { emailInDomains } from './domains'
 import { tombstoneStatements } from './tombstones'
@@ -98,6 +99,38 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           throw new APIError('FORBIDDEN', {
             message: 'Your company has switched off your access to this team.'
           })
+        // Company sign-in only links to a person their directory has not switched off, and never to an account that
+        // the directory ties to someone else (see ssoLinkRefusal).
+        if (
+          model === 'account' &&
+          typeof data.providerId === 'string' &&
+          typeof data.userId === 'string' &&
+          typeof data.accountId === 'string' &&
+          !['credential', 'magic-link', 'passkey'].includes(data.providerId)
+        ) {
+          const refusal = await ssoLinkRefusal(db, {
+            providerId: data.providerId,
+            userId: data.userId,
+            subject: data.accountId
+          })
+          if (refusal) {
+            waitUntil(
+              recordAudit(db, {
+                type: 'user_sign_in_failed',
+                outcome: 'failure',
+                userId: data.userId,
+                code: refusal === 'deprovisioned' ? 'SSO_DEPROVISIONED' : 'SSO_SUBJECT_TAKEN',
+                now: Date.now()
+              }).catch((error: unknown) => console.error('Could not record the refusal', error))
+            )
+            throw new APIError('FORBIDDEN', {
+              message:
+                refusal === 'deprovisioned'
+                  ? 'Your company has switched off your access.'
+                  : 'This company sign-in belongs to another account.'
+            })
+          }
+        }
       }
     ),
     session: {
@@ -117,7 +150,13 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         '/oauth2/authorize': { window: 60, max: 10 },
         '/oauth2/public-client': { window: 60, max: 20 },
         '/oauth2/token': { window: 60, max: 20 },
-        '/device/code': { window: 60, max: 10 }
+        '/device/code': { window: 60, max: 10 },
+        // The plugin also serves these. They check the caller's client credentials (a database read and, for a signed
+        // token, a signature check each time), so a stranger guessing at them is limited well below the general rule.
+        '/oauth2/introspect': { window: 60, max: 20 },
+        '/oauth2/revoke': { window: 60, max: 20 },
+        '/oauth2/end-session': { window: 60, max: 10 },
+        '/oauth2/register': { window: 60, max: 5 }
       }
     },
     hooks: {
@@ -136,6 +175,10 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
               message: 'Not allowed while viewing as this person.'
             })
         }
+        // RP-initiated logout is not used by any AI app, and for an unknown app id it would make this Worker fetch that
+        // app's address for a stranger (and fail with a 500). Not offered.
+        if (ctx.path === '/oauth2/end-session')
+          throw new APIError('NOT_FOUND', { message: 'Not found' })
         // SAML needs more CPU per sign-in than the free Workers plan allows, so only OpenID Connect is offered.
         if (
           ctx.path === '/sso/register' &&
@@ -144,6 +187,66 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           throw new APIError('BAD_REQUEST', {
             message: 'Only OpenID Connect providers are supported.'
           })
+        // Every address the sign-in will call must be a public https address, whoever registers it. Our own form fills
+        // them in from the issuer's discovery document, which is checked the same way (ssoDiscovery.ts), but this route
+        // takes whatever it is given. The simplest safe rule has no exceptions: there is no TRUSTED_IDP_ORIGINS setting,
+        // and an identity provider on a private network is not supported (a Worker cannot reach one anyway).
+        if (ctx.path === '/sso/register' || ctx.path === '/sso/update-provider') {
+          const body = ctx.body as
+            { issuer?: string; oidcConfig?: Record<string, unknown> } | undefined
+          const addresses: [string, unknown][] = [
+            ['The issuer', body?.issuer],
+            ...[
+              'authorizationEndpoint',
+              'tokenEndpoint',
+              'jwksEndpoint',
+              'userInfoEndpoint',
+              'discoveryEndpoint'
+            ].map((key): [string, unknown] => [`The ${key}`, body?.oidcConfig?.[key]])
+          ]
+          for (const [what, value] of addresses) {
+            if (value === undefined || value === null || value === '') continue
+            try {
+              publicHttps(value, what)
+            } catch (error) {
+              throw new APIError('BAD_REQUEST', {
+                message: error instanceof DiscoveryError ? error.message : `${what} is not valid.`
+              })
+            }
+          }
+        }
+        // A provider may not be told to overwrite the name or address of people who sign in with it: the company's
+        // directory (or whoever controls its claims) could then rewrite an address that other sign-ins match on.
+        if (
+          (ctx.path === '/sso/register' || ctx.path === '/sso/update-provider') &&
+          (ctx.body as { oidcConfig?: { overrideUserInfo?: unknown } } | undefined)?.oidcConfig
+            ?.overrideUserInfo === true
+        )
+          throw new APIError('BAD_REQUEST', {
+            message: 'Replacing a person�s details at each sign-in is not supported.'
+          })
+        // The plugin already refuses to change the issuer, client id or endpoints while people are linked through a
+        // provider. The domain is the other thing their sign-in is matched on: moving it needs the same care, so it
+        // too means deleting the provider (which signs those people out) and adding it again.
+        if (ctx.path === '/sso/update-provider') {
+          const change = ctx.body as { providerId?: string; domain?: string } | undefined
+          if (change?.providerId && change.domain !== undefined) {
+            const [current] = await db
+              .select({ domain: schema.ssoProvider.domain })
+              .from(schema.ssoProvider)
+              .where(eq(schema.ssoProvider.providerId, change.providerId))
+            const [linked] = await db
+              .select({ id: schema.account.id })
+              .from(schema.account)
+              .where(eq(schema.account.providerId, change.providerId))
+              .limit(1)
+            if (current && linked && current.domain !== change.domain.toLowerCase())
+              throw new APIError('CONFLICT', {
+                message:
+                  'People already sign in through this provider. Delete it and add it again to change its domain.'
+              })
+          }
+        }
         // Only staff may register a provider for nobody in particular. Anyone else must tie it to a team they own or
         // administer (the plugin checks that), and the domain still has to be proven with DNS before anyone signs in.
         if (ctx.path === '/sso/register') {

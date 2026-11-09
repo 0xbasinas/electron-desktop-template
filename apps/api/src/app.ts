@@ -1,3 +1,4 @@
+import { z } from 'zod'
 import { zValidator } from '@hono/zod-validator'
 import * as Sentry from '@sentry/cloudflare'
 import {
@@ -30,6 +31,7 @@ import { createMcpProtectedRequestHandler } from '@better-auth/mcp'
 import { createDpopReplayStore } from 'better-auth/oauth2'
 import { createAuth, DEFAULT_APP_NAME, MCP_READ_SCOPE, mcpResource, type Auth } from './auth'
 import { handleMcp } from './mcpServer'
+import { isAiAppDisabled, listAiApps, setAiAppDisabledStatements } from './aiApps'
 import { cachedJwks } from './jwksCache'
 import {
   cancelDeletion,
@@ -106,6 +108,16 @@ const requireSession =
     c.set('sessionId', session.session.id)
     await next()
   }
+
+/** Only the `admin` role (not `support`). Run after requireSession; reads the role from the database, not the cookie. */
+const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
+  const [me] = await c.var.db
+    .select({ role: schema.user.role })
+    .from(schema.user)
+    .where(eq(schema.user.id, c.var.userId))
+  if (me?.role !== 'admin') throw new HTTPException(403, { message: 'Not allowed' })
+  await next()
+}
 
 const toAccount = (
   row: typeof schema.user.$inferSelect,
@@ -616,6 +628,41 @@ export function createApp(options: AppOptions = {}) {
         if (!allowed.success) throw new HTTPException(403, { message: 'Not allowed' })
         return c.json(await recentAudit(c.var.db, c.req.param('userId')))
       })
+      // Staff (admin role only): the AI apps that have asked for access, and a switch to turn one off or on. Better Auth's
+      // own update-client route cannot set `disabled` from outside the server, so this is ours.
+      .get('/admin/ai-apps', requireSession(true), requireAdmin, async (c) =>
+        c.json(await listAiApps(c.var.db))
+      )
+      .post('/admin/ai-apps/:action', requireSession(true), requireAdmin, async (c) => {
+        const action = c.req.param('action')
+        if (action !== 'disable' && action !== 'enable')
+          throw new HTTPException(404, { message: 'Not found' })
+        const body = z
+          .object({ clientId: z.string().min(1).max(2048) })
+          .safeParse(await c.req.json().catch(() => null))
+        if (!body.success) throw new HTTPException(400, { message: 'Choose an app' })
+        const disabling = action === 'disable'
+        const [known] = await c.var.db
+          .select({ id: schema.oauthClient.id })
+          .from(schema.oauthClient)
+          .where(eq(schema.oauthClient.clientId, body.data.clientId))
+        if (!known) throw new HTTPException(404, { message: 'No such app' })
+        await c.var.db.batch(setAiAppDisabledStatements(c.var.db, body.data.clientId, disabling))
+        c.executionCtx.waitUntil(
+          recordAudit(c.var.db, {
+            type: disabling ? 'ai_app_disabled' : 'ai_app_enabled',
+            outcome: 'success',
+            // Kept under the staff member's own id: events about nobody are pruned after 30 days.
+            userId: c.var.userId,
+            actorId: c.var.userId,
+            ipAddress: c.req.header('cf-connecting-ip') ?? null,
+            userAgent: c.req.header('user-agent') ?? null,
+            subject: body.data.clientId.slice(0, 200),
+            now: Date.now()
+          }).catch((error: unknown) => console.error('Could not record the app change', error))
+        )
+        return c.json({ ok: true })
+      })
       // The simplest call a script can make with an API key (header x-api-key): who owns this key.
       .get('/v1/me', async (c) => {
         const key = c.req.header('x-api-key')
@@ -655,6 +702,9 @@ export function createApp(options: AppOptions = {}) {
             const suspended =
               owner?.banned && (!owner.banExpires || owner.banExpires.getTime() > Date.now())
             if (!owner || suspended)
+              return Response.json({ error: 'invalid_token' }, { status: 401 })
+            // Staff can switch an app off; its tokens stop working at once, not when they expire.
+            if (await isAiAppDisabled(c.var.db, String(claims.azp)))
               return Response.json({ error: 'invalid_token' }, { status: 401 })
             return handleMcp(
               request,
@@ -737,6 +787,28 @@ export function createApp(options: AppOptions = {}) {
         const rules = await loadRules(c.var.db, Date.now(), options.flagCacheMs ?? 30_000)
         c.header('cache-control', 'private, max-age=60')
         return c.json({ flags: evaluateFlags(rules, channel, id) })
+      })
+      // The page /t/<slug>/sign-in: a team's own company sign-in. Public, and it says nothing beyond the team's name,
+      // and only for a team that has a company sign-in whose domain was proven (anyone else gets the same 404, so the
+      // address cannot be used to find out which teams exist).
+      .get('/team-sign-in/:slug', async (c) => {
+        const slug = c.req.param('slug').toLowerCase()
+        if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(slug))
+          throw new HTTPException(404, { message: 'Not found' })
+        const [team] = await c.var.db
+          .select({ name: schema.organization.name })
+          .from(schema.organization)
+          .innerJoin(
+            schema.ssoProvider,
+            eq(schema.ssoProvider.organizationId, schema.organization.id)
+          )
+          .where(
+            and(eq(schema.organization.slug, slug), eq(schema.ssoProvider.domainVerified, true))
+          )
+          .limit(1)
+        if (!team) throw new HTTPException(404, { message: 'Not found' })
+        c.header('cache-control', 'private, max-age=60')
+        return c.json({ name: team.name })
       })
       // Fill in a company's sign-in settings from its issuer address. For staff and for owners and admins of a team.
       .get('/sso-discover', requireSession(true), async (c) => {

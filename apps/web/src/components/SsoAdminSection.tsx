@@ -129,7 +129,11 @@ export function SsoAdminSection({ organizationId }: { organizationId?: string })
   async function remove(id: string): Promise<void> {
     if (
       !window.confirm(
-        'Remove this sign-in? Everyone who signed in through it is signed out, and their company link is deleted. Their accounts and team memberships stay.'
+        [
+          'Remove this company sign-in?',
+          'Everyone who signed in through it is signed out right now, and their company link is deleted. They can still sign in with an email link.',
+          'Their accounts and their place in the team stay. If a directory sync added them, switch them off there; removing this sign-in does not remove anyone from the team.'
+        ].join('\n\n')
       )
     )
       return

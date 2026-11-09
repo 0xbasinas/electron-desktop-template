@@ -765,6 +765,31 @@ describe('devices', () => {
   })
 })
 
+describe('a team sign-in page', () => {
+  afterEach(() => vi.unstubAllGlobals())
+
+  it("offers the company's login for a team that has one, and starts it with the team slug", async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => Response.json({ name: 'Acme Corp' }))
+    )
+    auth.signInSso.mockReset().mockResolvedValue({ data: {}, error: null })
+    at('/t/acme/sign-in')
+    expect(await screen.findByRole('heading', { name: 'Sign in to Acme Corp' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Continue with Acme Corp' }))
+    expect(auth.signInSso).toHaveBeenCalledWith({ organizationSlug: 'acme', callbackURL: '/app' })
+  })
+
+  it('sends a team without a company sign-in to the ordinary sign-in page', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 404 }))
+    )
+    at('/t/nobody/sign-in')
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+})
+
 describe('admin page', () => {
   const people = {
     data: {
@@ -813,6 +838,40 @@ describe('admin page', () => {
     } as never
     at('/account')
     expect(screen.getByRole('button', { name: 'Stop' })).toBeInTheDocument()
+  })
+
+  it('lets an admin switch an AI app off after confirming, and support does not see the list', async () => {
+    const fetched: { url: string; init?: RequestInit }[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        fetched.push({ url, init })
+        if (url === '/api/admin/ai-apps')
+          return Response.json([
+            {
+              clientId: 'https://assistant.example/client.json',
+              name: 'Test Assistant',
+              disabled: false,
+              people: 2,
+              createdAt: null
+            }
+          ])
+        return Response.json({ ok: true })
+      })
+    )
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    auth.session = { user: { email: 'me@example.com', id: 'u1', role: 'admin' } } as never
+    auth.admin.listUsers.mockResolvedValue(people)
+    at('/admin')
+    expect(await screen.findByText('Test Assistant')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Switch off' }))
+    expect(window.confirm).toHaveBeenCalled()
+    const post = fetched.find((f) => f.url === '/api/admin/ai-apps/disable')
+    expect(JSON.parse(String(post?.init?.body))).toEqual({
+      clientId: 'https://assistant.example/client.json'
+    })
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
   })
 
   it('shows support the list without any buttons to change it', async () => {
@@ -1041,16 +1100,18 @@ describe('admin: one person activity', () => {
     })
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(
-        Response.json([
-          {
-            at: '2026-11-01T10:00:00Z',
-            type: 'user_sign_in_failed',
-            outcome: 'failure',
-            label: null,
-            ipAddress: '1.2.3.4'
-          }
-        ])
+      vi.fn(async (url: string) =>
+        url === '/api/admin/ai-apps'
+          ? Response.json([])
+          : Response.json([
+              {
+                at: '2026-11-01T10:00:00Z',
+                type: 'user_sign_in_failed',
+                outcome: 'failure',
+                label: null,
+                ipAddress: '1.2.3.4'
+              }
+            ])
       )
     )
     at('/admin')

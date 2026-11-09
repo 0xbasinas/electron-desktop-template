@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, ne, sql, type SQL } from 'drizzle-orm'
+import { and, count, eq, inArray, ne, or, sql, type SQL } from 'drizzle-orm'
 import type { Db } from './db'
 import { schema } from './db'
 import { revokeAppAccessStatements } from './oauthPrune'
@@ -189,8 +189,25 @@ async function deactivation(db: Db, conn: Connection, row: UserRow): Promise<Sta
         eq(schema.member.userId, row.userId)
       )
     )
-  // An owner is never removed by a directory: that would leave the team without anyone able to run it.
-  if (!seat || seat.role.includes('owner')) return []
+  // Whoever the directory switched off also loses the company sign-in link on their account, so the identity provider
+  // cannot sign them back in as that account. (The same rule is checked when a link is made: ssoLinkRefusal.) An
+  // owner is never touched, and never removed by a directory: that would leave the team without anyone able to run it.
+  if (seat?.role.includes('owner')) return []
+  const unlink = db
+    .delete(schema.account)
+    .where(
+      and(
+        eq(schema.account.userId, row.userId),
+        inArray(
+          schema.account.providerId,
+          db
+            .select({ id: schema.ssoProvider.providerId })
+            .from(schema.ssoProvider)
+            .where(eq(schema.ssoProvider.organizationId, conn.organizationId))
+        )
+      )
+    )
+  if (!seat) return [unlink]
   const [others] = await db
     .select({ n: count() })
     .from(schema.member)
@@ -205,6 +222,7 @@ async function deactivation(db: Db, conn: Connection, row: UserRow): Promise<Sta
     .from(schema.user)
     .where(eq(schema.user.id, row.userId))
   const statements: Statement[] = [
+    unlink,
     db
       .delete(schema.member)
       .where(
@@ -520,6 +538,44 @@ export async function isDeprovisioned(
       )
     )
   return Boolean(row)
+}
+
+/**
+ * The rule for linking a company sign-in to an account, done by hand because the plugin's own check cannot run on D1
+ * (no transactions). Called before the link (an `account` row of a team's provider) is made. Returns why it must be
+ * refused, or null.
+ *  - The directory switched this person off: no link (and deactivation removes an existing one).
+ *  - The identity provider's subject is already the directory's `externalId` of someone else: no link, so a matching
+ *    email alone can never attach an identity to another person's account.
+ * A team with no directory, or a person the directory does not list, is not affected.
+ */
+export async function ssoLinkRefusal(
+  db: Db,
+  link: { providerId: string; userId: string; subject: string }
+): Promise<'deprovisioned' | 'subject_taken' | null> {
+  const [provider] = await db
+    .select({ organizationId: schema.ssoProvider.organizationId })
+    .from(schema.ssoProvider)
+    .where(eq(schema.ssoProvider.providerId, link.providerId))
+  if (!provider?.organizationId) return null
+  const rows = await db
+    .select({
+      userId: schema.scimUser.userId,
+      externalId: schema.scimUser.externalId,
+      active: schema.scimUser.active
+    })
+    .from(schema.scimUser)
+    .innerJoin(schema.scimConnection, eq(schema.scimConnection.id, schema.scimUser.connectionId))
+    .where(
+      and(
+        eq(schema.scimConnection.organizationId, provider.organizationId),
+        or(eq(schema.scimUser.userId, link.userId), eq(schema.scimUser.externalId, link.subject))
+      )
+    )
+  if (rows.some((r) => r.userId === link.userId && !r.active)) return 'deprovisioned'
+  if (rows.some((r) => r.externalId === link.subject && r.userId !== link.userId))
+    return 'subject_taken'
+  return null
 }
 
 // ---------------------------------------------------------------- groups

@@ -38,6 +38,8 @@ export type AuditType =
   | 'sso_user_provisioned'
   | 'app_connected'
   | 'app_disconnected'
+  | 'ai_app_disabled'
+  | 'ai_app_enabled'
   | 'scim_connection_created'
   | 'scim_connection_removed'
   | 'scim_token_created'
@@ -58,6 +60,8 @@ export interface AuditInput {
   userAgent?: string | null
   /** A short code such as INVALID_TOKEN. Never free text from a stranger. */
   code?: string
+  /** What the event was about when that is not a person (an AI app's address). Kept in the row, never shown to the person. */
+  subject?: string
   now: number
 }
 
@@ -71,7 +75,10 @@ export async function recordAudit(db: Db, input: AuditInput): Promise<void> {
     outcome: input.outcome,
     ipAddress: input.ipAddress ?? null,
     label: input.userAgent ? describeDevice(input.userAgent) : null,
-    detail: input.code ? JSON.stringify({ code: input.code }) : null,
+    detail:
+      input.code || input.subject
+        ? JSON.stringify({ code: input.code, subject: input.subject })
+        : null,
     at: input.now
   })
 }

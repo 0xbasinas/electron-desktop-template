@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
 import { SignInPage } from './pages/SignInPage'
+import { TeamSignInPage } from './pages/TeamSignInPage'
 
 const AccountPage = lazy(() =>
   import('./pages/AccountPage').then((m) => ({ default: m.AccountPage }))
@@ -55,6 +56,7 @@ export function App(): JSX.Element {
         <Route path="feedback" element={<FeedbackPage />} />
         <Route path="sub-processors" element={<SubprocessorsPage />} />
         <Route path="sign-in" element={<SignInPage />} />
+        <Route path="t/:slug/sign-in" element={<TeamSignInPage />} />
         <Route path="consent" element={<ConsentPage />} />
         <Route path="device" element={<DevicePage />} />
         <Route path="admin" element={<AdminPage />} />
