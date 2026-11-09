@@ -989,3 +989,10 @@ mobile-starlight-toc .dropdown a {
   height: 1rem;
   flex: none;
 }
+
+/* Tablet widths: the sidebar is on screen, so the floating contents bar starts after it, not under it. */
+@media (min-width: 50rem) and (max-width: 72rem) {
+  mobile-starlight-toc nav {
+    inset-inline-start: calc(var(--sl-content-inline-start, 0px) + 0.75rem);
+  }
+}
