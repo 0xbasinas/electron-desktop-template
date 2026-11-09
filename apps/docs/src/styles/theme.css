@@ -888,8 +888,8 @@ mobile-starlight-toc .dropdown a {
     align-items: flex-start !important;
     gap: 0.5rem !important;
   }
-  .page-actions {
-    margin-top: 0.2rem;
+  .title-row > h1 {
+    margin: 0;
   }
   .pa-copy [data-label] {
     display: none;
@@ -912,4 +912,65 @@ mobile-starlight-toc .dropdown a {
   .pa-list {
     min-width: min(14rem, calc(100vw - 2rem));
   }
+}
+
+/* Small screens: the "On this page" bar floats as a rounded card instead of a full-width strip. */
+@media (max-width: 72rem) {
+  :root {
+    --sl-mobile-toc-height: 2.75rem;
+  }
+  mobile-starlight-toc nav {
+    top: calc(var(--sl-nav-height) + 0.4rem);
+    inset-inline: 0.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: color-mix(in oklab, var(--background) 92%, transparent);
+    backdrop-filter: blur(8px);
+    overflow: hidden;
+  }
+  mobile-starlight-toc summary,
+  mobile-starlight-toc[open] summary,
+  mobile-starlight-toc summary:focus-visible {
+    border: 0 !important;
+    background: transparent !important;
+    padding-inline: 0.6rem;
+  }
+  mobile-starlight-toc .dropdown {
+    border-bottom: 0;
+    border-top: 1px solid var(--border);
+    max-height: 60vh;
+  }
+}
+
+@media (max-width: 72rem) {
+  mobile-starlight-toc .toggle,
+  mobile-starlight-toc summary > * {
+    border-color: transparent !important;
+    background: transparent !important;
+  }
+}
+
+/* Compact floating contents bar, its text centred. */
+@media (max-width: 72rem) {
+  mobile-starlight-toc nav {
+    top: calc(var(--sl-nav-height) + 0.35rem);
+  }
+  mobile-starlight-toc summary {
+    height: 2.25rem !important;
+    padding: 0 0.75rem !important;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  mobile-starlight-toc .toggle {
+    padding: 0 !important;
+    height: auto !important;
+    line-height: 1;
+    gap: 0.35rem;
+  }
+  mobile-starlight-toc .display-current {
+    line-height: 1;
+  }
+}
+.sl-menu-button {
+  border-radius: calc(var(--radius) - 2px);
 }
