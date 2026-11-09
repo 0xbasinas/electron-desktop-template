@@ -4,23 +4,60 @@ import { emailSchema } from '@repo/shared'
 import { Navigate, useSearchParams } from 'react-router'
 import { authClient } from '../lib/auth'
 import { readDesktopParams } from '../lib/desktop'
+import { api } from '../lib/api'
+import { Turnstile } from '../components/Turnstile'
 
 type State = 'idle' | 'sending' | 'sent'
 
 const passkeysSupported = (): boolean =>
   typeof window !== 'undefined' && 'PublicKeyCredential' in window
 
+/** The request an AI app started, without the signature (the authorize step signs it again), or null. */
+function oauthContinuation(params: URLSearchParams): string | null {
+  if (!params.get('client_id') || !params.get('sig')) return null
+  const copy = new URLSearchParams(params)
+  for (const key of ['sig', 'exp', 'next', 'error', 'team']) copy.delete(key)
+  return copy.toString()
+}
+
 export function SignInPage(): JSX.Element {
   const { data: session } = authClient.useSession()
   const [params] = useSearchParams()
   const desktop = readDesktopParams(params)
+  // Where to go after signing in: a path on this site only (an invitation page, for example).
+  const wanted = params.get('next') ?? ''
+  // An AI app asked for a sign-in (the address carries the app's signed request): after signing in, go back to the
+  // authorize step, which then shows the consent page.
+  const oauthQuery = oauthContinuation(params)
+  const next = oauthQuery
+    ? `/api/auth/oauth2/authorize?${oauthQuery}`
+    : /^\/(?![/\\])/.test(wanted)
+      ? wanted
+      : '/app'
   const [email, setEmail] = useState('')
   const [state, setState] = useState<State>('idle')
+  // Turnstile: the key comes from the API; with none, no challenge is asked for.
+  const [siteKey, setSiteKey] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+  const [challenge, setChallenge] = useState(0)
+  useEffect(() => {
+    void api
+      .appConfig()
+      .then((config) => setSiteKey(config.turnstileSiteKey ?? null))
+      .catch(() => undefined)
+  }, [])
   const [error, setError] = useState<string | null>(
-    params.get('error')
-      ? 'That sign-in link did not work. It may have expired or been used already.'
-      : null
+    params.get('error') === 'suspended'
+      ? 'This account has been suspended. Contact support if you think that is a mistake.'
+      : params.get('error')
+        ? 'That sign-in link did not work. It may have expired or been used already.'
+        : null
   )
+
+  // Signed in and an AI app is waiting: carry on to the authorize step (a full page load, since the server answers).
+  useEffect(() => {
+    if (session && oauthQuery) window.location.replace(next)
+  }, [session, oauthQuery, next])
 
   // Already signed in on the web and the desktop app asked for a sign-in: hand the session over.
   const signedIn = Boolean(session)
@@ -43,7 +80,14 @@ export function SignInPage(): JSX.Element {
       </p>
     )
   }
-  if (session) return <Navigate to="/app" replace />
+  if (session && oauthQuery) {
+    return (
+      <p className="text-center text-muted-foreground" role="status">
+        Continuing...
+      </p>
+    )
+  }
+  if (session) return <Navigate to={next} replace />
 
   async function signInWithPasskey(): Promise<void> {
     setError(null)
@@ -53,6 +97,28 @@ export function SignInPage(): JSX.Element {
       setError('That passkey did not work. Try the email link instead.')
   }
 
+  async function signInWithCompany(): Promise<void> {
+    // A team's own sign-in link (/sign-in?team=acme) needs no email: the team picks the provider.
+    const team = params.get('team')
+    const parsed = emailSchema.safeParse(email)
+    if (!team && !parsed.success) {
+      setError('Enter your work email address first.')
+      return
+    }
+    setError(null)
+    const callbackURL = desktop ? '/auth/desktop' : next
+    const { error: failure } = await authClient.signIn.sso(
+      team
+        ? {
+            organizationSlug: team,
+            callbackURL,
+            ...(parsed.success ? { loginHint: parsed.data } : {})
+          }
+        : { email: parsed.data!, callbackURL, loginHint: parsed.data! }
+    )
+    if (failure) setError('Your company has not set up single sign-on here. Use the email link.')
+  }
+
   async function submit(event: FormEvent): Promise<void> {
     event.preventDefault()
     const parsed = emailSchema.safeParse(email)
@@ -60,15 +126,31 @@ export function SignInPage(): JSX.Element {
       setError('Enter a valid email address.')
       return
     }
+    if (siteKey && !token) {
+      setError('Complete the check below first.')
+      return
+    }
     setError(null)
     setState('sending')
     const { error: failure } = await authClient.signIn.magicLink({
       email: parsed.data,
       // From the desktop app, the link ends on a page that opens the app; otherwise the web app.
-      callbackURL: desktop ? '/auth/desktop' : '/app',
+      callbackURL: desktop ? '/auth/desktop' : next,
       errorCallbackURL: '/sign-in?error=link',
-      ...(desktop ? { fetchOptions: { query: desktop } } : {})
+      ...(desktop || (siteKey && token)
+        ? {
+            fetchOptions: {
+              ...(desktop ? { query: desktop } : {}),
+              ...(siteKey && token ? { headers: { 'x-captcha-response': token } } : {})
+            }
+          }
+        : {})
     })
+    // A token works once: ask for a new one whatever the answer was.
+    if (siteKey) {
+      setToken(null)
+      setChallenge((n) => n + 1)
+    }
     if (failure) {
       setState('idle')
       setError(
@@ -114,6 +196,7 @@ export function SignInPage(): JSX.Element {
           className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
         />
       </label>
+      {siteKey && <Turnstile siteKey={siteKey} onToken={setToken} resetKey={challenge} />}
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -121,6 +204,14 @@ export function SignInPage(): JSX.Element {
       )}
       <Button type="submit" disabled={state === 'sending'} className="w-full">
         {state === 'sending' ? 'Sending...' : 'Email me a sign-in link'}
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        onClick={() => void signInWithCompany()}
+      >
+        Sign in with your company
       </Button>
       {passkeysSupported() && (
         <Button

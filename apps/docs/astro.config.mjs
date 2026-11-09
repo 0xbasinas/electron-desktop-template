@@ -3,6 +3,7 @@ import starlight from '@astrojs/starlight'
 import tailwindcss from '@tailwindcss/vite'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { BASE } from './base.mjs'
 import { monoDark, monoLight } from './mono-themes.mjs'
 import { buildSidebar, pageChecker } from './scripts/versions-lib.mjs'
 
@@ -21,6 +22,8 @@ const REPO = 'https://github.com/0xbasinas/electron-desktop-template'
 // The pages under "Guides" and "Reference" are generated from /docs by scripts/sync-docs.mjs, so the Markdown in
 // /docs stays the one source of truth. Only the home page (src/content/docs/index.mdx) is written here.
 export default defineConfig({
+  // The docs are served under /docs on the site, next to the web app and the API.
+  base: BASE,
   // The diagram library is a big chunk on purpose: it is only fetched on pages that have a diagram.
   vite: { plugins: [tailwindcss()], build: { chunkSizeWarningLimit: 1500 } },
   integrations: [

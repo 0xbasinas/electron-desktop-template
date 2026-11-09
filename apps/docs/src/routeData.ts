@@ -3,6 +3,7 @@
 import { defineRouteMiddleware } from '@astrojs/starlight/route-data'
 import versionConfig from '../versions.json'
 import { versionOf } from '../scripts/versions-lib.mjs'
+import { BASE } from '../base.mjs'
 
 type Entry =
   { type: 'link'; href: string; label: string } | { type: 'group'; label: string; entries: Entry[] }
@@ -21,14 +22,14 @@ export const onRequest = defineRouteMiddleware((context) => {
   const versions: { slug: string; label: string }[] = versionConfig.versions
   const mine = versionOf(route.id, versions)
   const belongsHere = (entry: Entry): boolean => {
-    const href = firstHref(entry).replace(/^\//, '')
+    const href = firstHref(entry).slice(BASE.length).replace(/^\//, '')
     return versionOf(href, versions)?.slug === mine?.slug
   }
   // The home page has no sidebar group of its own; it keeps the latest docs' navigation.
   route.sidebar = (route.sidebar as Entry[]).filter(belongsHere) as typeof route.sidebar
 
   const flat = links(route.sidebar as Entry[])
-  const at = flat.findIndex((link) => link.href === `/${route.id}/`)
+  const at = flat.findIndex((link) => link.href === `${BASE}/${route.id}/`)
   if (at >= 0) {
     type Link = NonNullable<typeof route.pagination.next>
     const pick = (link?: { href: string; label: string }): Link | undefined =>

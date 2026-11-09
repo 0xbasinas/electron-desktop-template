@@ -30,11 +30,13 @@ Without `RESEND_API_KEY`, the sign-in link is printed in the terminal.
 
 ## Deploy
 
+The docs site is served by the same Worker under `/docs` (`pnpm build:site` builds the web app and the docs and copies the docs into `apps/web/dist/docs`). The deploy workflow fetches the full git history so each page's "Last updated" date comes from git, not from the checkout.
+
 Run `pnpm setup:cloud` once. It creates the D1 database, verifies your sending domain in Resend, generates the secrets,
 applies the migrations, deploys the Worker and sets the GitHub variables. Every step, the options and the manual
 equivalents are in [the setup guide](../guides/setup-cloud.md).
 
-After that, `.github/workflows/deploy-web.yml` deploys on every merge to `main` that changes `apps/web`, `apps/api` or
+After that, `.github/workflows/deploy-web.yml` deploys on every merge to `main` that changes `apps/web`, `apps/api`, `apps/docs`, `docs/` or
 `packages/` (it applies pending D1 migrations first, then deploys; it stays off until the repository variable
 `CLOUDFLARE_DEPLOY` is `true`). The Worker's own secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) live in Cloudflare and
 CI never sees them. Migrations run before the new code, so write each one to work with the previous version too.
@@ -52,7 +54,7 @@ Cloudflare Workers Free allows 100,000 requests/day and 10 ms CPU per request; D
 The design keeps well inside that:
 
 - **No passwords**: password hashing is CPU heavy and would not fit in 10 ms. Magic links need no hashing.
-- **Session cookie cache** (5 minutes): most requests do not read the database.
+- **Session cookie cache** (1 minute): most Better Auth requests do not read the database. Our own routes still check, by primary key, that the session exists and the person is not suspended, so a suspension or sign-out stops them at once.
 - **Rate limits only on sign-in**: each counted request is a D1 write, so `/get-session` is not counted.
 - **Static files are free**: only `/api/*` runs Worker code.
 - Resend's free plan is 100 emails/day, 3,000/month, so sign-in emails are the real ceiling.

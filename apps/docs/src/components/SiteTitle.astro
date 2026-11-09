@@ -6,6 +6,7 @@ import { getCollection } from 'astro:content'
 import versionConfig from '../../versions.json'
 import sections from '../../sidebar.json'
 import { pickerTarget, versionOf } from '../../scripts/versions-lib.mjs'
+import { BASE } from '../../base.mjs'
 
 const { id } = Astro.locals.starlightRoute
 const versions: { slug: string; label: string; redirect?: string }[] = versionConfig.versions
@@ -21,7 +22,7 @@ const choices = [
   return {
     label: choice.label,
     selected: (target?.slug ?? null) === (here?.slug ?? null),
-    href: pickerTarget({ id, from: here, to: target, sections, hasPage, redirect: choice.redirect })
+    href: BASE + pickerTarget({ id, from: here, to: target, sections, hasPage, redirect: choice.redirect })
   }
 })
 const current = choices.find((choice) => choice.selected)

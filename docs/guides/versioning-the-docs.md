@@ -34,3 +34,7 @@ Edit the files in `docs-versions/<slug>/`. They are plain Markdown, so a fix is 
 ## Removing a version
 
 Delete `docs-versions/<slug>/` and its entry in `apps/docs/versions.json`.
+
+## Where the versions live
+
+The docs are served under `/docs`, so the latest version is at `/docs/` and an old one at `/docs/<slug>/`. Locally, `pnpm --filter @repo/docs dev` serves them at `http://localhost:4321/docs/`.

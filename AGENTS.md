@@ -19,6 +19,7 @@ Package manager is **pnpm** (never npm or yarn). Node 24. Run commands from the 
 | Format / lint / typecheck                | `pnpm format` / `pnpm lint` / `pnpm typecheck`                                         |
 | Unit tests (src, scripts)                | `pnpm test` (and `pnpm test:scripts` for the root `scripts/` folder)                   |
 | Fill the local database with fake people | `pnpm seed:dev [--users N]` (local D1 only; never touches the real database)           |
+| Give or remove a staff role              | `pnpm admin:grant <email> [admin                                                       | support]`/`pnpm admin:revoke <email>` (`--remote` for the real database) |
 | Set up website + API accounts            | `pnpm setup:cloud` (interactive; needs the user's own Cloudflare/Resend accounts)      |
 | Update an app from the template          | `pnpm template:update` (apps made from the template only; opens a PR; `--adopt` first) |
 | Check the cloud setup                    | `pnpm cloud:doctor` (read-only; safe to run, never prints secret values)               |
@@ -60,7 +61,7 @@ apps/desktop/             The Electron app (its own package.json, electron-build
   tests/e2e/              Playwright against the packaged app.   tests/update/  old-to-new update test.
 apps/web/                 Vite + React SPA: marketing site (/), download page (/download, reads the latest GitHub release), web app (/app/*).
                           public/_headers sets the CSP and security headers (served by the Worker, see apps/api/wrangler.jsonc).
-apps/docs/                Astro Starlight docs site. Its pages are generated from the Markdown in docs/ (`pnpm --filter @repo/docs dev`); edit docs/, never src/content/docs/**. A ```mermaid code block in docs/ is drawn as a diagram (src/components/Mermaid.astro). Theme: src/styles/theme.css, which mirrors packages/ui/src/theme.css.
+apps/docs/                Astro Starlight docs site. Its pages are generated from the Markdown in docs/ (`pnpm --filter @repo/docs dev`, served at `/docs`; `pnpm build:site` builds web + docs together and copies the docs into `apps/web/dist/docs`; deploy builds need `fetch-depth: 0` so "Last updated" dates come from git); edit docs/, never src/content/docs/**. A ```mermaid code block in docs/ is drawn as a diagram (src/components/Mermaid.astro). Theme: src/styles/theme.css, which mirrors packages/ui/src/theme.css.
 apps/api/                 Hono API on Cloudflare Workers + D1 (Drizzle) + Better Auth magic links (Resend). Also serves apps/web/dist. See docs/api/overview.md.
 packages/shared/          zod schemas shared by API, web and desktop.
 packages/ui/               @repo/ui: shared React components (Button, cn) and the Tailwind theme (theme.css). Source-only; apps bundle it.
@@ -99,8 +100,8 @@ only third-party runtime modules go in `dependencies` (electron-builder packages
 
 ## Website, API and sign-in
 
-- Never put secrets in `apps/api/wrangler.jsonc` (it only holds `database_id`, `BETTER_AUTH_URL`, `EMAIL_FROM`, `TRUSTED_ORIGINS`, `routes` and the daily cron `triggers`).
-  Secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`) are set in Cloudflare by `pnpm setup:cloud` or `wrangler secret put`.
+- Never put secrets in `apps/api/wrangler.jsonc` (it only holds `database_id`, `BETTER_AUTH_URL`, `EMAIL_FROM`, `TRUSTED_ORIGINS`, `routes`, `MIN_APP_VERSION`, `TURNSTILE_SITE_KEY` and the daily cron `triggers`).
+  Secrets (`BETTER_AUTH_SECRET`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`) are set in Cloudflare by `pnpm setup:cloud` or `wrangler secret put`.
   Do not run `pnpm setup:cloud` for the user: it needs their accounts and keys, so tell them to run it.
   `pnpm cloud:doctor` only reads, so run it when something about sign-in or deploys looks wrong. Pull request previews
   (`.github/workflows/preview.yml`) set `PREVIEW=true`, and the Worker then takes its address from the request: do not read
@@ -113,6 +114,8 @@ only third-party runtime modules go in `dependencies` (electron-builder packages
   `pnpm --filter @repo/api auth:schema`. Migrations run before the new code deploys, so keep them backward compatible.
 - Per-person data that must follow them between devices goes through `/api/preferences` (last write wins, local copy first, best-effort sync):
   see `packages/shared/src/preferences.ts` and the theme in `apps/web/src/lib/theme.ts` and `apps/desktop/src/main/preferencesSync.ts`.
+- Directory sync (SCIM) is our own code on `db.batch()` (docs/api/teams-and-sso.md), not Better Auth's plugin, which needs transactions D1 lacks. Never enable the adapter's `transaction` option.
+- AI apps (MCP) use Better Auth's `mcp()` plugin as the OAuth server plus CIMD client ids (docs/api/ai-apps.md). Never add `oauthProvider()` beside it, never turn on client registration, and keep `/api/mcp` tools read-only and scoped to the token's person.
 - Anything you store per person needs `ON DELETE CASCADE` on the user and a place in the account export (`apps/api/src/app.ts`).
 - `apps/web/public/.well-known/security.txt` must be renewed before its `Expires` date (it is valid for at most a year, RFC 9116); the list on `/sub-processors` is `SUBPROCESSORS` in `apps/web/src/config.ts`: edit both to match the accounts you really use.
 - Web and API deploy from `.github/workflows/deploy-web.yml` (off until `CLOUDFLARE_DEPLOY=true`); it never releases the desktop app.

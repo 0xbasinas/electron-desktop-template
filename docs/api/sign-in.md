@@ -32,7 +32,7 @@ which one is the caller's. `PATCH /api/devices/:id` sets or clears the nickname 
 which goes with the session or the account), and `DELETE /api/devices/:id` signs that device out. The id is the session's row id,
 never its token, every query is limited to the caller's own sessions, and the caller's own session cannot be deleted this way
 (sign out instead). These routes check the database on every call, so a device you signed out stops working at once; routes that
-use the 5-minute session cookie cache (preferences, feedback) can take up to 5 minutes to notice.
+use the session cookie cache (preferences, feedback) still check the session and suspension in the database, so they stop at once too.
 
 The web app shows this on `/account` ("Your devices") and the desktop app in Settings. A nickname belongs to a session, so signing
 in again on the same device starts without one. Nicknames are listed in the data export.
@@ -50,3 +50,13 @@ and use them from `/sign-in`. It uses Better Auth's passkey plugin (`@better-aut
   the app and the site hands the session over.
 - The tests cover the endpoints and the rules around them (sessions needed, rpId, deletion cascades); the browser prompt itself
   needs a real authenticator, so try adding a passkey by hand after deploying.
+
+## Bot check on sign-in (Cloudflare Turnstile, optional)
+
+The email-link request (`POST /sign-in/magic-link`) is the one endpoint that sends email, so it can be protected with Cloudflare Turnstile, which is free and runs on your own Cloudflare account.
+
+- Create a Turnstile widget in the Cloudflare dashboard (hostname: your site). Put the **site key** in `TURNSTILE_SITE_KEY` (a public variable in `apps/api/wrangler.jsonc`) and the **secret key** with `wrangler secret put TURNSTILE_SECRET_KEY`.
+- The check turns on only when **both** are set. `/api/app-config` then returns `turnstileSiteKey`; the sign-in page shows the widget and sends the token in the `x-captcha-response` header. Without a token the API answers 400 and sends no email; a failed check is 403. A token works once, so the page asks for a new one after every try.
+- Only `/sign-in/magic-link` is checked (not the link itself, and not passkeys). A request without a valid token still counts against the sign-in rate limit.
+- The tests fake Cloudflare's answer (a stubbed `siteverify`): a token Cloudflare accepts sends the email with our secret, a rejected one is 403, a missing one never reaches Cloudflare, and an unreachable Cloudflare fails closed (5xx, no email). To try it locally use Cloudflare's test keys: site `1x00000000000000000000AA`, secret `1x0000000000000000000000000000000AA`.
+- The page's security headers (`apps/web/public/_headers`) allow `https://challenges.cloudflare.com` for scripts, frames and connections.

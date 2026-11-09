@@ -13,6 +13,7 @@ import {
 } from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { BASE } from '../base.mjs'
 import { toPage } from './sync-lib.mjs'
 
 const here = fileURLToPath(new URL('.', import.meta.url))
@@ -83,7 +84,7 @@ for (const version of versions) {
   writePages(folder, `${version.slug}/`, (slug) => ({
     editPath: `docs-versions/${version.slug}/${slug}.md`,
     search: false,
-    banner: `You are reading the docs for <strong>${version.label}</strong>. <a href="/${latest.has(slug) ? `${slug}/` : ''}">See the latest version</a>.`
+    banner: `You are reading the docs for <strong>${version.label}</strong>. <a href="${BASE}/${latest.has(slug) ? `${slug}/` : ''}">See the latest version</a>.`
   }))
 }
 console.log(
