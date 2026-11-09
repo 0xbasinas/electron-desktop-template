@@ -1,0 +1,128 @@
+---
+// Draws ```mermaid code blocks as diagrams. Our own small version of the astro-mermaid idea, working with Starlight:
+//  - Starlight turns the block into an Expressive Code figure; this script reads the source back from it, renders it
+//    with the `mermaid` library and swaps the figure for the SVG. If anything fails, the code block simply stays.
+//  - `mermaid` is imported on demand, so pages without a diagram download none of it.
+//  - Colours come from the shared theme (the CSS variables the whole site uses), and the diagram is drawn again when
+//    the reader switches between light and dark.
+---
+
+<script>
+  type Mermaid = typeof import('mermaid').default
+
+  const BLOCKS = '.expressive-code:has(pre[data-language="mermaid"])'
+  let loading: Promise<Mermaid> | null = null
+  let counter = 0
+
+  /** The source text of a diagram block: its lines, joined. */
+  function sourceOf(figure: Element): string {
+    return [...figure.querySelectorAll('pre .ec-line .code')]
+      .map((line) => line.textContent ?? '')
+      .join('\n')
+  }
+
+  /** A CSS colour from the theme (any format, including oklch) as an #rrggbb value the diagram library understands. */
+  function themeColor(variable: string): string {
+    const probe = document.createElement('span')
+    probe.style.color = `var(${variable})`
+    document.body.append(probe)
+    const resolved = getComputedStyle(probe).color
+    probe.remove()
+    const canvas = document.createElement('canvas')
+    canvas.width = canvas.height = 1
+    const context = canvas.getContext('2d', { willReadFrequently: true })
+    if (!context) return '#888888'
+    context.clearRect(0, 0, 1, 1)
+    context.fillStyle = resolved
+    context.fillRect(0, 0, 1, 1)
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data
+    return '#' + [r, g, b].map((v) => (v ?? 0).toString(16).padStart(2, '0')).join('')
+  }
+
+  function load(): Promise<Mermaid> {
+    loading ??= import('mermaid').then((module) => module.default).catch((error: unknown) => {
+      loading = null
+      throw error
+    })
+    return loading
+  }
+
+  function configure(mermaid: Mermaid): void {
+    const text = themeColor('--foreground')
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: 'strict',
+      theme: 'base',
+      fontFamily: 'inherit',
+      themeVariables: {
+        background: themeColor('--background'),
+        primaryColor: themeColor('--secondary'),
+        primaryTextColor: text,
+        primaryBorderColor: themeColor('--ring'),
+        secondaryColor: themeColor('--card'),
+        tertiaryColor: themeColor('--background'),
+        lineColor: themeColor('--muted-foreground'),
+        textColor: text,
+        noteBkgColor: themeColor('--card'),
+        noteTextColor: text,
+        clusterBkg: themeColor('--card'),
+        clusterBorder: themeColor('--ring')
+      }
+    })
+  }
+
+  async function draw(mermaid: Mermaid, source: string): Promise<HTMLElement> {
+    const { svg } = await mermaid.render(`mermaid-${counter++}`, source)
+    const holder = document.createElement('div')
+    holder.className = 'mermaid-diagram not-content'
+    holder.dataset.source = source
+    holder.setAttribute('role', 'img')
+    holder.innerHTML = svg
+    return holder
+  }
+
+  async function run(): Promise<void> {
+    const figures = [...document.querySelectorAll(BLOCKS)]
+    if (figures.length === 0) return
+    let mermaid: Mermaid
+    try {
+      mermaid = await load()
+    } catch (error) {
+      console.error('Could not load the diagram library; showing the diagram source instead.', error)
+      return
+    }
+    configure(mermaid)
+    for (const figure of figures) {
+      try {
+        figure.replaceWith(await draw(mermaid, sourceOf(figure)))
+      } catch (error) {
+        // A mistake in the diagram: keep the code block and say what the library found.
+        const note = document.createElement('p')
+        note.className = 'mermaid-error'
+        note.textContent = `This diagram could not be drawn: ${error instanceof Error ? error.message.split('\n')[0] : 'unknown error'}`
+        figure.before(note)
+      }
+    }
+  }
+
+  /** The reader switched between light and dark: draw every diagram again with the new colours. */
+  async function redraw(): Promise<void> {
+    const diagrams = [...document.querySelectorAll<HTMLElement>('.mermaid-diagram')]
+    if (diagrams.length === 0 || !loading) return
+    const mermaid = await load()
+    configure(mermaid)
+    for (const diagram of diagrams) {
+      try {
+        diagram.replaceWith(await draw(mermaid, diagram.dataset.source ?? ''))
+      } catch {
+        // The old drawing stays.
+      }
+    }
+  }
+
+  void run()
+  new MutationObserver(() => void redraw()).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme']
+  })
+</script>

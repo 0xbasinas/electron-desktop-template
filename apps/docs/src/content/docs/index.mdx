@@ -37,6 +37,21 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components'
   </Card>
 </CardGrid>
 
+## How a change reaches people
+
+```mermaid
+flowchart LR
+  Merge[Merge to main] --> CI[Checks and builds]
+  CI --> Release[GitHub Release at 10%]
+  Release --> Guard[Hourly rollout guard]
+  Guard -->|healthy| Wider[25% then 50% then 100%]
+  Guard -->|crashing| Paused[Paused at 0%]
+  Release --> App[Desktop app updates itself]
+  Release --> Site[Website download page]
+  App --> API[(API on Workers and D1)]
+  Site --> API
+```
+
 ## Where to go next
 
 <LinkCard

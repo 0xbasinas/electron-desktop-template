@@ -50,7 +50,7 @@ anything touching main, preload, the window or IPC, also `pnpm build:unpack && p
 
 This is a **pnpm + Turborepo monorepo**. Apps are in `apps/`, shared code in `packages/`. Add UI that more than one app needs to `packages/ui` and export it from `src/index.ts`.
 
-```
+````
 apps/desktop/             The Electron app (its own package.json, electron-builder.yml, tests, scripts).
   src/main/               Electron main process (Node). index.ts is the entry.
   src/preload/            api.ts = everything the page may call (contextBridge). Sandboxed: import only `electron` + shared code.
@@ -60,7 +60,7 @@ apps/desktop/             The Electron app (its own package.json, electron-build
   tests/e2e/              Playwright against the packaged app.   tests/update/  old-to-new update test.
 apps/web/                 Vite + React SPA: marketing site (/), download page (/download, reads the latest GitHub release), web app (/app/*).
                           public/_headers sets the CSP and security headers (served by the Worker, see apps/api/wrangler.jsonc).
-apps/docs/                Astro Starlight docs site. Its pages are generated from the Markdown in docs/ (`pnpm --filter @repo/docs dev`); edit docs/, never src/content/docs/*.md. Theme: src/styles/theme.css, which mirrors packages/ui/src/theme.css.
+apps/docs/                Astro Starlight docs site. Its pages are generated from the Markdown in docs/ (`pnpm --filter @repo/docs dev`); edit docs/, never src/content/docs/*.md. A ```mermaid code block in docs/ is drawn as a diagram (src/components/Mermaid.astro). Theme: src/styles/theme.css, which mirrors packages/ui/src/theme.css.
 apps/api/                 Hono API on Cloudflare Workers + D1 (Drizzle) + Better Auth magic links (Resend). Also serves apps/web/dist. See docs/api.md.
 packages/shared/          zod schemas shared by API, web and desktop.
 packages/ui/               @repo/ui: shared React components (Button, cn) and the Tailwind theme (theme.css). Source-only; apps bundle it.
@@ -69,7 +69,7 @@ turbo.json                Task graph (build, typecheck, test). pnpm-workspace.ya
 scripts/                  template-update.mjs (+ template-update-lib.mjs, pure and tested): `pnpm template:update`. setup-cloud.mjs (+ setup-cloud-lib.mjs, pure and tested with `node --test`): one-command Cloudflare/Resend/GitHub setup.
 docs/                     template-updates.md (keeping an app in sync with the template), setup-cloud.md (that setup), api.md (API, database, sign-in), architecture.md (how the app works), releasing.md (releases, rollouts, rollbacks),
                           monorepo-and-web.md (how the repo is organised and the plan for web + API).
-```
+````
 
 Monorepo rules: shared dependency versions live in the `catalog:` of `pnpm-workspace.yaml` (use `catalog:` in a package, not a
 version). Root scripts (`pnpm dev`, `pnpm build:unpack`, `pnpm test:e2e` ...) forward to `apps/desktop`. Lint, format and

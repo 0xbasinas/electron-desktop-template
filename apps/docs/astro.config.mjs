@@ -7,7 +7,8 @@ const REPO = 'https://github.com/0xbasinas/electron-desktop-template'
 // The pages under "Guides" and "Reference" are generated from /docs by scripts/sync-docs.mjs, so the Markdown in
 // /docs stays the one source of truth. Only the home page (src/content/docs/index.mdx) is written here.
 export default defineConfig({
-  vite: { plugins: [tailwindcss()] },
+  // The diagram library is a big chunk on purpose: it is only fetched on pages that have a diagram.
+  vite: { plugins: [tailwindcss()], build: { chunkSizeWarningLimit: 1500 } },
   integrations: [
     starlight({
       title: 'Electron Desktop Template',
@@ -15,7 +16,10 @@ export default defineConfig({
         'Build, ship and update an Electron desktop app with a website, an API and sign-in.',
       favicon: '/favicon.svg',
       customCss: ['./src/styles/global.css', './src/styles/theme.css'],
-      components: { Footer: './src/components/Footer.astro' },
+      components: {
+        Footer: './src/components/Footer.astro',
+        MarkdownContent: './src/components/MarkdownContent.astro'
+      },
       // Starlight marks the theme with data-theme; the web app's theme file uses a "dark" class. Keep them in step.
       head: [
         {

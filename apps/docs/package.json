@@ -17,11 +17,12 @@
     "@astrojs/starlight-tailwind": "^5.0.0",
     "@tailwindcss/vite": "catalog:",
     "astro": "^7.4.7",
+    "mermaid": "^12.3.0",
     "tailwindcss": "catalog:"
   },
   "devDependencies": {
     "@astrojs/check": "^0.9.12",
-    "typescript": "catalog:",
-    "@repo/ui": "workspace:*"
+    "@repo/ui": "workspace:*",
+    "typescript": "catalog:"
   }
 }
