@@ -12,4 +12,4 @@ apps/api/src/db/auth-schema.ts
 .dev.vars
 .wrangler
 apps/docs/.astro
-apps/docs/src/content/docs/*.md
+apps/docs/src/content/docs/**/*.md

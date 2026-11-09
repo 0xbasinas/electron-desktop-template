@@ -19,15 +19,17 @@ test('describes the page with its first paragraph in plain text', () => {
 
 test('rewrites links between docs, with and without a section', () => {
   assert.equal(
-    rewriteLinks('[a](api.md) [b](setup-cloud.md#x) [c](https://x.dev/a.md)'),
-    '[a](../api/) [b](../setup-cloud/#x) [c](https://x.dev/a.md)'
+    rewriteLinks(
+      '[a](api.md) [b](../guides/setup-cloud.md#x) [c](./api/sign-in.md) [d](https://x.dev/a.md)'
+    ),
+    '[a](../api/) [b](../../guides/setup-cloud/#x) [c](../api/sign-in/) [d](https://x.dev/a.md)'
   )
 })
 
 test('builds a page with front matter and no duplicate title', () => {
-  const page = toPage('releasing', sample.replaceAll('\n', '\r\n'))
+  const page = toPage('releasing/overview', sample.replaceAll('\n', '\r\n'))
   assert.match(page, /^---\ntitle: "Releasing"\n/)
-  assert.match(page, /editUrl: ".*\/docs\/releasing\.md"/)
+  assert.match(page, /editUrl: ".*\/docs\/releasing\/overview\.md"/)
   assert.ok(!page.includes('\n# Releasing'))
   assert.ok(page.includes('](../api/#sign-in)'))
 })

@@ -1,6 +1,6 @@
 name: Deploy web and API
 # Deploys the website and the API (one Cloudflare Worker) when they change on main. The desktop app is released by
-# its own workflows and is not touched. Nothing happens until you turn it on: see "Deploy" in docs/api.md.
+# its own workflows and is not touched. Nothing happens until you turn it on: see "Deploy" in docs/api/overview.md.
 on:
   push:
     branches: [main]

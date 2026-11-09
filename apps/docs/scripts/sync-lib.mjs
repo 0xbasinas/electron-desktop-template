@@ -25,11 +25,14 @@ export function findDescription(markdown) {
   return null
 }
 
-/** Links to another file in /docs (api.md, api.md#section) become links between the generated pages. */
+/**
+ * Links to another file in /docs (api.md, ../api/overview.md#section) become links between the generated pages.
+ * A page is served as /folder/name/, so a relative link needs one more "../" than the Markdown file path.
+ */
 export function rewriteLinks(markdown) {
   return markdown.replace(
-    /\]\(([a-z0-9-]+)\.md(#[^)]*)?\)/gi,
-    (_all, slug, hash = '') => `](../${slug}/${hash})`
+    /\]\(((?:\.{1,2}\/)*)([a-z0-9][a-z0-9/-]*)\.md(#[^)]*)?\)/gi,
+    (_all, up, slug, hash = '') => `](../${up.replace(/^\.\//, '')}${slug}/${hash})`
   )
 }
 

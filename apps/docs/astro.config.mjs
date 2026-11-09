@@ -43,11 +43,35 @@ export default defineConfig({
         { label: 'Start here', items: [{ slug: 'index' }] },
         {
           label: 'Guides',
-          items: [{ slug: 'setup-cloud' }, { slug: 'template-updates' }, { slug: 'releasing' }]
+          items: [{ slug: 'guides/setup-cloud' }, { slug: 'guides/template-updates' }]
         },
         {
-          label: 'Reference',
-          items: [{ slug: 'architecture' }, { slug: 'monorepo-and-web' }, { slug: 'api' }]
+          label: 'The desktop app',
+          items: [
+            { slug: 'desktop/architecture' },
+            { slug: 'desktop/window-and-menus' },
+            { slug: 'desktop/app-features' },
+            { slug: 'desktop/security' },
+            { slug: 'desktop/account-sign-in' }
+          ]
+        },
+        {
+          label: 'Releasing',
+          items: [
+            { slug: 'releasing/overview', label: 'Overview' },
+            { slug: 'releasing/rollouts' },
+            { slug: 'releasing/checks-and-security' }
+          ]
+        },
+        {
+          label: 'Website and API',
+          items: [
+            { slug: 'project/monorepo-and-web' },
+            { slug: 'api/overview', label: 'API overview' },
+            { slug: 'api/sign-in' },
+            { slug: 'api/accounts' },
+            { slug: 'api/operations' }
+          ]
         }
       ]
     })
