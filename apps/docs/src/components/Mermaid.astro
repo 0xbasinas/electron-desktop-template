@@ -61,10 +61,10 @@
       securityLevel: 'strict',
       theme: 'base',
       fontFamily: font,
-      flowchart: { curve: 'basis', padding: 14, htmlLabels: true },
+      flowchart: { curve: 'basis', padding: 10, htmlLabels: true, nodeSpacing: 28, rankSpacing: 36, useMaxWidth: true },
       sequence: { actorMargin: 40, messageMargin: 32, mirrorActors: false },
       themeVariables: {
-        fontSize: '14px',
+        fontSize: '12px',
         dropShadow: 'none',
         // The diagram sits on a card, so its own background (and the labels written on lines) match the card.
         background: card,
@@ -135,6 +135,13 @@
     holder.dataset.source = source
     holder.setAttribute('role', 'img')
     holder.innerHTML = svg
+    // Draw at the diagram's own size (never stretched to the column), shrinking only when it does not fit.
+    const drawn = holder.querySelector('svg')
+    const box = drawn?.viewBox.baseVal
+    if (drawn && box?.width) {
+      drawn.style.width = `${Math.round(box.width)}px`
+      drawn.style.maxWidth = '100%'
+    }
     return holder
   }
 

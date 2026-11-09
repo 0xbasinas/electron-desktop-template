@@ -19,19 +19,19 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components'
 ## What you get
 
 <CardGrid>
-  <Card title="Desktop app" icon="laptop">
+  <Card title="Desktop app">
     Electron, Vite, React and TypeScript. A sandboxed window, a typed bridge to the main process,
     tray, settings and updates.
   </Card>
-  <Card title="Website and web app" icon="rocket">
+  <Card title="Website and web app">
     A marketing site, a download page that reads the latest release, and the web version of the app,
     all served from one Cloudflare Worker.
   </Card>
-  <Card title="API and sign-in" icon="seti:lock">
+  <Card title="API and sign-in">
     Hono on Cloudflare Workers with D1. Sign in with a magic link or a passkey, teams, single
     sign-on and directory sync for companies.
   </Card>
-  <Card title="Safe releases" icon="approve-check">
+  <Card title="Safe releases">
     Every merge to `main` builds for Windows, macOS and Linux, publishes at 10%, and widens or
     pauses on its own.
   </Card>
@@ -41,15 +41,11 @@ import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components'
 
 ```mermaid
 flowchart LR
-  Merge[Merge to main] --> CI[Checks and builds]
-  CI --> Release[GitHub Release at 10%]
+  Merge[Merge to main] --> Release[Build and release at 10%]
   Release --> Guard[Hourly rollout guard]
-  Guard -->|healthy| Wider[25% then 50% then 100%]
+  Release --> App[Apps update themselves]
+  Guard -->|healthy| Wider[Widens to 100%]
   Guard -->|crashing| Paused[Paused at 0%]
-  Release --> App[Desktop app updates itself]
-  Release --> Site[Website download page]
-  App --> API[(API on Workers and D1)]
-  Site --> API
 ```
 
 ## Where to go next
