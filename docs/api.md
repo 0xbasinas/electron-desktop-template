@@ -341,6 +341,26 @@ A company's directory (Okta, Microsoft Entra, JumpCloud ...) can add, update, sw
 - **Groups can make team admins, only if an owner says so.** A group does nothing by default. A team owner ticks a group on the team page ("Directory sync"); everyone in it is then an admin, and loses that again on leaving the group, being switched off, or the group being removed or unticked. Only rights the group gave are taken back, owners are never touched, and nothing here can make an owner. Anyone who manages that group in the directory can now decide who administers the team, which is why the owner has to opt in and is warned.
 - **Tombstones.** When a person deletes their account (or staff remove it) while the directory still lists them, a salted hash of their address is kept for 90 days (`scim_tombstone`; not the address itself). The next sync's create is answered with 409 instead of silently recreating the account. The owner sees "N deleted accounts are not being recreated" and can choose Allow again. A person who has an account again (they signed in) is not blocked.
 - **Setting up Okta or Entra:** SCIM base URL `<site>/api/scim/v2`, authentication "HTTP header" / bearer with the token, unique identifier `userName` (the work email), push new users, profile updates and deactivation. Send the sign-in subject (OIDC `sub`) as `externalId`.
+- **Company sign-in only links to a person the directory has not switched off.** When the identity provider's login would be attached to an account (`ssoLinkRefusal` in `scimStore.ts`, called from the database adapter in `auth.ts` because the plugin's own transaction-based check cannot run on D1), it is refused if the team's directory lists that person as inactive, or if the identity's subject is the directory's `externalId` of a different person (a matching email alone never attaches an identity to someone else's account). Switching a person off also deletes the company sign-in link on their account in the same batch (owners excepted), so the identity provider cannot sign them back in as that account; switching them on lets the next login link again. Teams without a directory, and people the directory does not list, are not affected. A person the directory created has an unverified address, and the plugin links only verified addresses, so their first company login works after they have proven the address once (a magic link).
+
+### Setting up Okta
+
+1. On the team page, **Directory sync > New connection**; copy the token (shown once).
+2. In Okta, open the OIDC app for this team > **General > App settings** and, in the app's **Provisioning** tab, **Configure API integration**. Choose the SCIM 2.0 template ("SCIM 2.0 Test App (Header Auth)" or your own app with SCIM enabled).
+3. SCIM connector base URL `https://<site>/api/scim/v2`; unique identifier field `userName`; supported actions: Push New Users, Push Profile Updates, Push Groups (optional); authentication mode HTTP Header, with the token as the **Authorization** value (`Bearer <token>`). Use **Test Connector Configuration**.
+4. In **To App**, enable Create Users, Update User Attributes and Deactivate Users. Set the `userName` mapping to the work email address and `externalId` to the same value as the OIDC `sub` (Okta user id, `user.id`), because that is how a login is tied to a person.
+5. Assign people (or a group) to the app. They appear under Directory sync on the team page; deactivating or unassigning them in Okta switches them off here.
+
+### Setting up Microsoft Entra ID
+
+1. On the team page create a connection and copy the token.
+2. Entra admin center > **Enterprise applications > New application > Create your own application** (non-gallery). Open **Provisioning**, set mode **Automatic**.
+3. **Tenant URL** `https://<site>/api/scim/v2`; **Secret token** the token. **Test connection** (it sends a lookup by `userName`; unknown users are answered with an empty list, which Entra expects).
+4. **Mappings > Provision Microsoft Entra ID Users**: keep `userPrincipalName` > `userName` (or map `mail`, whichever is the work email), `objectId` > `externalId` (the same value as the OIDC `oid`/`sub` your sign-in sends), and `Switch([IsSoftDeleted], , "False", "True", "True", "False")` > `active`. Remove attributes we do not store if the log warns about them. Groups are optional.
+5. Set **Provisioning Status** on and the scope to "Sync only assigned users and groups". Entra syncs about every 40 minutes; **Provision on demand** is the quick way to try one person.
+6. Entra sends `active` as the strings `"True"`/`"False"`; both are accepted. If the validator reports a failure on a feature listed as unsupported above (bulk, sort, ETags), it is expected, not a defect.
+
+Both vendors' steps are described from their documentation; they have not been run against real tenants yet (see "Not yet tried against a real directory" below).
 - Tested with `src/scim.test.ts` (filters, PATCH, groups) and the "directory sync" block in `test/api.test.ts` (tokens, discovery, expiry and rotation, provisioning, adoption rule, off and on, owner kept, PUT, return of a person, groups, isolation between teams, scopes, rejoin refusal, export, removal). Not yet tried against a real directory: run the Okta or Entra provisioning test against a preview copy first.
 
 ## AI apps (MCP): sign in with OAuth, then call `/api/mcp`

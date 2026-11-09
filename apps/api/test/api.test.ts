@@ -2115,6 +2115,139 @@ describe('single sign-on, a whole login against a fake identity provider', () =>
 
   afterEach(() => vi.restoreAllMocks())
 
+  /**
+   * A company with a team, a proven domain and a directory connection. Returns what the directory needs and a way to
+   * push a person into it.
+   */
+  async function companyWithDirectory(s: ReturnType<typeof setup>, id: string) {
+    await setupCompany(s, true, id)
+    const ownerEmail = `owner@${id}.example`
+    const owner = await signIn(s, ownerEmail)
+    const made = await s.call('/api/auth/organization/create', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ name: `Team ${id}`, slug: `team-${id}` })
+    })
+    const team = (await made.json()) as { id: string }
+    await bindings.DB.prepare('UPDATE sso_provider SET organization_id = ? WHERE provider_id = ?')
+      .bind(team.id, id)
+      .run()
+    const conn = await s.call('/api/scim-connections', {
+      method: 'POST',
+      headers: { cookie: owner, ...json },
+      body: JSON.stringify({ organizationId: team.id, name: 'Okta' })
+    })
+    expect(conn.status).toBe(201)
+    const { token } = (await conn.json()) as { token: string }
+    const scim = (path: string, method: string, body?: unknown): Promise<Response> =>
+      s.call(`/api/scim/v2${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${token}`,
+          ...(body === undefined ? {} : { 'content-type': 'application/scim+json' })
+        },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      })
+    const push = async (email: string, externalId: string): Promise<string> => {
+      const r = await scim('/Users', 'POST', {
+        schemas: ['urn:ietf:params:scim:schemas:core:2.0:User'],
+        userName: email,
+        externalId,
+        emails: [{ value: email, primary: true, type: 'work' }]
+      })
+      expect(r.status).toBe(201)
+      return ((await r.json()) as { id: string }).id
+    }
+    const setActive = async (scimId: string, active: boolean): Promise<void> => {
+      const r = await scim(`/Users/${scimId}`, 'PATCH', {
+        schemas: ['urn:ietf:params:scim:api:messages:2.0:PatchOp'],
+        Operations: [{ op: 'replace', path: 'active', value: active }]
+      })
+      expect(r.status).toBe(200)
+    }
+    return { push, setActive }
+  }
+
+  const linksOf = async (providerId: string): Promise<number> =>
+    (await bindings.DB.prepare('SELECT COUNT(*) AS n FROM account WHERE provider_id = ?')
+      .bind(providerId)
+      .first<{ n: number }>())!.n
+
+  const loginAs = async (s: ReturnType<typeof setup>, id: string): Promise<Response> => {
+    const { path, cookie } = await startLogin(s, id)
+    return s.call(path, { headers: { cookie } })
+  }
+
+  it('links company sign-in to a person the directory lists as active, and unlinks them when switched off', async () => {
+    await fakeIdp(() => ({
+      sub: 'dir-sub-1',
+      email: 'ada@dir-co.example',
+      email_verified: true,
+      name: 'Ada'
+    }))
+    const s = setup()
+    const { push, setActive } = await companyWithDirectory(s, 'dir-co')
+    const scimId = await push('ada@dir-co.example', 'dir-sub-1')
+    // A directory-made account has an unverified address, and the plugin links only verified ones: as soon as the
+    // person has proven it (a magic link), their company sign-in can link.
+    await bindings.DB.prepare('UPDATE user SET email_verified = 1 WHERE email = ?')
+      .bind('ada@dir-co.example')
+      .run()
+
+    const first = await loginAs(s, 'dir-co')
+    expect(first.headers.getSetCookie().join(';')).toContain('session_token')
+    expect(await linksOf('dir-co')).toBe(1)
+
+    // Switched off in the directory: the link is removed with the membership ...
+    await setActive(scimId, false)
+    expect(await linksOf('dir-co')).toBe(0)
+    // ... and the identity provider cannot link it again while the person stays off.
+    const refused = await loginAs(s, 'dir-co')
+    expect(refused.headers.getSetCookie().join(';')).not.toContain('session_token')
+    expect(await linksOf('dir-co')).toBe(0)
+    const failure = await bindings.DB.prepare(
+      "SELECT detail FROM audit_event WHERE type = 'user_sign_in_failed' AND detail LIKE '%SSO_DEPROVISIONED%'"
+    ).first()
+    expect(failure).not.toBeNull()
+
+    // Switched back on: signing in links again.
+    await setActive(scimId, true)
+    const again = await loginAs(s, 'dir-co')
+    expect(again.headers.getSetCookie().join(';')).toContain('session_token')
+    expect(await linksOf('dir-co')).toBe(1)
+  })
+
+  it('does not link an identity the directory ties to someone else, even with a matching email', async () => {
+    // The identity provider says "sub 'victim-sub', email ada@..." but the directory says victim-sub is another person.
+    await fakeIdp(() => ({
+      sub: 'victim-sub',
+      email: 'ada@tied-co.example',
+      email_verified: true
+    }))
+    const s = setup()
+    const { push } = await companyWithDirectory(s, 'tied-co')
+    await push('ada@tied-co.example', 'ada-sub')
+    await push('victim@tied-co.example', 'victim-sub')
+    // Verified, so that only our rule (not the plugin's own verified-address rule) can be what refuses.
+    await bindings.DB.prepare('UPDATE user SET email_verified = 1 WHERE email = ?')
+      .bind('ada@tied-co.example')
+      .run()
+
+    const response = await loginAs(s, 'tied-co')
+    expect(response.headers.getSetCookie().join(';')).not.toContain('session_token')
+    expect(await linksOf('tied-co')).toBe(0)
+  })
+
+  it('leaves people the directory does not list, alone', async () => {
+    await fakeIdp(() => ({ sub: 'free-sub', email: 'ada@free-co.example', email_verified: true }))
+    const s = setup()
+    const { push } = await companyWithDirectory(s, 'free-co')
+    await push('someone-else@free-co.example', 'other-sub')
+    const response = await loginAs(s, 'free-co')
+    expect(response.headers.getSetCookie().join(';')).toContain('session_token')
+    expect(await linksOf('free-co')).toBe(1)
+  })
+
   it('signs a person from the verified company in, creating the account', async () => {
     await fakeIdp(() => ({
       sub: 'idp-1',

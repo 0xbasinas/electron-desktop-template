@@ -27,7 +27,7 @@ import {
 import { newDeviceEmail, recordSignIn } from './signIns'
 import { magicLinkEmail, type EmailSender } from './email'
 import { isSuppressed } from './suppression'
-import { isDeprovisioned } from './scimStore'
+import { isDeprovisioned, ssoLinkRefusal } from './scimStore'
 import { revokeAppAccessStatements } from './oauthPrune'
 import { emailInDomains } from './domains'
 import { tombstoneStatements } from './tombstones'
@@ -98,6 +98,38 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
           throw new APIError('FORBIDDEN', {
             message: 'Your company has switched off your access to this team.'
           })
+        // Company sign-in only links to a person their directory has not switched off, and never to an account that
+        // the directory ties to someone else (see ssoLinkRefusal).
+        if (
+          model === 'account' &&
+          typeof data.providerId === 'string' &&
+          typeof data.userId === 'string' &&
+          typeof data.accountId === 'string' &&
+          !['credential', 'magic-link', 'passkey'].includes(data.providerId)
+        ) {
+          const refusal = await ssoLinkRefusal(db, {
+            providerId: data.providerId,
+            userId: data.userId,
+            subject: data.accountId
+          })
+          if (refusal) {
+            waitUntil(
+              recordAudit(db, {
+                type: 'user_sign_in_failed',
+                outcome: 'failure',
+                userId: data.userId,
+                code: refusal === 'deprovisioned' ? 'SSO_DEPROVISIONED' : 'SSO_SUBJECT_TAKEN',
+                now: Date.now()
+              }).catch((error: unknown) => console.error('Could not record the refusal', error))
+            )
+            throw new APIError('FORBIDDEN', {
+              message:
+                refusal === 'deprovisioned'
+                  ? 'Your company has switched off your access.'
+                  : 'This company sign-in belongs to another account.'
+            })
+          }
+        }
       }
     ),
     session: {
