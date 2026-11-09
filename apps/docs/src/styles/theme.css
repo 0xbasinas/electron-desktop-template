@@ -299,10 +299,6 @@ starlight-toc a[aria-current='true'] {
 .sl-link-button.minimal {
   padding-inline: 1.4rem;
 }
-#_top + .page-actions,
-h1#_top ~ .page-actions {
-  margin-top: 1.25rem;
-}
 
 /* Smaller type: the sidebar and headings were too large. */
 .sidebar-content {
@@ -446,10 +442,20 @@ footer a:hover {
   top: 0.5rem;
 }
 .expressive-code .copy button {
-  width: 1.75rem;
-  height: 1.75rem;
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: calc(var(--radius) - 4px);
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted-foreground);
   opacity: 0.6;
+}
+.expressive-code .copy button::before {
+  display: none;
+}
+.expressive-code .copy button div {
+  background: currentColor;
+  opacity: 1;
 }
 .expressive-code .copy button:hover,
 .expressive-code .frame:hover .copy button {
@@ -617,6 +623,40 @@ site-search kbd {
 }
 .sl-markdown-content .sl-anchor-link {
   margin-inline-start: 0.4em;
+}
+
+/* Page layout: less empty space around the title, no scrollbars on the side panels. */
+.sl-markdown-content .sl-heading-wrapper {
+  align-items: center;
+}
+.sl-markdown-content .sl-anchor-link {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+.sl-markdown-content .sl-anchor-icon {
+  display: inline-flex;
+  align-items: center;
+}
+.sl-markdown-content .sl-anchor-icon > svg {
+  vertical-align: middle;
+  position: static;
+  transform: none;
+}
+.content-panel {
+  padding-block: 1rem;
+}
+.sl-container .sidebar-pane,
+.sidebar-content,
+.right-sidebar,
+.right-sidebar-panel {
+  scrollbar-width: none;
+}
+.sidebar-pane::-webkit-scrollbar,
+.sidebar-content::-webkit-scrollbar,
+.right-sidebar::-webkit-scrollbar,
+.right-sidebar-panel::-webkit-scrollbar {
+  display: none;
 }
 
 /* A smaller heading link icon. */

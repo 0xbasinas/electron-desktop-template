@@ -40,7 +40,7 @@ const yaml = (text) => JSON.stringify(text)
 
 /**
  * The finished page: front matter plus the body without its title. For a saved version, `options` says where the file
- * lives (editPath), the notice shown above the page (banner, HTML) and that search should skip it (search: false).
+ * lives (editPath), when it last changed (lastUpdated, an ISO date), the notice shown above the page (banner, HTML) and that search should skip it (search: false).
  */
 export function toPage(name, markdown, options = {}) {
   const source = markdown.replaceAll('\r\n', '\n')
@@ -51,6 +51,7 @@ export function toPage(name, markdown, options = {}) {
     `title: ${yaml(title)}`,
     ...(description ? [`description: ${yaml(description)}`] : []),
     `editUrl: ${yaml(`https://github.com/0xbasinas/electron-desktop-template/edit/main/${options.editPath ?? `docs/${name}.md`}`)}`,
+    ...(options.lastUpdated ? [`lastUpdated: ${options.lastUpdated}`] : []),
     ...(options.banner ? [`banner:`, `  content: ${yaml(options.banner)}`] : []),
     ...(options.search === false ? [`pagefind: false`] : []),
     '---',

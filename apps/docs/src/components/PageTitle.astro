@@ -7,5 +7,17 @@ const { id, entry } = Astro.locals.starlightRoute
 const hasMarkdown = id !== 'index' && entry.data.template !== 'splash'
 ---
 
-<Default><slot /></Default>
-{hasMarkdown && <PageActions slug={id} />}
+<div class="title-row">
+  <Default><slot /></Default>
+  {hasMarkdown && <PageActions slug={id} />}
+</div>
+
+<style>
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+</style>

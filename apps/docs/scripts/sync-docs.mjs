@@ -1,7 +1,16 @@
 // Copies /docs/**/*.md into src/content/docs as Starlight pages (folders stay folders), and every saved version in
 // /docs-versions/<slug>/** into src/content/docs/<slug>/**. The copies are generated (git ignores them); edit the files
 // in /docs, never the copies. Runs before `dev`, `build` and `typecheck`.
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { dirname, join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { toPage } from './sync-lib.mjs'
@@ -30,15 +39,33 @@ const latest = new Set(
   listMarkdown(join(repo, 'docs')).map((f) => f.replaceAll('\\', '/').replace(/\.md$/, ''))
 )
 
+/** When a file last changed: its last commit, or its modified time when it is not committed yet. */
+function lastChanged(path) {
+  try {
+    const date = execFileSync('git', ['log', '-1', '--format=%cI', '--', path], {
+      cwd: repo,
+      encoding: 'utf8'
+    }).trim()
+    if (date) return date
+  } catch {
+    // no git here (a copy of the files): use the modified time
+  }
+  return statSync(path).mtime.toISOString()
+}
+
 /** Writes one folder of Markdown as pages, under a prefix, with options that depend on the page. */
 function writePages(folder, prefix, optionsFor) {
   for (const file of listMarkdown(folder)) {
     const slug = file.replaceAll('\\', '/').replace(/\.md$/, '')
+    const source = join(folder, file)
     const out = join(to, prefix, file)
     mkdirSync(dirname(out), { recursive: true })
     writeFileSync(
       out,
-      toPage(`${prefix}${slug}`, readFileSync(join(folder, file), 'utf8'), optionsFor(slug))
+      toPage(`${prefix}${slug}`, readFileSync(source, 'utf8'), {
+        lastUpdated: lastChanged(source),
+        ...optionsFor(slug)
+      })
     )
   }
 }

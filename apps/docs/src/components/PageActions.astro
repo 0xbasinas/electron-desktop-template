@@ -83,7 +83,7 @@ const markdownPath = `${base}/${Astro.props.slug}.md`
     position: relative;
     display: inline-flex;
     align-items: stretch;
-    margin-block: 0.75rem 0.25rem;
+    flex: none;
     border: 1px solid var(--border);
     border-radius: calc(var(--radius) - 2px);
     background: var(--card);
@@ -123,7 +123,7 @@ const markdownPath = `${base}/${Astro.props.slug}.md`
   }
   .pa-list {
     position: absolute;
-    inset-inline-start: 0;
+    inset-inline-end: 0;
     top: calc(100% + 0.3rem);
     z-index: 20;
     display: flex;
