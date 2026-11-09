@@ -573,3 +573,32 @@ footer a {
 [data-has-hero] .card {
   padding: 0.75rem 0.9rem;
 }
+
+/* Header: a step smaller. */
+:root {
+  --sl-nav-height: 3rem;
+  --sl-nav-pad-y: 0.4rem;
+}
+.site-title {
+  font-size: var(--sl-text-base);
+}
+site-search button {
+  height: 2rem;
+  font-size: var(--sl-text-xs);
+  padding-inline: 0.6rem;
+  min-width: 0;
+}
+site-search kbd {
+  font-size: 0.6875rem;
+}
+.header .social-icons a {
+  padding: 0.4rem;
+}
+.header .social-icons svg {
+  width: 1.1rem;
+  height: 1.1rem;
+}
+starlight-theme-toggle button {
+  padding: 0.15rem 0.5rem;
+  font-size: var(--sl-text-xs);
+}
