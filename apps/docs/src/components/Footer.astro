@@ -10,7 +10,7 @@ const { siteTitle } = Astro.locals.starlightRoute
 <Default><slot /></Default>
 <div class="mt-8 border-t border-border pt-6 text-center text-xs text-muted-foreground">
   {siteTitle} ·
-  <a class="underline" href={`${REPO}/releases`}>Releases</a> ·
-  <a class="underline" href={`${REPO}/issues/new/choose`}>Feedback</a> ·
-  <a class="underline" href={`${REPO}/security`}>Security</a>
+  <a class="text-muted-foreground underline underline-offset-2 hover:text-foreground" href={`${REPO}/releases`}>Releases</a> ·
+  <a class="text-muted-foreground underline underline-offset-2 hover:text-foreground" href={`${REPO}/issues/new/choose`}>Feedback</a> ·
+  <a class="text-muted-foreground underline underline-offset-2 hover:text-foreground" href={`${REPO}/security`}>Security</a>
 </div>

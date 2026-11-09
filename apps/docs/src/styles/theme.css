@@ -376,3 +376,86 @@ mobile-starlight-toc a {
 .sl-markdown-content tbody tr:last-child td:last-child {
   border-bottom-right-radius: calc(var(--radius) - 1px);
 }
+
+/* Previous / next links and the edit link: small and quiet. */
+.pagination-links {
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+.pagination-links > a {
+  padding: 0.6rem 0.9rem;
+  gap: 0.6rem;
+  border-color: var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  box-shadow: none;
+}
+.pagination-links > a:hover {
+  border-color: var(--muted-foreground);
+}
+.pagination-links > a span {
+  font-size: var(--sl-text-xs);
+  color: var(--muted-foreground);
+}
+.pagination-links .link-title {
+  font-size: var(--sl-text-sm);
+  line-height: 1.3;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.pagination-links svg {
+  width: 1rem;
+  height: 1rem;
+}
+footer .meta a,
+.meta a {
+  font-size: var(--sl-text-xs);
+  color: var(--muted-foreground);
+}
+
+/* Footer line: plain grey links, not the browser's blue and purple. */
+footer a,
+footer a:visited {
+  color: var(--muted-foreground);
+  text-decoration: none;
+}
+footer a:hover {
+  color: var(--foreground);
+  text-decoration: underline;
+}
+
+/* Code blocks: smaller text, no window-dots header on blocks without a title, a quiet copy button. */
+.expressive-code {
+  --ec-codeFontSize: 0.8125rem;
+  --ec-codeLineHt: 1.6;
+  --ec-codePadInl: 1rem;
+  --ec-codePadBlk: 0.75rem;
+  --ec-brdRad: calc(var(--radius) - 2px);
+  margin-block: 1rem;
+}
+.expressive-code .frame.is-terminal:not(.has-title) .header {
+  display: none;
+}
+.expressive-code .frame.is-terminal:not(.has-title) pre {
+  border-radius: inherit;
+}
+.expressive-code .frame {
+  box-shadow: none;
+}
+.expressive-code .copy {
+  inset-inline-end: 0.5rem;
+  top: 0.5rem;
+}
+.expressive-code .copy button {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: calc(var(--radius) - 4px);
+  opacity: 0.6;
+}
+.expressive-code .copy button:hover,
+.expressive-code .frame:hover .copy button {
+  opacity: 1;
+}
+.expressive-code pre {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
