@@ -341,3 +341,19 @@ mobile-starlight-toc a {
 [data-has-hero] .hero h1 {
   font-size: clamp(2.25rem, 6vw, 3.25rem);
 }
+
+/* Table cells: even padding all round, including the first and last column that Starlight leaves flush. */
+.sl-markdown-content :is(th, td),
+.sl-markdown-content :is(th, td):first-child,
+.sl-markdown-content :is(th, td):last-child {
+  padding: 0.6rem 1rem;
+  font-size: var(--sl-text-sm);
+  line-height: 1.5;
+  vertical-align: top;
+}
+.sl-markdown-content thead th {
+  background: var(--secondary);
+}
+.sl-markdown-content tbody tr:last-child td {
+  border-bottom: 0;
+}
