@@ -383,52 +383,6 @@ export function createAuth({ db, env, email, waitUntil }: AuthDeps) {
         )
       })
     },
-    hooks: {
-      // At most MAX_API_KEYS keys per person, so one account cannot fill the table.
-      before: createAuthMiddleware(async (ctx) => {
-        if (ctx.path !== '/api-key/create') return
-        const session = ctx.context.session ?? (await getSessionFromCtx(ctx))
-        if (!session) return
-        const [row] = await db
-          .select({ n: count() })
-          .from(schema.apikey)
-          .where(eq(schema.apikey.referenceId, session.user.id))
-        if ((row?.n ?? 0) >= MAX_API_KEYS)
-          throw new APIError('BAD_REQUEST', {
-            message: 'You have the most keys allowed. Delete one first.'
-          })
-      }),
-      // The security trail: failed sign-ins and account changes. After the response, and never fatal.
-      after: createAuthMiddleware(async (ctx) => {
-        const returned = ctx.context.returned
-        const failed = returned instanceof APIError
-        const event = eventForCall({
-          path: ctx.path,
-          failed,
-          errorCode: failed ? (returned.body?.code as string | undefined) : undefined,
-          location: ctx.context.responseHeaders?.get('location')
-        })
-        if (!event) return
-        const userId = ctx.context.session?.user.id ?? null
-        const actorId = ctx.path.startsWith('/admin/') ? userId : null
-        const target = ctx.path.startsWith('/admin/')
-          ? ((ctx.body as { userId?: string } | undefined)?.userId ?? null)
-          : userId
-        waitUntil(
-          recordAudit(db, {
-            ...event,
-            userId: ctx.path.startsWith('/admin/') ? target : userId,
-            actorId,
-            ipAddress: ctx.headers?.get('cf-connecting-ip') ?? null,
-            userAgent: ctx.headers?.get('user-agent') ?? null,
-            now: Date.now()
-          }).catch((error: unknown) => {
-            console.error('Could not record the audit event', error)
-            Sentry.captureException(error)
-          })
-        )
-      })
-    },
     databaseHooks: {
       user: {
         delete: {
