@@ -818,3 +818,98 @@ site-search dialog::backdrop {
 :root[data-theme='light'] .sl-link-card {
   background: var(--secondary);
 }
+
+/* No drop shadows anywhere: flat, with thin borders. */
+:root {
+  --sl-shadow-sm: none;
+  --sl-shadow-md: none;
+  --sl-shadow-lg: none;
+}
+.sl-menu-button {
+  box-shadow: none !important;
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+}
+.mobile-toc-menu,
+mobile-starlight-toc nav,
+mobile-starlight-toc .dropdown {
+  box-shadow: none !important;
+}
+
+/* The "On this page" bar on small screens: same grey borders as the rest. */
+mobile-starlight-toc nav {
+  background: var(--background);
+  border: 0;
+  border-bottom: 1px solid var(--border);
+}
+mobile-starlight-toc summary {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: var(--sl-text-xs);
+  padding: 0.35rem 0.7rem;
+}
+mobile-starlight-toc summary:focus-visible,
+mobile-starlight-toc[open] summary {
+  outline: none;
+  border-color: var(--muted-foreground);
+}
+mobile-starlight-toc .display-current {
+  font-size: var(--sl-text-xs);
+  color: var(--muted-foreground);
+  font-weight: 500;
+}
+mobile-starlight-toc .dropdown {
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  border-radius: 0;
+}
+mobile-starlight-toc .dropdown a {
+  font-size: var(--sl-text-sm);
+  padding-block: 0.45rem;
+}
+
+/* Small screens: a smaller title, compact page actions, tighter spacing. */
+@media (max-width: 50rem) {
+  .sl-markdown-content h1,
+  .content-panel h1 {
+    font-size: 1.5rem;
+  }
+  .sl-markdown-content h2 {
+    font-size: 1.25rem;
+  }
+  .sl-markdown-content h3 {
+    font-size: 1.0625rem;
+  }
+  .title-row {
+    align-items: flex-start !important;
+    gap: 0.5rem !important;
+  }
+  .page-actions {
+    margin-top: 0.2rem;
+  }
+  .pa-copy [data-label] {
+    display: none;
+  }
+  .pa-copy {
+    padding-inline: 0.5rem !important;
+  }
+  .content-panel {
+    padding-inline: 1rem;
+  }
+  .sl-markdown-content {
+    font-size: 0.9375rem;
+  }
+  .sl-markdown-content table {
+    font-size: var(--sl-text-xs);
+  }
+  .sl-markdown-content :is(td, th) {
+    padding: 0.5rem 0.65rem;
+  }
+  .pa-list {
+    min-width: min(14rem, calc(100vw - 2rem));
+  }
+}
