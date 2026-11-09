@@ -811,7 +811,7 @@ site-search dialog::backdrop {
   --ec-frm-trmTtbBg: var(--muted);
   --ec-frm-edTabBarBg: var(--muted);
   --ec-frm-edActTabBg: var(--secondary);
-  --ec-brdWd: 1px;
+  --ec-brdWd: 0px;
 }
 :root[data-theme='light'] .starlight-aside,
 :root[data-theme='light'] .page-actions,
