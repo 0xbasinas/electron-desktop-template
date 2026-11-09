@@ -713,7 +713,8 @@ export function createApp(options: AppOptions = {}) {
               c.env.APP_NAME || DEFAULT_APP_NAME,
               String(claims.scope ?? '')
                 .split(' ')
-                .filter(Boolean)
+                .filter(Boolean),
+              new URL('/.well-known/oauth-protected-resource/api/mcp', c.env.BETTER_AUTH_URL).href
             )
           }
         )

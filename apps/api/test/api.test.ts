@@ -3729,6 +3729,23 @@ describe('AI apps (MCP): OAuth sign-in and the /api/mcp endpoint', () => {
     await forgetClient()
   })
 
+  it('keeps only a hash of an app refresh token in the database', async () => {
+    publishClient()
+    const s = setup()
+    const cookie = await signIn(s, 'mcp-hash@example.com')
+    const tokens = await getTokens(s, cookie, 'openid mcp:read offline_access')
+    expect(tokens.refresh_token).toBeTruthy()
+    const rows = (
+      await bindings.DB.prepare('SELECT token FROM oauth_refresh_token').all<{
+        token: string
+      }>()
+    ).results.map((r) => r.token)
+    expect(rows.length).toBeGreaterThan(0)
+    // A leaked database must not hand out working refresh tokens.
+    expect(rows).not.toContain(tokens.refresh_token)
+    await forgetClient()
+  })
+
   it('offers the sign-out tool only to an app that was given the write permission', async () => {
     publishClient()
     const s = setup()
@@ -3736,6 +3753,15 @@ describe('AI apps (MCP): OAuth sign-in and the /api/mcp endpoint', () => {
     const readOnly = await getTokens(s, cookie, 'openid mcp:read')
     expect(await (await call(s, readOnly.access_token, 'tools/list')).text()).not.toContain(
       'sign_out_device'
+    )
+    // Asking for it anyway is a step-up challenge (RFC 6750), so the app can ask the person to approve again.
+    const denied = await call(s, readOnly.access_token, 'tools/call', {
+      name: 'sign_out_device',
+      arguments: { id: 'x' }
+    })
+    expect(denied.status).toBe(403)
+    expect(denied.headers.get('www-authenticate')).toMatch(
+      /error="insufficient_scope".*scope="mcp:write"/
     )
     const full = await getTokens(s, cookie, 'openid mcp:read mcp:write')
     expect(await (await call(s, full.access_token, 'tools/list')).text()).toContain(

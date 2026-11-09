@@ -130,14 +130,47 @@ function buildServer(db: Db, userId: string, appName: string, scopes: string[]):
   return server
 }
 
+/**
+ * True when the request calls a tool that needs the write permission and the token lacks it. The sign-out tool is not
+ * listed for a read-only app, so an app that knows about it anyway (or was updated to use it) gets a step-up answer
+ * instead of "no such tool": it can then ask the person to approve again with the extra permission.
+ */
+async function needsWriteStepUp(request: Request, scopes: string[]): Promise<boolean> {
+  if (scopes.includes(MCP_WRITE_SCOPE) || request.method !== 'POST') return false
+  const body = (await request
+    .clone()
+    .json()
+    .catch(() => null)) as { method?: unknown; params?: { name?: unknown } } | null
+  return body?.method === 'tools/call' && body.params?.name === 'sign_out_device'
+}
+
 /** Answers one MCP request for the person the (already verified) token belongs to. Stateless; 2025-era traffic is refused. */
-export function handleMcp(
+export async function handleMcp(
   request: Request,
   db: Db,
   userId: string,
   appName: string,
-  scopes: string[] = []
+  scopes: string[] = [],
+  metadataUrl?: string
 ): Promise<Response> {
+  // RFC 6750 section 3.1: 403 with an insufficient_scope challenge naming the missing permission.
+  if (await needsWriteStepUp(request, scopes))
+    return Response.json(
+      {
+        error: 'insufficient_scope',
+        error_description: `The ${MCP_WRITE_SCOPE} permission is needed.`
+      },
+      {
+        status: 403,
+        headers: {
+          'WWW-Authenticate': [
+            'Bearer error="insufficient_scope"',
+            `scope="${MCP_WRITE_SCOPE}"`,
+            ...(metadataUrl ? [`resource_metadata="${metadataUrl}"`] : [])
+          ].join(', ')
+        }
+      }
+    )
   const handler = createMcpHandler(() => buildServer(db, userId, appName, scopes), {
     legacy: 'reject'
   })
