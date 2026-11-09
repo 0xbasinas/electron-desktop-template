@@ -23,26 +23,26 @@ Start with the desktop app (`pnpm dev`). The website, API and account sign-in ar
 
 ## Scripts
 
-| Command                                        | What it does                                                                                              |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                                     | Run the app with HMR                                                                                      |
-| `pnpm build`                                   | Typecheck and build                                                                                       |
-| `pnpm build:win` / `build:mac` / `build:linux` | Package installers                                                                                        |
-| `pnpm lint` / `pnpm format` / `pnpm typecheck` | Code quality                                                                                              |
-| `pnpm test:e2e`                                | Playwright smoke test against the packaged app (run `pnpm build:unpack` first)                            |
-| `pnpm test`                                    | Vitest (jsdom)                                                                                            |
-| `pnpm check:release`                           | After `pnpm build:<os> --publish never`: check the installers against the update manifest                 |
-| `pnpm check:fuses`                             | Check the Electron fuses of the packaged app (`--test-build` for the Playwright build)                    |
-| `pnpm test:update`                             | Build 0.0.1 and 0.0.2, check the old one updates to the new one                                           |
-| `pnpm icons`                                   | Regenerate app icons from `apps/desktop/build/icon-source.svg`                                            |
-| `pnpm check:bundle`                            | Fail if the renderer bundle exceeds `apps/desktop/bundle-budget.json` (run after `pnpm build`)            |
-| `pnpm rename`                                  | Rename the template for a new app                                                                         |
-| `pnpm dev:all`                                 | Run every app that has a dev server (desktop, web, API) through Turborepo                                 |
-| `pnpm setup:cloud`                             | Set up Cloudflare, Resend and GitHub for the website and API in one go (docs/setup-cloud.md)              |
-| `pnpm template:update`                         | Bring the template's newer changes into an app made from it, as a pull request (docs/template-updates.md) |
-| `pnpm template:status`                         | How far behind the template this app is                                                                   |
-| `pnpm cloud:doctor`                            | Check the whole cloud setup and say what is wrong and how to fix it                                       |
-| `pnpm test:scripts`                            | Unit tests for the setup script (`node --test`)                                                           |
+| Command                                        | What it does                                                                                                     |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `pnpm dev`                                     | Run the app with HMR                                                                                             |
+| `pnpm build`                                   | Typecheck and build                                                                                              |
+| `pnpm build:win` / `build:mac` / `build:linux` | Package installers                                                                                               |
+| `pnpm lint` / `pnpm format` / `pnpm typecheck` | Code quality                                                                                                     |
+| `pnpm test:e2e`                                | Playwright smoke test against the packaged app (run `pnpm build:unpack` first)                                   |
+| `pnpm test`                                    | Vitest (jsdom)                                                                                                   |
+| `pnpm check:release`                           | After `pnpm build:<os> --publish never`: check the installers against the update manifest                        |
+| `pnpm check:fuses`                             | Check the Electron fuses of the packaged app (`--test-build` for the Playwright build)                           |
+| `pnpm test:update`                             | Build 0.0.1 and 0.0.2, check the old one updates to the new one                                                  |
+| `pnpm icons`                                   | Regenerate app icons from `apps/desktop/build/icon-source.svg`                                                   |
+| `pnpm check:bundle`                            | Fail if the renderer bundle exceeds `apps/desktop/bundle-budget.json` (run after `pnpm build`)                   |
+| `pnpm rename`                                  | Rename the template for a new app                                                                                |
+| `pnpm dev:all`                                 | Run every app that has a dev server (desktop, web, API) through Turborepo                                        |
+| `pnpm setup:cloud`                             | Set up Cloudflare, Resend and GitHub for the website and API in one go (docs/guides/setup-cloud.md)              |
+| `pnpm template:update`                         | Bring the template's newer changes into an app made from it, as a pull request (docs/guides/template-updates.md) |
+| `pnpm template:status`                         | How far behind the template this app is                                                                          |
+| `pnpm cloud:doctor`                            | Check the whole cloud setup and say what is wrong and how to fix it                                              |
+| `pnpm test:scripts`                            | Unit tests for the setup script (`node --test`)                                                                  |
 
 ## Website and API
 
@@ -58,8 +58,8 @@ pnpm --filter @repo/api dev                         # http://localhost:8787 (sig
 pnpm setup:cloud                                    # when you are ready to deploy: Cloudflare + Resend + GitHub
 ```
 
-Guides: [docs/setup-cloud.md](docs/setup-cloud.md) (one-command setup, options, manual steps), [docs/api.md](docs/api.md) (API, database,
-sign-in, free-tier notes, security), [docs/monorepo-and-web.md](docs/monorepo-and-web.md) (how the parts connect).
+Guides: [docs/guides/setup-cloud.md](docs/guides/setup-cloud.md) (one-command setup, options, manual steps), [docs/api/overview.md](docs/api/overview.md) (API, database,
+sign-in, free-tier notes, security), [docs/project/monorepo-and-web.md](docs/project/monorepo-and-web.md) (how the parts connect).
 
 ## Auto-update
 
@@ -69,14 +69,14 @@ sign-in, free-tier notes, security), [docs/monorepo-and-web.md](docs/monorepo-an
 - **Publish beta pre-release** (`publish-beta.yml`): the same for the `beta` branch, published as a pre-release for people on the beta channel. Users switch channels in the app.
 - Only changes to `apps/desktop/src/` (not tests), `apps/desktop/build/`, `apps/desktop/resources/`, `apps/desktop/package.json`, the lockfile and the build config publish. CI, docs and test changes don't. A failing CI blocks the publish.
 - The version is `<major>.<minor>.<commit count>`: `major.minor` come from `apps/desktop/package.json`, so it grows on its own. Edit `apps/desktop/package.json` to move to `0.1.x` or `1.0.x`.
-- New stable releases go to 10% of users first, then 25%, 50% and 100% over three days while the rollout guard sees healthy crash data. Pause, raise or roll back by hand from the Actions tab (see [docs/releasing.md](docs/releasing.md)).
+- New stable releases go to 10% of users first, then 25%, 50% and 100% over three days while the rollout guard sees healthy crash data. Pause, raise or roll back by hand from the Actions tab (see [docs/releasing/overview.md](docs/releasing/overview.md)).
 - Every pull request builds the real installers on all three systems and checks them against the update manifest, so packaging problems fail before the merge.
 - Release notes are generated from Conventional Commit messages (`feat:`, `fix:`, ...), grouped by type.
 - Updates are differential (blockmaps), and every release has `SHA256SUMS.txt` plus GitHub build-provenance attestations.
 - The repo is public, so installed apps can read releases without a token. If you make it private again, add `private: true` to `publish` in `apps/desktop/electron-builder.yml` and give installed apps a `GH_TOKEN`.
 - macOS auto-update requires code signing and notarization (not configured here).
 
-Details: [docs/releasing.md](docs/releasing.md). How the app is put together: [docs/architecture.md](docs/architecture.md). How the monorepo and the web/API plan fit together: [docs/monorepo-and-web.md](docs/monorepo-and-web.md). Website and API setup: [docs/setup-cloud.md](docs/setup-cloud.md).
+Details: [docs/releasing/overview.md](docs/releasing/overview.md). How the app is put together: [docs/desktop/architecture.md](docs/desktop/architecture.md). How the monorepo and the web/API plan fit together: [docs/project/monorepo-and-web.md](docs/project/monorepo-and-web.md). Website and API setup: [docs/guides/setup-cloud.md](docs/guides/setup-cloud.md).
 
 ## Security, settings and logs
 
@@ -84,7 +84,7 @@ Renderers are sandboxed, Electron fuses and ASAR integrity are on in releases (t
 
 ## Menu, tray and shortcuts
 
-A native application menu, a system tray icon (click to show or hide) and a global shortcut, `Ctrl/Cmd+Shift+Space`, to show or hide the window from anywhere. The tray menu can keep the app running when you close the window (off by default). See [docs/architecture.md](docs/architecture.md).
+A native application menu, a system tray icon (click to show or hide) and a global shortcut, `Ctrl/Cmd+Shift+Space`, to show or hide the window from anywhere. The tray menu can keep the app running when you close the window (off by default). See [docs/desktop/architecture.md](docs/desktop/architecture.md).
 
 ## Icons and logo
 
