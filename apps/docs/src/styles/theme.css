@@ -234,10 +234,6 @@ site-search button {
 .expressive-code .frame .header {
   border-color: var(--border);
 }
-.expressive-code .copy button {
-  border-color: var(--border);
-  background: var(--secondary);
-}
 
 /* Asides (note, tip, caution, danger): all plain grey boxes with a dark edge instead of four colours. */
 .starlight-aside {
@@ -426,6 +422,7 @@ footer a:hover {
   --ec-codePadInl: 1rem;
   --ec-codePadBlk: 0.75rem;
   --ec-brdRad: calc(var(--radius) - 2px);
+  --ec-brdWd: 0px;
   margin-block: 1rem;
 }
 .expressive-code .frame.is-terminal:not(.has-title) .header {
@@ -445,17 +442,15 @@ footer a:hover {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: calc(var(--radius) - 4px);
+  --ec-frm-inlBtnFg: var(--muted-foreground);
+  --ec-frm-inlBtnBg: transparent;
+  --ec-frm-inlBtnBgIdleOpa: 0;
+  --ec-frm-inlBtnBgHoverOrFocusOpa: 1;
+  --ec-frm-inlBtnBgActOpa: 1;
+  --ec-frm-inlBtnBrd: transparent;
   border-color: transparent;
   background: transparent;
-  color: var(--muted-foreground);
-  opacity: 0.6;
-}
-.expressive-code .copy button::before {
-  display: none;
-}
-.expressive-code .copy button div {
-  background: currentColor;
-  opacity: 1;
+  opacity: 0.7;
 }
 .expressive-code .copy button:hover,
 .expressive-code .frame:hover .copy button {
@@ -646,11 +641,12 @@ site-search kbd {
 .content-panel {
   padding-block: 1rem;
 }
-.sl-container .sidebar-pane,
+sl-sidebar-pane,
+.sidebar-pane,
 .sidebar-content,
 .right-sidebar,
 .right-sidebar-panel {
-  scrollbar-width: none;
+  scrollbar-width: none !important;
 }
 .sidebar-pane::-webkit-scrollbar,
 .sidebar-content::-webkit-scrollbar,
