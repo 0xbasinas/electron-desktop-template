@@ -49,25 +49,82 @@
 
   function configure(mermaid: Mermaid): void {
     const text = themeColor('--foreground')
+    const background = themeColor('--background')
+    const surface = themeColor('--secondary')
+    const card = themeColor('--card')
+    const line = themeColor('--muted-foreground')
+    const edge = themeColor('--ring')
+    const accent = themeColor('--primary')
+    const font = getComputedStyle(document.body).fontFamily
     mermaid.initialize({
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'base',
-      fontFamily: 'inherit',
+      fontFamily: font,
+      flowchart: { curve: 'basis', padding: 14, htmlLabels: true },
+      sequence: { actorMargin: 40, messageMargin: 32, mirrorActors: false },
       themeVariables: {
-        background: themeColor('--background'),
-        primaryColor: themeColor('--secondary'),
+        fontSize: '14px',
+        dropShadow: 'none',
+        // The diagram sits on a card, so its own background (and the labels written on lines) match the card.
+        background: card,
+        // Boxes: the secondary surface with a soft outline, text in the foreground colour.
+        primaryColor: surface,
         primaryTextColor: text,
-        primaryBorderColor: themeColor('--ring'),
-        secondaryColor: themeColor('--card'),
-        tertiaryColor: themeColor('--background'),
-        lineColor: themeColor('--muted-foreground'),
+        primaryBorderColor: edge,
+        secondaryColor: card,
+        secondaryTextColor: text,
+        secondaryBorderColor: edge,
+        tertiaryColor: card,
+        tertiaryTextColor: text,
+        mainBkg: surface,
+        nodeBorder: edge,
+        nodeTextColor: text,
+        // Lines, arrows and the labels written on them.
+        lineColor: line,
         textColor: text,
-        noteBkgColor: themeColor('--card'),
+        edgeLabelBackground: card,
+        arrowheadColor: line,
+        // Groups and notes.
+        clusterBkg: card,
+        clusterBorder: edge,
+        titleColor: text,
+        noteBkgColor: card,
         noteTextColor: text,
-        clusterBkg: themeColor('--card'),
-        clusterBorder: themeColor('--ring')
-      }
+        noteBorderColor: edge,
+        // Sequence diagrams.
+        actorBkg: surface,
+        actorBorder: edge,
+        actorTextColor: text,
+        actorLineColor: edge,
+        signalColor: line,
+        signalTextColor: text,
+        labelBoxBkgColor: card,
+        labelBoxBorderColor: edge,
+        labelTextColor: text,
+        loopTextColor: text,
+        activationBkgColor: surface,
+        activationBorderColor: accent,
+        sequenceNumberColor: card,
+        // State and class diagrams.
+        stateBkg: surface,
+        stateLabelColor: text,
+        compositeBackground: card,
+        altBackground: card
+      },
+      // Crisper, flatter shapes than the library's default: rounded corners, thin outlines, no shadows.
+      themeCSS: `
+        .node rect, .node polygon, .node circle, .node ellipse, .node path { stroke-width: 1px !important; filter: none !important; }
+        .node rect { rx: 8px !important; ry: 8px !important; }
+        .cluster rect { rx: 10px !important; ry: 10px !important; stroke-width: 1px !important; filter: none !important; }
+        .edgePath .path, .flowchart-link { stroke-width: 1.5px; }
+        .edgeLabel, .edgeLabel p, .labelBkg { background-color: ${card} !important; border-radius: 4px; }
+        .actor { stroke-width: 1px; rx: 8px; ry: 8px; filter: none !important; }
+        .messageLine0, .messageLine1 { stroke-width: 1.5px; }
+        .labelBox { rx: 6px; ry: 6px; }
+        .note { rx: 6px; ry: 6px; stroke-width: 1px; filter: none !important; }
+        .sequenceNumber { font-weight: 600; }
+      `
     })
   }
 
@@ -114,8 +171,9 @@
     for (const diagram of diagrams) {
       try {
         diagram.replaceWith(await draw(mermaid, diagram.dataset.source ?? ''))
-      } catch {
+      } catch (error) {
         // The old drawing stays.
+        console.warn('Could not redraw a diagram for the new theme.', error)
       }
     }
   }
