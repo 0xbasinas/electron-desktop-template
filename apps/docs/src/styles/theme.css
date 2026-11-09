@@ -92,11 +92,6 @@
   padding-inline: 0.5rem;
 }
 
-/* File names and other short code in tables stay on one line instead of breaking at the hyphen. */
-.sl-markdown-content :is(td, th) code {
-  white-space: nowrap;
-}
-
 /* Content */
 .sl-markdown-content h1,
 .sl-markdown-content h2,
@@ -279,4 +274,15 @@ mobile-starlight-toc summary {
 starlight-toc a[aria-current='true'] {
   color: var(--foreground);
   font-weight: 600;
+}
+
+/* Tables fit the column: long addresses and names wrap instead of pushing the table past the edge. */
+.sl-markdown-content table {
+  width: 100%;
+}
+.sl-markdown-content :is(td, th) {
+  overflow-wrap: anywhere;
+}
+.sl-markdown-content :is(td, th) code {
+  white-space: nowrap;
 }
