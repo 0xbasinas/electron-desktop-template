@@ -1,77 +1,60 @@
 /*
- * Docs theme: the same colours as the web app (packages/ui/src/theme.css), mapped onto Starlight's variables.
- * Keep the oklch values in step with that file. The web app's neutral look is the base; links and highlights use
- * its "blue" accent (change the four --accent-* values below to use another preset, for example green:
- * light oklch(0.527 0.154 150), dark oklch(0.723 0.219 150)).
+ * Maps the web app's colour tokens (--background, --foreground, --primary, ... from @repo/ui/theme.css) onto
+ * Starlight's variables, so the docs follow the web app: change a colour there and it changes here.
+ * Starlight switches theme with data-theme; the web theme uses a "dark" class. The head script in astro.config.mjs
+ * keeps that class in step. The accent presets (data-accent) work here too, as they do in the app.
  */
-:root {
-  --accent-light: oklch(0.546 0.215 262);
-  --accent-dark: oklch(0.707 0.165 254);
-  --radius: 0.625rem;
-  --sl-font-system-mono: ui-monospace, 'Cascadia Code', 'SF Mono', Menlo, Consolas, monospace;
-}
-
-/* Dark (Starlight's default) */
 :root,
-:root[data-theme='dark'] {
-  --sl-color-white: oklch(0.985 0 0); /* foreground */
-  --sl-color-gray-1: oklch(0.922 0 0);
-  --sl-color-gray-2: oklch(0.82 0 0);
-  --sl-color-gray-3: oklch(0.708 0 0); /* muted-foreground */
-  --sl-color-gray-4: oklch(0.45 0 0);
-  --sl-color-gray-5: oklch(0.3 0 0); /* border */
-  --sl-color-gray-6: oklch(0.205 0 0); /* card */
-  --sl-color-gray-7: oklch(0.17 0 0);
-  --sl-color-black: oklch(0.145 0 0); /* background */
-  --sl-color-accent-low: oklch(0.27 0.08 262);
-  --sl-color-accent: var(--accent-dark);
-  --sl-color-accent-high: oklch(0.85 0.09 254);
-  --sl-color-text-accent: var(--accent-dark);
-  --sl-color-bg-inline-code: oklch(0.269 0 0);
-  --docs-glow: oklch(0.707 0.165 254 / 16%);
-}
-
+:root[data-theme='dark'],
 :root[data-theme='light'] {
-  --sl-color-white: oklch(0.145 0 0); /* foreground */
-  --sl-color-gray-1: oklch(0.205 0 0);
-  --sl-color-gray-2: oklch(0.3 0 0);
-  --sl-color-gray-3: oklch(0.556 0 0); /* muted-foreground */
-  --sl-color-gray-4: oklch(0.708 0 0);
-  --sl-color-gray-5: oklch(0.922 0 0); /* border */
-  --sl-color-gray-6: oklch(0.97 0 0); /* secondary */
-  --sl-color-gray-7: oklch(0.985 0 0);
-  --sl-color-black: oklch(1 0 0); /* background */
-  --sl-color-accent-low: oklch(0.94 0.035 262);
-  --sl-color-accent: var(--accent-light);
-  --sl-color-accent-high: oklch(0.42 0.18 262);
-  --sl-color-text-accent: var(--accent-light);
-  --sl-color-bg-inline-code: oklch(0.97 0 0);
-  --docs-glow: oklch(0.546 0.215 262 / 12%);
+  --sl-color-black: var(--background);
+  --sl-color-white: var(--foreground);
+  --sl-color-gray-1: color-mix(in oklab, var(--foreground) 90%, var(--background));
+  --sl-color-gray-2: color-mix(in oklab, var(--foreground) 78%, var(--background));
+  --sl-color-gray-3: var(--muted-foreground);
+  --sl-color-gray-4: color-mix(in oklab, var(--foreground) 40%, var(--background));
+  --sl-color-gray-5: color-mix(in oklab, var(--foreground) 14%, var(--background));
+  --sl-color-gray-6: var(--card);
+  --sl-color-gray-7: color-mix(in oklab, var(--card) 55%, var(--background));
+  --sl-color-hairline: var(--border);
+  --sl-color-hairline-light: var(--border);
+  --sl-color-hairline-shade: var(--border);
+
+  /* Neutral by default, like the app; with data-accent set, the accent colour. */
+  --sl-color-accent: var(--primary);
+  --sl-color-accent-low: var(--secondary);
+  --sl-color-accent-high: var(--foreground);
+  --sl-color-text-accent: var(--foreground);
+  --sl-color-text: var(--sl-color-gray-2);
+  --sl-color-bg-inline-code: var(--secondary);
+  --sl-color-bg-nav: var(--background);
+  --sl-color-bg-sidebar: var(--background);
+  --sl-color-bg: var(--background);
+  --sl-color-backdrop-overlay: color-mix(in oklab, var(--background) 70%, transparent);
+  --sl-focus-ring: 2px solid var(--ring);
 }
 
-/* Header and sidebar: quiet, with the same thin borders as the web app. */
+/* Header and sidebar: quiet, with the app's thin borders. */
 .header {
-  border-bottom: 1px solid var(--sl-color-gray-5);
+  border-bottom: 1px solid var(--border);
   backdrop-filter: blur(8px);
 }
 .sidebar-pane {
-  border-inline-end: 1px solid var(--sl-color-gray-5);
+  border-inline-end: 1px solid var(--border);
 }
 .site-title {
-  color: var(--sl-color-white);
+  color: var(--foreground);
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 
-/* The page you are on gets the accent as a soft pill instead of a solid block. */
-.sidebar-content a[aria-current='page'] {
-  background: var(--sl-color-accent-low);
-  color: var(--sl-color-accent-high);
-  border-radius: calc(var(--radius) - 4px);
-  font-weight: 500;
-}
+/* The current page is a soft pill (the secondary background in the neutral look). */
 .sidebar-content a {
   border-radius: calc(var(--radius) - 4px);
+}
+.sidebar-content a[aria-current='page'] {
+  background: var(--secondary);
+  color: var(--foreground);
+  font-weight: 500;
 }
 
 /* Content */
@@ -85,70 +68,87 @@
 }
 .sl-markdown-content :not(pre) > code {
   border-radius: 0.375rem;
-  border: 1px solid var(--sl-color-gray-5);
+  border: 1px solid var(--border);
   padding: 0.1em 0.35em;
 }
 .sl-markdown-content table {
   display: block;
   overflow-x: auto;
-  border: 1px solid var(--sl-color-gray-5);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   border-collapse: separate;
   border-spacing: 0;
 }
 .sl-markdown-content :is(th, td) {
-  border-color: var(--sl-color-gray-5);
+  border-color: var(--border);
 }
 .sl-markdown-content tr:nth-child(2n) {
   background: transparent;
 }
 .sl-markdown-content blockquote {
-  border-inline-start-color: var(--sl-color-accent);
+  border-inline-start-color: var(--ring);
 }
 
-/* Cards on the home page */
+/* Cards */
 .starlight-card,
 .sl-link-card {
   border-radius: var(--radius);
-  border-color: var(--sl-color-gray-5);
-  background: var(--sl-color-gray-7);
+  border-color: var(--border);
+  background: var(--card);
 }
 .sl-link-card:hover {
-  border-color: var(--sl-color-accent);
-  background: var(--sl-color-gray-6);
+  border-color: var(--ring);
 }
 
-/* Buttons: the web app's primary button (solid accent, rounded) */
+/* Buttons: the app's primary and outline buttons. */
 .sl-link-button {
   border-radius: calc(var(--radius) - 2px);
   font-weight: 500;
 }
 .sl-link-button.primary {
-  color: oklch(0.985 0 0);
+  background: var(--primary);
+  border-color: var(--primary);
+  color: var(--primary-foreground);
 }
-:root[data-theme='dark'] .sl-link-button.primary {
-  color: oklch(0.145 0 0);
+.sl-link-button.secondary,
+.sl-link-button.minimal {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--foreground);
 }
 
-/* Home page: a soft accent glow behind the hero. */
+/* Home page: centred and text only, like the web app's home page. */
 [data-has-hero] .hero {
-  position: relative;
+  grid-template-columns: 1fr;
+  justify-items: center;
+  text-align: center;
+  padding-block: 3rem 2rem;
 }
-[data-has-hero] .hero::before {
-  content: '';
-  position: absolute;
-  inset: -4rem 0 auto;
-  height: 28rem;
-  z-index: -1;
-  background: radial-gradient(60% 70% at 50% 0%, var(--docs-glow), transparent 70%);
+[data-has-hero] .hero > img,
+[data-has-hero] .hero > .hero-html {
+  display: none;
 }
-[data-has-hero] .hero img {
-  border-radius: 2rem;
-  filter: drop-shadow(0 8px 24px var(--docs-glow));
+[data-has-hero] .hero .sl-flex {
+  justify-content: center;
+}
+[data-has-hero] .hero h1 {
+  letter-spacing: -0.03em;
+}
+[data-has-hero] .hero .copy {
+  align-items: center;
+}
+[data-has-hero] .hero .tagline {
+  text-align: center;
+  max-width: 40rem;
 }
 
-/* Search box and inputs use the web app's input colour. */
+/* Card icons: Starlight tints each card differently; here they all use the neutral theme colours. */
+.card {
+  --sl-card-border: var(--border) !important;
+  --sl-card-bg: var(--secondary) !important;
+}
+
 site-search button {
   border-radius: calc(var(--radius) - 2px);
-  border-color: var(--sl-color-gray-5);
+  border-color: var(--border);
 }
