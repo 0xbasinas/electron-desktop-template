@@ -974,3 +974,18 @@ mobile-starlight-toc .dropdown a {
 .sl-menu-button {
   border-radius: calc(var(--radius) - 2px);
 }
+
+/* Menu button: the bars and the close cross sit exactly in the middle. */
+.sl-menu-button {
+  box-sizing: border-box;
+  width: 2rem;
+  height: 2rem;
+  padding: 0 !important;
+  align-items: center;
+  justify-content: center;
+}
+.sl-menu-button svg {
+  width: 1rem;
+  height: 1rem;
+  flex: none;
+}
