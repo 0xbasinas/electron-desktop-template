@@ -87,14 +87,6 @@ export function SignInPage(): JSX.Element {
       </p>
     )
   }
-  if (session && oauthQuery) {
-    window.location.replace(next)
-    return (
-      <p className="text-center text-muted-foreground" role="status">
-        Continuing...
-      </p>
-    )
-  }
   if (session) return <Navigate to={next} replace />
 
   async function signInWithPasskey(): Promise<void> {
