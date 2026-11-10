@@ -1704,6 +1704,54 @@ describe('teams (organization plugin)', () => {
   })
 })
 
+describe('workspace', () => {
+  const json = { 'content-type': 'application/json' }
+  const org = (s: ReturnType<typeof setup>, cookie: string, path: string, body: unknown) =>
+    s.call(`/api/auth/organization/${path}`, {
+      method: 'POST',
+      headers: { cookie, ...json },
+      body: JSON.stringify(body)
+    })
+  const current = async (s: ReturnType<typeof setup>, cookie: string) =>
+    (await (await s.call('/api/workspace', { headers: { cookie } })).json()) as {
+      teamId: string | null
+      teamName: string | null
+      role: string
+    }
+
+  it('needs a session', async () => {
+    const s = setup()
+    expect((await s.call('/api/workspace')).status).toBe(401)
+  })
+
+  it('is Personal until a team is active, then names the team and the role', async () => {
+    const s = setup()
+    const cookie = await signIn(s, 'ws-owner@example.com')
+    expect(await current(s, cookie)).toEqual({ teamId: null, teamName: null, role: '' })
+    const made = await org(s, cookie, 'create', { name: 'Acme', slug: 'acme-ws' })
+    const team = (await made.json()) as { id: string }
+    expect(await current(s, cookie)).toEqual({ teamId: team.id, teamName: 'Acme', role: 'owner' })
+  })
+
+  it('ignores an active team the person is no longer a member of', async () => {
+    const s = setup()
+    const owner = await signIn(s, 'ws-own2@example.com')
+    const team = (await (
+      await org(s, owner, 'create', { name: 'Gone', slug: 'gone-ws' })
+    ).json()) as {
+      id: string
+    }
+    const outsider = await signIn(s, 'ws-out@example.com')
+    // A removed member's session still points at the team: nothing clears it.
+    await bindings.DB.prepare(
+      "UPDATE session SET active_organization_id = ? WHERE user_id = (SELECT id FROM user WHERE email = 'ws-out@example.com')"
+    )
+      .bind(team.id)
+      .run()
+    expect(await current(s, outsider)).toEqual({ teamId: null, teamName: null, role: '' })
+  })
+})
+
 describe('single sign-on (OpenID Connect)', () => {
   const json = { 'content-type': 'application/json' }
   const provider = (providerId: string, extra: Record<string, unknown> = {}): string =>
