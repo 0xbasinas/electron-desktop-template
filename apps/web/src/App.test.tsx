@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -6,7 +6,10 @@ import { App } from './App'
 
 // The auth client talks to the network; replace it with a controllable fake.
 const auth = vi.hoisted(() => ({
-  session: null as null | { user: { email: string } },
+  session: null as null | {
+    user: { email: string }
+    session?: { activeOrganizationId?: string | null }
+  },
   pending: false,
   magicLink: vi.fn(),
   apiKey: { list: vi.fn(), create: vi.fn(), delete: vi.fn() },
@@ -20,6 +23,7 @@ const auth = vi.hoisted(() => ({
   },
   organization: {
     list: vi.fn(),
+    setActive: vi.fn(),
     create: vi.fn(),
     getFullOrganization: vi.fn(),
     inviteMember: vi.fn(),
@@ -106,6 +110,8 @@ vi.mock('./lib/api', () => ({
 beforeEach(() => {
   auth.session = null
   auth.pending = false
+  auth.organization.list.mockReset().mockResolvedValue({ data: [], error: null })
+  auth.organization.setActive.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.magicLink.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.transfer.mockReset().mockResolvedValue({ data: {}, error: null })
   auth.ensureRedirect.mockClear()
@@ -995,6 +1001,67 @@ describe('teams', () => {
     expect(within(section).queryByLabelText('Email to invite')).not.toBeInTheDocument()
     expect(within(section).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
     expect(within(section).getByRole('button', { name: 'Leave team' })).toBeInTheDocument()
+  })
+})
+
+describe('the app bar and workspaces', () => {
+  beforeEach(() => {
+    auth.session = {
+      user: { email: 'me@example.com', id: 'u1' },
+      session: { activeOrganizationId: null }
+    } as never
+    auth.organization.list.mockResolvedValue({
+      data: [
+        { id: 't1', name: 'Acme' },
+        { id: 't2', name: 'Beta' }
+      ],
+      error: null
+    })
+  })
+
+  it('shows the workspace switcher, page tabs and an account menu inside /app', async () => {
+    at('/app')
+    expect(await screen.findByRole('button', { name: 'Switch workspace' })).toHaveTextContent(
+      'Personal'
+    )
+    const tabs = screen.getByRole('navigation', { name: 'App' })
+    expect(within(tabs).getByRole('link', { name: 'Teams' })).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Releases' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+    expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeInTheDocument()
+  })
+
+  it('switches workspace and back to personal', async () => {
+    at('/app')
+    await userEvent.click(await screen.findByRole('button', { name: 'Switch workspace' }))
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: 'Beta' }))
+    expect(auth.organization.setActive).toHaveBeenCalledWith({ organizationId: 't2' })
+    await userEvent.click(screen.getByRole('button', { name: 'Switch workspace' }))
+    await userEvent.click(screen.getByRole('menuitemradio', { name: /Personal/ }))
+    expect(auth.organization.setActive).toHaveBeenLastCalledWith({ organizationId: null })
+  })
+
+  it('names the active team and lets a team be made the workspace from the Teams page', async () => {
+    auth.session = {
+      user: { email: 'me@example.com', id: 'u1' },
+      session: { activeOrganizationId: 't1' }
+    } as never
+    at('/app')
+    expect(await screen.findByRole('button', { name: 'Switch workspace' })).toHaveTextContent(
+      'Acme'
+    )
+    expect(await screen.findByText('Manage this team')).toBeInTheDocument()
+    cleanup()
+    at('/teams')
+    await userEvent.click(await screen.findByRole('button', { name: 'Use Beta as workspace' }))
+    expect(auth.organization.setActive).toHaveBeenCalledWith({ organizationId: 't2' })
+    expect(screen.getByText('Active workspace')).toBeInTheDocument()
+  })
+
+  it('keeps the public bar on public pages', async () => {
+    at('/releases')
+    expect(await screen.findByRole('link', { name: 'Open web app' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Switch workspace' })).not.toBeInTheDocument()
   })
 })
 
