@@ -14,6 +14,7 @@ const AcceptInvitationPage = lazy(() =>
   import('./pages/AcceptInvitationPage').then((m) => ({ default: m.AcceptInvitationPage }))
 )
 const AdminPage = lazy(() => import('./pages/AdminPage').then((m) => ({ default: m.AdminPage })))
+const TeamPage = lazy(() => import('./pages/TeamPage').then((m) => ({ default: m.TeamPage })))
 const TeamsPage = lazy(() => import('./pages/TeamsPage').then((m) => ({ default: m.TeamsPage })))
 const AppPage = lazy(() => import('./pages/AppPage').then((m) => ({ default: m.AppPage })))
 const CancelDeletionPage = lazy(() =>
@@ -68,6 +69,7 @@ export function App(): JSX.Element {
       <Route element={<AppLayout />}>
         <Route path="app/*" element={<AppPage />} />
         <Route path="teams" element={<TeamsPage />} />
+        <Route path="teams/:slug" element={<TeamPage />} />
         <Route path="admin" element={<AdminPage />} />
         <Route path="account" element={<AccountPage />} />
         <Route path="account/cancel-deletion" element={<CancelDeletionPage />} />

@@ -2,6 +2,7 @@ import { type JSX } from 'react'
 import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router'
 import { authClient } from '../lib/auth'
+import { TodosSection } from '../components/TodosSection'
 
 /** The signed-in home of the web app. Replace it with your product; sign-in, the API and the database are already wired up. */
 export function AppPage(): JSX.Element {
@@ -35,6 +36,12 @@ export function AppPage(): JSX.Element {
           {teamName ? 'Manage this team' : 'Create or join a team'}
         </Link>
       </p>
+      <div className="pt-6">
+        <TodosSection
+          workspaceKey={activeId ?? 'personal'}
+          workspaceName={teamName ?? 'Personal'}
+        />
+      </div>
     </div>
   )
 }
