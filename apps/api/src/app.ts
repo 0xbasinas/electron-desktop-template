@@ -58,6 +58,7 @@ import { listRequests, openRequest } from './dataRequests'
 import { recentSignIns } from './signIns'
 import { recentAudit, recordAudit } from './audit'
 import { teamsOf } from './teams'
+import { createWorkspaceApi } from './workspace'
 import { createScimAdmin, createScimApi } from './scimRoutes'
 import { DiscoveryError, discoverIssuer } from './ssoDiscovery'
 import { isSuppressed, suppress, suppressionsFrom } from './suppression'
@@ -839,6 +840,7 @@ export function createApp(options: AppOptions = {}) {
       // Directory sync: the company's identity provider calls /scim/v2 with a bearer token; owners manage tokens.
       .route('/scim/v2', createScimApi())
       .route('/scim-connections', createScimAdmin(requireSession(true)))
+      .route('/workspace', createWorkspaceApi(requireSession(true)))
       .route('/preferences', preferences)
       .route('/devices', devices)
       .route('/feedback', feedback)
