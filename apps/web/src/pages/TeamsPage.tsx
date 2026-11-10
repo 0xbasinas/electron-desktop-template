@@ -44,6 +44,8 @@ export function TeamsPage(): JSX.Element {
   const [email, setEmail] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [reload, setReload] = useState(0)
+  const activeId = (session?.session as { activeOrganizationId?: string | null } | undefined)
+    ?.activeOrganizationId
 
   useEffect(() => {
     if (!me) return
@@ -126,10 +128,31 @@ export function TeamsPage(): JSX.Element {
       <ul className="divide-y divide-border rounded-lg border border-border">
         {teams?.map((t) => (
           <li key={t.id} className="flex items-center justify-between p-3 text-sm">
-            <span>{t.name}</span>
-            <Button variant="outline" size="sm" onClick={() => setOpen(t.id)}>
-              Open
-            </Button>
+            <span>
+              {t.name}
+              {activeId === t.id && (
+                <span className="ml-2 rounded-full bg-muted px-2 py-0.5 text-xs">
+                  Active workspace
+                </span>
+              )}
+            </span>
+            <span className="flex gap-2">
+              {activeId !== t.id && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={`Use ${t.name} as workspace`}
+                  onClick={() =>
+                    void run(authClient.organization.setActive({ organizationId: t.id }))
+                  }
+                >
+                  Use
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={() => setOpen(t.id)}>
+                Open
+              </Button>
+            </span>
           </li>
         ))}
       </ul>
